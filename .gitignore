@@ -1,0 +1,30 @@
+# ── Environment ───────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── uv (will be REMOVED after uv init — lock file gets committed) ──
+.venv/
+
+# ── FastF1 cache (can be hundreds of MBs) ─────────────
+fastf1_cache/
+
+# ── ML artifacts ──────────────────────────────────────
+mlruns/
+*.pkl
+*.joblib
+*.parquet
+
+# ── Node / Next.js ────────────────────────────────────
+node_modules/
+.next/
+.pnpm-store/
+
+# ── OS ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE (share extensions.json but not personal settings) ──
+.vscode/settings.json
+.idea/
+EOF
