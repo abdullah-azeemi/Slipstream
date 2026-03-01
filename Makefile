@@ -155,3 +155,6 @@ redis-shell:
 
 	docker exec -it pitwall-redis redis-cli
 
+topics :
+
+	@bash infra/kafka/create-topics.sh
