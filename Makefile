@@ -164,3 +164,6 @@ backend:
 
 backend:
 	uv run flask --app apps/backend/src/backend run --port 8000 --debug
+
+test-backend:
+	uv run pytest apps/backend/tests/ -v --cov=apps/backend/src --cov-report=term-missing
