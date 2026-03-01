@@ -158,3 +158,9 @@ redis-shell:
 topics :
 
 	@bash infra/kafka/create-topics.sh
+
+backend:
+	uv run flask --app apps/backend/src/backend run --port 8000 --debug
+
+backend:
+	uv run flask --app apps/backend/src/backend run --port 8000 --debug
