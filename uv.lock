@@ -9,10 +9,10 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "pitwaal-backend",
-    "pitwaal-ingestion",
-    "pitwaal-ml",
-    "pitwaal-stream",
+    "pitwall-backend",
+    "pitwall-ingestion",
+    "pitwall-ml",
+    "pitwall-stream",
 ]
 
 [manifest.dependency-groups]
@@ -2225,7 +2225,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pitwaal-backend"
+name = "pitwall-backend"
 version = "0.1.0"
 source = { editable = "apps/backend" }
 dependencies = [
@@ -2256,7 +2256,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "pitwaal-ingestion"
+name = "pitwall-ingestion"
 version = "0.1.0"
 source = { editable = "packages/ingestion" }
 dependencies = [
@@ -2281,7 +2281,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "pitwaal-ml"
+name = "pitwall-ml"
 version = "0.1.0"
 source = { editable = "apps/ml" }
 dependencies = [
@@ -2316,7 +2316,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "pitwaal-stream"
+name = "pitwall-stream"
 version = "0.1.0"
 source = { editable = "packages/stream" }
 dependencies = [
