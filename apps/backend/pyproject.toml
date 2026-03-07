@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "structlog>=24.0",
+    "flask-cors>=6.0.2",
 ]
 
 [build-system]

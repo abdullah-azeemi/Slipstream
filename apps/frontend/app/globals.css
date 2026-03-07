@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* Colors — generates bg-*, text-*, border-* utilities */
+  --color-bg: #0A0A0A;
+  --color-surface: #111111;
+  --color-surface2: #1A1A1A;
+  --color-surface3: #222222;
+  --color-border: #2A2A2A;
+  --color-red: #E8002D;
+  --color-red-dim: #9B0020;
+  --color-teal: #2CF4C5;
+
+  /* Fonts — in Tailwind v4, font-family utilities use --font-family-* */
+  --font-family-sans: 'Inter', sans-serif;
+  --font-family-mono: 'JetBrains Mono', monospace;
+  --font-family-display: 'Rajdhani', sans-serif;
+}
+
+:root {
+  --bg: #0A0A0A;
+  --surface: #111111;
+  --surface-2: #1A1A1A;
+  --surface-3: #222222;
+  --border: #2A2A2A;
+  --red: #E8002D;
+  --red-dim: #9B0020;
+  --text: #FFFFFF;
+  --text-2: #A1A1AA;
+  --text-3: #52525B;
+  --green: #22C55E;
+  --teal: #2CF4C5;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Guarantee fixed TopBar (56px) + BottomNav (80px) clearance
+   regardless of Tailwind utility class resolution */
+main {
+  padding-top: 3.5rem;
+  /* = h-14 TopBar  */
+  padding-bottom: 5rem;
+  /* = pb-20 BottomNav buffer */
+  min-height: 100vh;
+}
+
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.display {
+  font-family: 'Rajdhani', sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
+.tyre-soft {
+  background: #FF3333;
+  color: #fff;
+}
+
+.tyre-medium {
+  background: #FFD700;
+  color: #000;
+}
+
+.tyre-hard {
+  background: #FFFFFF;
+  color: #000;
+}
+
+.tyre-inter {
+  background: #39B54A;
+  color: #fff;
+}
+
+.tyre-wet {
+  background: #0067FF;
+  color: #fff;
+}
+@media (max-width: 768px) {
+  main {
+    padding-left: 0 !important;
+  }
+}
