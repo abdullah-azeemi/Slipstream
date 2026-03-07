@@ -1,9 +1,12 @@
 """
 Telemetry endpoints.
 
-Route order matters in Flask — /telemetry/compare must be registered
-BEFORE /telemetry/<int:driver_number> otherwise Flask tries to cast
-the string "compare" as an int and 404s.
+Column names match the actual DB schema:
+  speed_kmh, throttle_pct, distance_m, x_pos, y_pos
+
+Route order matters — /telemetry/compare must come BEFORE
+/telemetry/<int:driver_number> or Flask tries to cast "compare"
+as an int and 404s.
 """
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
@@ -15,7 +18,7 @@ telemetry_bp = Blueprint("telemetry", __name__)
 @telemetry_bp.get("/sessions/<int:session_key>/telemetry/compare")
 def compare_telemetry(session_key: int):
     """
-    Speed traces for multiple drivers — aligned by distance for spatial overlay.
+    Speed traces for multiple drivers aligned by distance.
     Query param: ?drivers=44,63
     """
     drivers_param = request.args.get("drivers", "")
@@ -30,6 +33,7 @@ def compare_telemetry(session_key: int):
     result = {}
     with engine.connect() as conn:
         for num in driver_nums:
+            # Find the lap number that has telemetry stored for this driver
             lap_row = conn.execute(text("""
                 SELECT DISTINCT lap_number FROM telemetry
                 WHERE session_key = :sk AND driver_number = :dn
@@ -40,13 +44,20 @@ def compare_telemetry(session_key: int):
                 continue
 
             rows = conn.execute(text("""
-                SELECT speed, throttle, brake, gear, drs,
-                       distance, x, y
+                SELECT
+                    speed_kmh,
+                    throttle_pct,
+                    brake,
+                    gear,
+                    drs,
+                    distance_m,
+                    x_pos,
+                    y_pos
                 FROM telemetry
                 WHERE session_key   = :sk
                   AND driver_number = :dn
                   AND lap_number    = :ln
-                ORDER BY distance ASC NULLS LAST, id
+                ORDER BY distance_m ASC NULLS LAST, sample_order
             """), {"sk": session_key, "dn": num, "ln": lap_row[0]}
             ).mappings().all()
 
@@ -68,7 +79,7 @@ def compare_telemetry(session_key: int):
 
 @telemetry_bp.get("/sessions/<int:session_key>/telemetry/<int:driver_number>")
 def driver_telemetry(session_key: int, driver_number: int):
-    """Single driver telemetry."""
+    """Single driver telemetry — full detail including RPM."""
     with engine.connect() as conn:
         lap_row = conn.execute(text("""
             SELECT DISTINCT lap_number FROM telemetry
@@ -81,13 +92,21 @@ def driver_telemetry(session_key: int, driver_number: int):
             return {"error": "No telemetry for this driver in this session"}, 404
 
         rows = conn.execute(text("""
-            SELECT speed, rpm, gear, throttle, brake, drs,
-                   distance, x, y
+            SELECT
+                speed_kmh,
+                rpm,
+                gear,
+                throttle_pct,
+                brake,
+                drs,
+                distance_m,
+                x_pos,
+                y_pos
             FROM telemetry
             WHERE session_key   = :session_key
               AND driver_number = :driver_number
               AND lap_number    = :lap_number
-            ORDER BY distance ASC NULLS LAST, id
+            ORDER BY distance_m ASC NULLS LAST, sample_order
         """), {
             "session_key":   session_key,
             "driver_number": driver_number,

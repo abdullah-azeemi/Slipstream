@@ -31,7 +31,7 @@ export interface Lap {
   s1_ms: number | null
   s2_ms: number | null
   s3_ms: number | null
-  compound: 'SOFT' | 'MEDIUM' | 'HARD' | 'INTER' | 'WET' | null
+  compound: 'SOFT' | 'MEDIUM' | 'HARD' | 'INTER' | 'INTERMEDIATE' | 'WET' | null
   tyre_life_laps: number | null
   is_personal_best: boolean
   track_status: string | null
@@ -88,14 +88,15 @@ export interface RacePosition {
   position:      number | null
 }
 
+// Column names match the actual DB schema (renamed from generic speed/throttle)
 export interface TelemetrySample {
-  speed:        number | null
-  throttle:     number | null
+  speed_kmh:    number | null   // km/h
+  throttle_pct: number | null   // 0–100
   brake:        boolean | null
-  gear:         number | null
-  drs:          number | null
-  distance?:    number | null   // metres into lap
-  x?:           number | null   // track map coordinate
-  y?:           number | null   // track map coordinate
-  distance_pct?: number
+  gear:         number | null   // 1–8
+  drs:          number | null   // 0/8/10/12/14 — >8 means DRS open
+  distance_m:   number | null   // metres into lap — used for spatial alignment
+  x_pos:        number | null   // track map X coordinate
+  y_pos:        number | null   // track map Y coordinate
+  distance_pct?: number         // computed by API: 0–100
 }
