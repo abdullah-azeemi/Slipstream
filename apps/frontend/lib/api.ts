@@ -54,3 +54,20 @@ export const api = {
 }
 
 export { APIError }
+
+// Add these inside the api object — paste after drivers block:
+export const strategyApi = {
+  stints:     (key: number) => get<import('@/types/f1').Stint[]>(`/api/v1/sessions/${key}/strategy`),
+  raceOrder:  (key: number) => get<import('@/types/f1').RacePosition[]>(`/api/v1/sessions/${key}/race-order`),
+}
+
+export const telemetryApi = {
+  driver:  (key: number, num: number) =>
+    get<{ driver_number: number; lap_number: number; samples: import('@/types/f1').TelemetrySample[] }>(
+      `/api/v1/sessions/${key}/telemetry/${num}`
+    ),
+  compare: (key: number, drivers: number[]) =>
+    get<Record<string, { lap_number: number; samples: import('@/types/f1').TelemetrySample[] }>>(
+      `/api/v1/sessions/${key}/telemetry/compare?drivers=${drivers.join(',')}`
+    ),
+}

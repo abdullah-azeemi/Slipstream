@@ -1,148 +1,161 @@
 """
-FastF1 API client.
-
-FastF1 is a Python library that fetches F1 session data from the
-official F1 timing API and caches it locally. After the first fetch,
-subsequent calls for the same session are instant (from cache).
-
-FastF1 cache is critical for development — without it every run
-re-downloads hundreds of MB of data.
+FastF1 client — fetches and normalises session data.
 """
-import os
-from pathlib import Path
-from typing import Any
-
+from __future__ import annotations
+import warnings
 import fastf1
 import pandas as pd
 import structlog
 
-from ingestion.config import settings
-
+warnings.filterwarnings('ignore')
 log = structlog.get_logger()
 
 
-def setup_cache() -> None:
-    """
-    Enable FastF1's local disk cache.
-    Must be called before any FastF1 API calls.
-    Creates the cache directory if it doesn't exist.
-    """
-    cache_dir = Path(settings.fastf1_cache_dir)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    fastf1.Cache.enable_cache(str(cache_dir))
-    log.info("fastf1.cache_enabled", path=str(cache_dir))
-
-
-def fetch_session(year: int, gp: str | int, session_type: str) -> fastf1.core.Session:
-    """
-    Fetch a FastF1 session with all data loaded.
-
-    Args:
-        year: Season year e.g. 2024
-        gp: GP name e.g. 'British' or round number e.g. 12
-        session_type: 'R' (race), 'Q' (qualifying), 'FP1', 'FP2', 'FP3'
-
-    Returns:
-        A loaded FastF1 Session object.
-
-    FastF1 loads different data with different flags:
-        laps=True        → lap times and tyre data
-        telemetry=True   → speed, brake, throttle etc.
-        weather=True     → air/track temperature, rainfall
-        messages=True    → team radio and flag messages
-    """
-    log.info("fastf1.fetching_session",
-             year=year, gp=gp, session_type=session_type)
-
+def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
+    fastf1.Cache.enable_cache('./fastf1_cache')
     session = fastf1.get_session(year, gp, session_type)
-
-    # Load everything we need in one call
-    session.load(
-        laps=True,
-        telemetry=True,
-        weather=True,
-        messages=False,    # team radio — not needed for analytics
-    )
-
-    log.info("fastf1.session_loaded",
-             year=year,
-             gp=gp,
-             session_type=session_type,
-             session_key=session.session_info.get("Key"),
-             total_laps=len(session.laps))
-
+    load_weather = session_type in ('R', 'Race')
+    session.load(telemetry=False, weather=load_weather, messages=False)
+    log.info("session.loaded", year=year, gp=gp, type=session_type,
+             drivers=len(session.drivers))
     return session
 
 
-def extract_session_info(session: fastf1.core.Session) -> dict[str, Any]:
-    """Pull the metadata fields we need from a FastF1 session object."""
-    info = session.session_info
+def extract_session_info(session: fastf1.core.Session) -> dict:
     event = session.event
-
+    key = session.session_info.get('Key')
+    if not key:
+        import hashlib
+        key = int(hashlib.md5(
+            f"{event['EventName']}{session.name}".encode()
+        ).hexdigest()[:8], 16)
     return {
-        "session_key": int(info.get("Key", 0)),
-        "year": int(session.date.year),
-        "gp_name": str(event.get("EventName", "")),
-        "country": str(event.get("Country", "")),
-        "circuit_key": info.get("CircuitKey"),
-        "session_type": str(session.name[0].upper()),   # 'Race' → 'R'
-        "session_name": str(session.name),
-        "date_start": session.date,
-        "date_end": None,   # FastF1 doesn't always provide end time
+        'session_key':  int(key),
+        'year':         int(event['EventDate'].year),
+        'gp_name':      event['EventName'],
+        'country':      event.get('Country', None),
+        'session_type': {
+            'Qualifying': 'Q', 'Race': 'R', 'Sprint': 'SS',
+            'Sprint Qualifying': 'SQ', 'Practice 1': 'FP1',
+            'Practice 2': 'FP2', 'Practice 3': 'FP3',
+        }.get(session.name, session.name[:2]),
+        'session_name': session.name,
+        'date_start':   str(event['EventDate']),
     }
 
 
-def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict[str, Any]]:
-    """Extract driver info from a session."""
-    drivers = []
-    for driver_num, driver_info in session.results.iterrows():
-        drivers.append({
-            "driver_number": int(driver_num) if str(driver_num).isdigit()
-                             else int(driver_info.get("DriverNumber", 0)),
-            "session_key": session_key,
-            "full_name": str(driver_info.get("FullName", "")),
-            "abbreviation": str(driver_info.get("Abbreviation", "")),
-            "team_name": driver_info.get("TeamName"),
-            "team_colour": driver_info.get("TeamColor"),
-            "headshot_url": driver_info.get("HeadshotUrl"),
+def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    results = []
+    for drv in session.drivers:
+        try:
+            info = session.get_driver(drv)
+            results.append({
+                'driver_number': int(drv),
+                'session_key':   session_key,
+                'full_name':     info.get('FullName', info.get('BroadcastName', drv)),
+                'abbreviation':  info.get('Abbreviation', drv),
+                'team_name':     info.get('TeamName', None),
+                'team_colour':   info.get('TeamColour', None),
+            })
+        except Exception as e:
+            log.warning("driver.skip", driver=drv, error=str(e))
+    return results
+
+
+def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    laps    = session.laps
+    results = []
+    for _, row in laps.iterrows():
+        try:
+            driver_num = int(row['DriverNumber'])
+        except (ValueError, TypeError):
+            continue
+        results.append({
+            'session_key':      session_key,
+            'driver_number':    driver_num,
+            'lap_number':       row.get('LapNumber'),
+            'lap_time_ms':      row.get('LapTime'),
+            'pit_in_time_ms':   row.get('PitInTime'),
+            'pit_out_time_ms':  row.get('PitOutTime'),
+            's1_ms':            row.get('Sector1Time'),
+            's2_ms':            row.get('Sector2Time'),
+            's3_ms':            row.get('Sector3Time'),
+            'compound':         row.get('Compound'),
+            'tyre_life_laps':   row.get('TyreLife'),
+            'is_personal_best': row.get('IsPersonalBest', False),
+            'track_status':     row.get('TrackStatus'),
+            'deleted':          row.get('Deleted'),
+            'stint':            row.get('Stint'),
+            'position':         row.get('Position'),
+            'fresh_tyre':       row.get('FreshTyre'),
+            'deleted_reason':   row.get('DeletedReason'),
+            'is_accurate':      row.get('IsAccurate'),
+            'speed_i1':         row.get('SpeedI1'),
+            'speed_i2':         row.get('SpeedI2'),
+            'speed_fl':         row.get('SpeedFL'),
+            'speed_st':         row.get('SpeedST'),
         })
-    return drivers
-
-
-def extract_laps(
-    session: fastf1.core.Session,
-    session_key: int,
-) -> pd.DataFrame:
-    """
-    Return the raw laps DataFrame from FastF1.
-    We return the raw DataFrame here and let the loader handle
-    the row-by-row transformation and validation.
-    """
-    laps = session.laps.copy()
-    laps["session_key"] = session_key
-    return laps
+    log.info("laps.extracted", session_key=session_key, count=len(results))
+    return results
 
 
 def extract_telemetry(
     session: fastf1.core.Session,
     session_key: int,
-    driver_number: int,
-) -> pd.DataFrame:
+    all_drivers: bool = False,
+) -> list[dict]:
     """
-    Return telemetry for one driver.
-    We fetch per-driver to handle errors gracefully —
-    if one driver's telemetry is missing we skip them,
-    not the entire session.
+    Extract telemetry for the fastest lap of each driver.
+
+    Captures: speed, rpm, gear, throttle, brake, drs, distance.
+    Distance is key — it's metres around the lap, so two drivers
+    can be compared at the exact same track position regardless of
+    how many samples they have.
+
+    all_drivers=True: all drivers (use for qualifying — 20 drivers × ~300 rows = 6k rows)
+    all_drivers=False: first 10 drivers only (use for races to keep it fast)
     """
-    try:
-        driver_laps = session.laps.pick_drivers(driver_number)
-        tel = driver_laps.get_telemetry()
-        tel["session_key"] = session_key
-        tel["driver_number"] = driver_number
-        return tel
-    except Exception as e:
-        log.warning("fastf1.telemetry_unavailable",
-                    driver_number=driver_number,
-                    session_key=session_key,
-                    error=str(e))
-        return pd.DataFrame()   # empty DataFrame — caller skips it
+    results   = []
+    drivers   = session.drivers if all_drivers else session.drivers[:10]
+
+    for drv in drivers:
+        try:
+            driver_laps = session.laps.pick_drivers(drv)
+            # pick_fastest() returns the lap with the lowest LapTime
+            fast_lap    = driver_laps.pick_fastest()
+
+            if fast_lap is None or fast_lap.empty:
+                log.debug("telemetry.no_fastest_lap", driver=drv)
+                continue
+
+            tel = fast_lap.get_telemetry()
+
+            if tel is None or tel.empty:
+                log.debug("telemetry.no_data", driver=drv)
+                continue
+
+            lap_number = int(fast_lap['LapNumber'])
+
+            for _, row in tel.iterrows():
+                results.append({
+                    'session_key':   session_key,
+                    'driver_number': int(drv),
+                    'lap_number':    lap_number,
+                    'speed':         row.get('Speed'),
+                    'rpm':           row.get('RPM'),
+                    'gear':          row.get('nGear'),
+                    'throttle':      row.get('Throttle'),
+                    'brake':         row.get('Brake'),
+                    'drs':           row.get('DRS'),
+                    'distance':      row.get('Distance'),   # metres — critical for overlay
+                    'x':             row.get('X'),          # track map X coordinate
+                    'y':             row.get('Y'),          # track map Y coordinate
+                })
+
+            log.info("telemetry.driver_done", driver=drv, samples=len(tel))
+
+        except Exception as e:
+            log.warning("telemetry.skip", driver=drv, error=str(e))
+
+    log.info("telemetry.extracted", session_key=session_key, total=len(results))
+    return results

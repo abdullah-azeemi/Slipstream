@@ -68,3 +68,34 @@ export interface HealthStatus {
   database: 'ok' | 'unreachable'
   version: string
 }
+
+export interface Stint {
+  driver_number: number
+  abbreviation:  string
+  team_colour:   string | null
+  compound:      string | null
+  stint_num:     number
+  lap_start:     number
+  lap_end:       number
+  lap_count:     number
+}
+
+export interface RacePosition {
+  driver_number: number
+  abbreviation:  string
+  team_colour:   string | null
+  team_name:     string | null
+  position:      number | null
+}
+
+export interface TelemetrySample {
+  speed:        number | null
+  throttle:     number | null
+  brake:        boolean | null
+  gear:         number | null
+  drs:          number | null
+  distance?:    number | null   // metres into lap
+  x?:           number | null   // track map coordinate
+  y?:           number | null   // track map coordinate
+  distance_pct?: number
+}
