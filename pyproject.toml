@@ -1,7 +1,7 @@
 [tool.uv.workspace]
 members = [
     "apps/backend",
-    "apps/ml",
+    "packages/ml",
     "packages/ingestion",
     "packages/stream",
 ]

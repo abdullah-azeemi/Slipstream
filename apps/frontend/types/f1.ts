@@ -100,3 +100,28 @@ export interface TelemetrySample {
   y_pos:        number | null   // track map Y coordinate
   distance_pct?: number         // computed by API: 0–100
 }
+
+export interface ShapFactor {
+  feature:    string
+  label:      string
+  shap_value: number
+  positive:   boolean
+}
+
+export interface DriverPrediction {
+  driver_number:           number
+  abbreviation:            string
+  team_name:               string | null
+  grid_position:           number
+  predicted_position:      number
+  win_probability:         number
+  podium_probability:      number
+  position_probabilities:  Record<string, number>
+  shap_factors:            ShapFactor[]
+}
+
+export interface PredictionResponse {
+  quali_session_key: number
+  predictions:       DriverPrediction[]
+  model_info:        { name: string; version: string }
+}

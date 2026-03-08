@@ -71,3 +71,10 @@ export const telemetryApi = {
       `/api/v1/sessions/${key}/telemetry/compare?drivers=${drivers.join(',')}`
     ),
 }
+
+export const predictionsApi = {
+  predict: (qualiKey: number) =>
+    get<import('@/types/f1').PredictionResponse>(
+      `/api/v1/sessions/${qualiKey}/predict`
+    ),
+}

@@ -1,236 +1,250 @@
 'use client'
-import { useState } from 'react'
-import { FlaskConical, Play } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { predictionsApi } from '@/lib/api'
 import { teamColour } from '@/lib/utils'
+import type { DriverPrediction, PredictionResponse } from '@/types/f1'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
-const MOCK_PREDICTIONS = [
-  { pos: 1, abbr: 'RUS', driver: 'George Russell', team: 'Mercedes',  colour: '27F4D2', confidence: 67,
-    shap: ['+Strong home form', '+Pole advantage', '-Tyre deg risk'] },
-  { pos: 2, abbr: 'HAM', driver: 'Lewis Hamilton', team: 'Mercedes',  colour: '27F4D2', confidence: 42,
-    shap: ['+Silverstone specialist', '+Team strategy', '-Grid P2'] },
-  { pos: 3, abbr: 'VER', driver: 'Max Verstappen', team: 'Red Bull Racing', colour: '3671C6', confidence: 31,
-    shap: ['+Pace in race trim', '-Street circuit gap', '-Tyre management'] },
+// ── Session options — qualifying sessions with trained data ──────────────────
+const QUALI_SESSIONS = [
+  { key: 9554, label: '2024 British GP' },
+  { key: 9122, label: '2023 British GP' },
+  { key: 7107, label: '2022 British GP' },
 ]
 
-const FULL_GRID = [
-  { pos: 4,  abbr: 'NOR', colour: 'FF8000', prob: 18.2 },
-  { pos: 5,  abbr: 'LEC', colour: 'E80020', prob: 12.4 },
-  { pos: 6,  abbr: 'SAI', colour: 'E80020', prob: 8.1  },
-  { pos: 7,  abbr: 'PIA', colour: 'FF8000', prob: 6.3  },
-  { pos: 8,  abbr: 'ALO', colour: '229971', prob: 4.2  },
-  { pos: 9,  abbr: 'STR', colour: '229971', prob: 2.1  },
-  { pos: 10, abbr: 'ALB', colour: '64C4FF', prob: 1.8  },
-]
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const POS_STYLE: Record<number, { colour: string }> = {
-  1: { colour: '#FFD700' },
-  2: { colour: '#C0C0C0' },
-  3: { colour: '#CD7F32' },
+function ProbBar({ value, colour }: { value: number; colour: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${value * 100}%`, background: colour }}
+        />
+      </div>
+      <span className="font-mono text-xs text-zinc-400 w-10 text-right">
+        {(value * 100).toFixed(1)}%
+      </span>
+    </div>
+  )
 }
 
-// Visual order: P2 left, P1 centre (elevated), P3 right
-const PODIUM_ORDER = [MOCK_PREDICTIONS[1], MOCK_PREDICTIONS[0], MOCK_PREDICTIONS[2]]
+function PositionDistribution({
+  probs,
+  colour,
+}: {
+  probs: Record<string, number>
+  colour: string
+}) {
+  const maxProb = Math.max(...Object.values(probs))
+  return (
+    <div className="flex items-end gap-px h-8">
+      {Array.from({ length: 20 }, (_, i) => {
+        const p = probs[String(i + 1)] ?? 0
+        const h = maxProb > 0 ? (p / maxProb) * 100 : 0
+        return (
+          <div
+            key={i}
+            className="flex-1 rounded-sm transition-all duration-300"
+            style={{
+              height: `${Math.max(h, 4)}%`,
+              background: p > 0.05 ? colour : '#2A2A2A',
+              opacity: p > 0 ? 0.7 + p * 0.3 : 0.3,
+            }}
+            title={`P${i + 1}: ${(p * 100).toFixed(1)}%`}
+          />
+        )
+      })}
+    </div>
+  )
+}
 
-export default function PredictionsPage() {
-  const [gridPos,   setGridPos]   = useState('Actual Grid')
-  const [weather,   setWeather]   = useState('Dry (24°C)')
-  const [safetyCar, setSafetyCar] = useState('Standard (Historical)')
-  const [simulating,setSimulating]= useState(false)
+function DriverCard({
+  pred,
+  rank,
+}: {
+  pred: DriverPrediction
+  rank: number
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const colour  = teamColour(null) // will use team colour from drivers context
+  const isTop3  = rank <= 3
 
-  const runSimulation = () => {
-    setSimulating(true)
-    setTimeout(() => setSimulating(false), 1800)
-  }
+  // Podium colours
+  const medalColour =
+    rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : rank === 3 ? '#CD7F32' : null
 
   return (
-    <div className="px-4 py-6 max-w-2xl mx-auto space-y-6">
+    <div
+      className={`bg-surface border rounded-xl overflow-hidden transition-all
+        ${isTop3 ? 'border-zinc-600' : 'border-border'}`}
+    >
+      {/* Main row */}
+      <div
+        className="grid grid-cols-12 px-4 py-3.5 items-center cursor-pointer hover:bg-surface2 transition-colors"
+        onClick={() => setExpanded(e => !e)}
+      >
+        {/* Position */}
+        <div className="col-span-1 flex items-center justify-center">
+          {medalColour ? (
+            <div
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+              style={{ background: medalColour, color: '#000' }}
+            >
+              {rank}
+            </div>
+          ) : (
+            <span className="font-mono text-sm text-zinc-500">{rank}</span>
+          )}
+        </div>
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="text-center space-y-2">
-        <h1 className="font-display font-bold text-3xl text-white tracking-wide">
-          Race Prediction
-        </h1>
-        <p className="text-zinc-500 text-xs tracking-widest uppercase">
-          British GP · Silverstone
-        </p>
-        <div className="flex items-center justify-center gap-2 pt-1">
-          <span className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] px-2.5 py-1 rounded font-mono">
-            Model: FLAML AutoML
-          </span>
-          <span className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] px-2.5 py-1 rounded font-mono">
-            Acc: 71%
+        {/* Driver */}
+        <div className="col-span-4">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-white text-sm">{pred.abbreviation}</span>
+            <span className="font-mono text-[10px] text-zinc-600 bg-surface2 px-1.5 py-0.5 rounded">
+              P{pred.grid_position} → P{pred.predicted_position}
+            </span>
+          </div>
+          <span className="text-zinc-500 text-xs">{pred.team_name}</span>
+        </div>
+
+        {/* Win probability bar */}
+        <div className="col-span-4">
+          <ProbBar value={pred.win_probability} colour={isTop3 ? '#E8002D' : '#444'} />
+          <span className="text-[9px] text-zinc-600 mt-0.5 block">Win prob</span>
+        </div>
+
+        {/* Podium probability */}
+        <div className="col-span-2 text-right">
+          <div className="font-mono text-sm text-white">
+            {(pred.podium_probability * 100).toFixed(0)}%
+          </div>
+          <div className="text-[9px] text-zinc-600">Podium</div>
+        </div>
+
+        {/* Expand chevron */}
+        <div className="col-span-1 flex justify-end">
+          <span className="text-zinc-600 text-xs transition-transform duration-200"
+            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+            ▾
           </span>
         </div>
-        <p className="text-zinc-600 text-xs">
-          Based on 2022–2025 British GP historical data
-        </p>
       </div>
 
-      {/* ── Podium ─────────────────────────────────────────────────── */}
-      <div>
-        <div className="text-[10px] tracking-widest text-zinc-500 uppercase flex items-center gap-2 mb-5">
-          <span className="text-red">⚑</span> PREDICTED PODIUM
-        </div>
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
 
-        <div className="grid grid-cols-3 gap-3 items-end">
-          {PODIUM_ORDER.map((pred, vi) => {
-            const isCenter = vi === 1
-            const style    = POS_STYLE[pred.pos]
-            const colour   = teamColour(pred.colour)
+          {/* Position distribution */}
+          <div>
+            <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1.5">
+              Position probability distribution
+            </div>
+            <PositionDistribution probs={pred.position_probabilities} colour="#E8002D" />
+            <div className="flex justify-between mt-1">
+              <span className="font-mono text-[9px] text-zinc-700">P1</span>
+              <span className="font-mono text-[9px] text-zinc-700">P20</span>
+            </div>
+          </div>
 
-            return (
-              <div
-                key={pred.pos}
-                className={`bg-surface border rounded-xl relative transition-all duration-300 ${
-                  isCenter
-                    ? 'border-yellow-500/50 shadow-xl shadow-yellow-500/10 pb-5 pt-8'
-                    : 'border-border pb-4 pt-7'
-                }`}
-              >
-                {/* Position badge */}
-                <div
-                  className="absolute -top-3.5 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg"
-                  style={{ background: style.colour, color: '#000' }}
-                >
-                  {pred.pos}
-                </div>
-
-                <div className="px-3 text-center">
-                  {/* Driver abbr */}
-                  <div
-                    className="font-display font-bold text-3xl mb-1"
-                    style={{ color: colour }}
-                  >
-                    {pred.abbr}
-                  </div>
-
-                  {/* Team underline */}
-                  <div
-                    className="h-0.5 w-10 mx-auto rounded mb-2"
-                    style={{ background: colour }}
-                  />
-
-                  <div className="text-zinc-500 text-[10px] mb-1">{pred.team}</div>
-
-                  {/* Confidence */}
-                  <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">
-                    Conf
-                  </div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className="flex-1 h-1 bg-surface3 rounded overflow-hidden">
-                      <div
-                        className="h-full rounded"
-                        style={{ width: `${pred.confidence}%`, background: colour }}
-                      />
-                    </div>
-                    <span className="font-mono text-[10px] text-zinc-400 flex-shrink-0">
-                      {pred.confidence}%
+          {/* SHAP factors */}
+          {pred.shap_factors.length > 0 && (
+            <div>
+              <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
+                Key factors
+              </div>
+              <div className="space-y-1.5">
+                {pred.shap_factors.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div
+                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: f.positive ? '#2CF4C5' : '#E8002D' }}
+                    />
+                    <span className="text-xs text-zinc-400">{f.label}</span>
+                    <span className="font-mono text-[10px] text-zinc-600 ml-auto">
+                      {f.shap_value > 0 ? '+' : ''}{f.shap_value.toFixed(2)}
                     </span>
                   </div>
-
-                  {/* SHAP factors */}
-                  <div className="mt-2.5 space-y-1">
-                    {pred.shap.map((factor, i) => (
-                      <div
-                        key={i}
-                        className={`text-[9px] px-1.5 py-0.5 rounded text-left leading-tight ${
-                          factor.startsWith('+')
-                            ? 'bg-green-500/10 text-green-400'
-                            : 'bg-red-500/10 text-red-400'
-                        }`}
-                      >
-                        {factor}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                ))}
               </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── What If Simulator ──────────────────────────────────────── */}
-      <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <FlaskConical size={16} className="text-red" />
-          <h2 className="font-semibold text-white">What If? Simulator</h2>
-        </div>
-        <p className="text-zinc-600 text-xs mb-5">Modify race conditions and re-run the model</p>
-
-        <div className="space-y-4 mb-5">
-          {[
-            { label: 'GRID POSITION',          value: gridPos,   set: setGridPos,
-              options: ['Actual Grid', 'VER P1 / RUS P3', 'HAM P1', 'Random Grid'] },
-            { label: 'WEATHER',                value: weather,   set: setWeather,
-              options: ['Dry (24°C)', 'Wet', 'Mixed Conditions'] },
-            { label: 'SAFETY CAR PROBABILITY', value: safetyCar, set: setSafetyCar,
-              options: ['Standard (Historical)', 'High Probability', 'Certain SC', 'No SC'] },
-          ].map(({ label, value, set, options }) => (
-            <div key={label}>
-              <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-2">
-                {label}
-              </div>
-              <select
-                className="w-full bg-surface2 border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:border-zinc-500 appearance-none"
-                value={value}
-                onChange={e => set(e.target.value)}
-              >
-                {options.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
             </div>
-          ))}
-        </div>
-
-        <button
-          onClick={runSimulation}
-          disabled={simulating}
-          className="w-full bg-red text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-red/90 active:scale-[0.98] transition-all disabled:opacity-60"
-        >
-          {simulating ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Running simulation...
-            </>
-          ) : (
-            <>
-              <Play size={16} fill="white" /> Run Simulation
-            </>
           )}
-        </button>
+
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
+
+export default function PredictionsPage() {
+  const [selectedKey, setSelectedKey] = useState(QUALI_SESSIONS[0].key)
+  const [data,        setData]        = useState<PredictionResponse | null>(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    predictionsApi.predict(selectedKey)
+      .then(setData)
+      .catch(e => setError(e.message ?? 'Failed to load predictions'))
+      .finally(() => setLoading(false))
+  }, [selectedKey])
+
+  return (
+    <div className="px-4 py-4 max-w-2xl mx-auto space-y-4">
+
+      <div>
+        <h1 className="font-display font-bold text-2xl text-white">Race Predictions</h1>
+        <p className="text-zinc-500 text-sm mt-0.5">
+          FLAML AutoML · XGBoost · trained on 3 years of Silverstone data
+        </p>
       </div>
 
-      {/* ── Full Grid Win Probability ──────────────────────────────── */}
-      <div className="bg-surface border border-border rounded-xl p-5">
-        <h2 className="font-semibold text-white mb-4">Full Grid Win Probability</h2>
-        <div className="space-y-3">
-          {FULL_GRID.map(driver => (
-            <div key={driver.abbr} className="flex items-center gap-3">
-              <span className="font-mono text-xs text-zinc-600 w-4 text-right flex-shrink-0">
-                {driver.pos}
-              </span>
-              <span className="font-mono text-xs font-bold text-white w-8 flex-shrink-0">
-                {driver.abbr}
-              </span>
-              <div className="flex-1 h-2 bg-surface2 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${(driver.prob / 20) * 100}%`,
-                    background: `#${driver.colour}`,
-                  }}
-                />
-              </div>
-              <span
-                className="font-mono text-xs w-10 text-right flex-shrink-0 font-semibold"
-                style={{ color: `#${driver.colour}` }}
-              >
-                {driver.prob}%
-              </span>
-            </div>
+      {/* Session selector */}
+      <div className="flex gap-2">
+        {QUALI_SESSIONS.map(s => (
+          <button
+            key={s.key}
+            onClick={() => setSelectedKey(s.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+              ${selectedKey === s.key
+                ? 'bg-red text-white'
+                : 'bg-surface border border-border text-zinc-400 hover:border-zinc-500'
+              }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Model info */}
+      {data && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-surface border border-border rounded-lg">
+          <div className="w-1.5 h-1.5 rounded-full bg-teal animate-pulse" />
+          <span className="text-xs text-zinc-500">
+            {data.model_info.name} · MAE 3.1 positions · 33% top-3 accuracy
+          </span>
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingSpinner text="Running inference..." />
+      ) : error ? (
+        <div className="bg-surface border border-red/30 rounded-xl p-4 text-sm text-red">
+          {error}
+        </div>
+      ) : data ? (
+        <div className="space-y-2">
+          {data.predictions.map((pred, i) => (
+            <DriverCard key={pred.driver_number} pred={pred} rank={i + 1} />
           ))}
         </div>
-      </div>
+      ) : null}
 
     </div>
   )
