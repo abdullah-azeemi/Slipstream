@@ -118,3 +118,51 @@ def driver_telemetry(session_key: int, driver_number: int):
         "lap_number":    lap_row[0],
         "samples":       [dict(r) for r in rows],
     })
+
+@telemetry_bp.get("/sessions/<int:session_key>/telemetry/stats")
+def telemetry_stats(session_key: int):
+    """
+    Pre-computed lap telemetry stats for all drivers.
+    Used for corner analysis, RPM comparison, braking index.
+    Query param: ?drivers=44,63  (optional — returns all if omitted)
+    """
+    drivers_param = request.args.get("drivers", "")
+    driver_filter = ""
+    params = {"sk": session_key}
+
+    if drivers_param:
+        try:
+            nums = [int(d.strip()) for d in drivers_param.split(",")]
+            driver_filter = "AND s.driver_number = ANY(:drivers)"
+            params["drivers"] = nums
+        except ValueError:
+            return {"error": "Driver numbers must be integers"}, 400
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(f"""
+            SELECT
+                s.driver_number,
+                d.abbreviation,
+                d.team_colour,
+                s.lap_number,
+                s.corners,
+                s.speed_trap_1_kmh,
+                s.speed_trap_2_kmh,
+                s.max_speed_kmh,
+                s.max_rpm,
+                s.avg_rpm_pct,
+                s.avg_brake_point_pct,
+                s.drs_open_pct
+            FROM lap_telemetry_stats s
+            JOIN drivers d
+                ON d.driver_number = s.driver_number
+                AND d.session_key  = s.session_key
+            WHERE s.session_key = :sk
+            {driver_filter}
+            ORDER BY s.driver_number
+        """), params).mappings().all()
+
+    if not rows:
+        return {"error": "No stats computed for this session yet"}, 404
+
+    return jsonify([dict(r) for r in rows])

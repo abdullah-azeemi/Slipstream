@@ -125,3 +125,30 @@ export interface PredictionResponse {
   predictions:       DriverPrediction[]
   model_info:        { name: string; version: string }
 }
+
+export interface CornerStat {
+  corner_num:       number
+  distance_m:       number
+  min_speed_kmh:    number
+  entry_speed_kmh:  number
+  exit_speed_kmh:   number
+  brake_point_m:    number | null
+  throttle_point_m: number | null
+  min_gear:         number
+  apex_rpm:         number | null
+}
+
+export interface DriverTelemetryStats {
+  driver_number:       number
+  abbreviation:        string
+  team_colour:         string | null
+  lap_number:          number
+  corners:             CornerStat[]
+  speed_trap_1_kmh:    number | null
+  speed_trap_2_kmh:    number | null
+  max_speed_kmh:       number
+  max_rpm:             number | null
+  avg_rpm_pct:         number | null
+  avg_brake_point_pct: number | null
+  drs_open_pct:        number | null
+}

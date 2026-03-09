@@ -7,6 +7,7 @@ import type { Driver, TelemetrySample } from '@/types/f1'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import CornerAnalysis from '@/components/telemetry/CornerAnalysis'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -410,6 +411,20 @@ export default function TelemetryPage() {
 
           {/* Track map */}
           <TrackMap traces={norm} />
+
+          {/* Corner analysis */}
+            <CornerAnalysis
+              sessionKey={sessionKey}
+              drivers={selected}
+              driverMap={Object.fromEntries(
+                drivers.map(d => [d.driver_number, {
+                  abbreviation: d.abbreviation,
+                  team_colour:  d.team_colour,
+                }])
+              )}
+            />
+
+
 
         </div>
       )}

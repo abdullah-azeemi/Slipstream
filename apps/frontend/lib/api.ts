@@ -70,6 +70,13 @@ export const telemetryApi = {
     get<Record<string, { lap_number: number; samples: import('@/types/f1').TelemetrySample[] }>>(
       `/api/v1/sessions/${key}/telemetry/compare?drivers=${drivers.join(',')}`
     ),
+  stats: (key: number, drivers?: number[]) => {
+    const q = drivers?.length ? `?drivers=${drivers.join(',')}` : ''
+      return get<import('@/types/f1').DriverTelemetryStats[]>(
+          `/api/v1/sessions/${key}/telemetry/stats${q}`
+        )
+    },
+  
 }
 
 export const predictionsApi = {
