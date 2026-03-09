@@ -1,37 +1,41 @@
 """
 Celery task: ingest a single F1 session.
 
-Wraps the existing ingestion pipeline as an async task.
-Chains to stats computation and optional ML retraining.
+FastF1 session type strings (use these exactly):
+  Conventional weekend: 'Qualifying', 'Race'
+  Sprint weekend:       'Qualifying', 'Sprint Qualifying', 'Sprint', 'Race'
 """
 from __future__ import annotations
-from celery import chain
 import structlog
 from workers.celery_app import app
 
 log = structlog.get_logger()
 
+# Map short names → FastF1 session identifiers
+SESSION_MAP = {
+    'Q':  'Qualifying',
+    'R':  'Race',
+    'SQ': 'Sprint Qualifying',
+    'S':  'Sprint',
+    'FP1': 'Practice 1',
+    'FP2': 'Practice 2',
+    'FP3': 'Practice 3',
+}
+
 
 @app.task(
     bind=True,
     max_retries=3,
-    default_retry_delay=1800,  # retry after 30 min (FastF1 data may not be ready)
+    default_retry_delay=1800,
     name='workers.tasks.ingest.ingest_session',
 )
 def ingest_session(
     self,
     year:           int,
     gp:             str,
-    session_type:   str,
+    session_type:   str,        # short code: 'Q', 'R', 'SQ', 'S'
     skip_telemetry: bool = False,
 ):
-    """
-    Ingest a single session and optionally chain downstream tasks.
-
-    Retries up to 3× with 30-minute delay if FastF1 data isn't available yet.
-    This handles the common case where the task fires before FastF1 has
-    processed the timing data (~2-4 hours after race end).
-    """
     from ingestion.fastf1_client import (
         fetch_session, extract_session_info,
         extract_drivers, extract_laps, extract_telemetry,
@@ -40,15 +44,19 @@ def ingest_session(
         upsert_session, load_drivers, load_laps, load_telemetry,
     )
 
+    # Resolve short code → FastF1 string
+    fastf1_session = SESSION_MAP.get(session_type, session_type)
+
     log.info("task.ingest.start",
-             year=year, gp=gp, session=session_type)
+             year=year, gp=gp,
+             session=session_type, fastf1_name=fastf1_session)
 
     try:
-        session      = fetch_session(year, gp, session_type)
+        session      = fetch_session(year, gp, fastf1_session)
         session_info = extract_session_info(session)
         session_key  = upsert_session(session_info)
 
-        drivers = extract_drivers(session, session_key)
+        drivers   = extract_drivers(session, session_key)
         load_drivers(drivers)
 
         laps      = extract_laps(session, session_key)
@@ -65,9 +73,10 @@ def ingest_session(
                  telemetry=tel_count)
 
         return {
-            "session_key": session_key,
-            "laps":        lap_count,
-            "telemetry":   tel_count,
+            "session_key":   session_key,
+            "session_type":  session_type,
+            "laps":          lap_count,
+            "telemetry":     tel_count,
         }
 
     except Exception as exc:
@@ -81,43 +90,73 @@ def ingest_session(
 @app.task(name='workers.tasks.ingest.ingest_weekend')
 def ingest_weekend(year: int, gp: str, is_sprint: bool = False):
     """
-    Ingest a full race weekend — quali + race (+ sprint sessions if applicable).
-    Chains tasks sequentially: Q first, then R.
-    Telemetry only loaded for qualifying.
+    Ingest a full race weekend sequentially.
+
+    Conventional: Q → R
+    Sprint:       Q → SQ → S → R
+    
+    Telemetry only loaded for Qualifying.
+    After completion, triggers stats computation for the quali session.
     """
-    log.info("task.ingest_weekend.start", year=year, gp=gp, sprint=is_sprint)
+    log.info("task.ingest_weekend.start",
+             year=year, gp=gp, sprint=is_sprint)
 
-    sessions = [
-        (year, gp, 'Q',  False),   # qualifying — WITH telemetry
-        (year, gp, 'R',  True),    # race — skip telemetry
-    ]
-
+    # (session_type, skip_telemetry)
     if is_sprint:
         sessions = [
-            (year, gp, 'Q',  False),
-            (year, gp, 'SQ', True),   # sprint qualifying
-            (year, gp, 'S',  True),   # sprint race
-            (year, gp, 'R',  True),
+            ('Q',  False),   # Qualifying — WITH telemetry
+            ('SQ', True),    # Sprint Qualifying
+            ('S',  True),    # Sprint
+            ('R',  True),    # Race
+        ]
+    else:
+        sessions = [
+            ('Q', False),    # Qualifying — WITH telemetry
+            ('R', True),     # Race
         ]
 
-    results = []
-    for yr, g, stype, skip_tel in sessions:
+    results      = []
+    quali_key    = None
+
+    for stype, skip_tel in sessions:
         try:
             result = ingest_session.apply(
-                args=(yr, g, stype, skip_tel)
-            ).get(timeout=300)
+                args=(year, gp, stype, skip_tel)
+            ).get(timeout=600)   # 10 min max per session
             results.append(result)
+
+            if stype == 'Q':
+                quali_key = result.get('session_key')
+
             log.info("task.ingest_weekend.session_done",
-                     session_type=stype, result=result)
+                     session_type=stype,
+                     session_key=result.get('session_key'),
+                     laps=result.get('laps'))
+
         except Exception as e:
             log.error("task.ingest_weekend.session_failed",
-                      session_type=stype, error=str(e))
+                      session_type=stype,
+                      error=str(e))
+            # Continue with remaining sessions — don't abort the weekend
 
-    # After ingestion, compute telemetry stats for qualifying session
-    if results:
-        quali_key = results[0].get('session_key') if results else None
-        if quali_key and not skip_telemetry:
-            from workers.tasks.stats import compute_stats
-            compute_stats.delay(quali_key)
+    # Trigger downstream tasks
+    if quali_key:
+        from workers.tasks.stats import compute_stats
+        from workers.tasks.train import retrain_model
+        # Chain: compute stats → retrain model
+        compute_stats.apply_async(
+            args=(quali_key,),
+            link=retrain_model.si()
+        )
+        log.info("task.ingest_weekend.downstream_triggered",
+                 quali_key=quali_key)
 
-    return results
+    log.info("task.ingest_weekend.done",
+             year=year, gp=gp,
+             sessions_ingested=len(results))
+
+    return {
+        "year":    year,
+        "gp":      gp,
+        "results": results,
+    }
