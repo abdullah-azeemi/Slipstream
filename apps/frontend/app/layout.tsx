@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import './globals.css'
 import BottomNav from '@/components/layout/BottomNav'
 import TopBar from '@/components/layout/TopBar'
-import Sidebar from '@/components/layout/Sidebar'
 
 export const metadata: Metadata = {
   title: 'Pitwall — F1 Analytics',
@@ -14,9 +13,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="bg-bg text-white min-h-screen">
         <TopBar />
-        <Sidebar />
-        <main style={{ paddingTop: '56px', paddingLeft: '224px', minHeight: '100vh', paddingBottom: '32px' }}>
-          <div style={{ maxWidth: '1200px', padding: '24px' }}>
+        <main style={{ paddingTop: '56px', paddingBottom: '80px', minHeight: '100vh' }}>
+          <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '24px 20px' }}>
             {children}
           </div>
         </main>
