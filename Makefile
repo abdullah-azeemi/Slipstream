@@ -167,3 +167,19 @@ backend:
 
 test-backend:
 	uv run pytest apps/backend/tests/ -v --cov=apps/backend/src --cov-report=term-missing
+
+worker:
+	uv run celery -A workers.celery_app worker --loglevel=info --concurrency=2
+
+beat:
+	uv run celery -A workers.celery_app beat --loglevel=info
+
+monitor-now:
+	uv run celery -A workers.celery_app call workers.tasks.monitor.check_completed_sessions
+
+ingest-weekend:
+	uv run celery -A workers.celery_app call workers.tasks.ingest.ingest_weekend \
+		--args='[$(YEAR), "$(GP)", $(SPRINT)]'
+
+storage-report:
+	uv run celery -A workers.celery_app call workers.tasks.retention.storage_report

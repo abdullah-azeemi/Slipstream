@@ -4,6 +4,7 @@ members = [
     "packages/ml",
     "packages/ingestion",
     "packages/stream",
+    "packages/workers",
 ]
 
 [tool.uv]

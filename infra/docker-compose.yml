@@ -94,3 +94,28 @@ volumes:
   postgres_data:
   redis_data:
   mlflow_data:
+
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=postgresql+psycopg://pitwall:pitwall@timescaledb:5432/pitwall
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - timescaledb
+      - redis
+    volumes:
+      - ./fastf1_cache:/root/.cache/fastf1
+
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
+    command: celery -A workers.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+psycopg://pitwall:pitwall@timescaledb:5432/pitwall
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
