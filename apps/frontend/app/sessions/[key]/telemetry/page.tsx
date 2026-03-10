@@ -1,432 +1,741 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
-import { useParams } from 'next/navigation'
-import { api, telemetryApi } from '@/lib/api'
+
+import { use, useEffect, useRef, useState, useCallback } from 'react'
+import { api } from '@/lib/api'
 import { teamColour } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import CornerAnalysis from '@/components/telemetry/CornerAnalysis'
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface DriverTrace {
-  driver_number: number
-  abbreviation:  string
-  colour:        string
-  lap_number:    number
-  samples:       TelemetrySample[]
-}
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const POINTS   = 300
-const PAD      = 4
-const CHART_H  = 100
-const MINI_H   = 50
-const GEAR_H   = 50
-const DRS_H    = 24
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Interpolate trace to N evenly-spaced distance points for alignment */
-function interpolateByDistance(
-  samples: TelemetrySample[],
-  n:       number,
-  maxDist: number,
-): TelemetrySample[] {
-  if (samples.length === 0) return []
-  const out: TelemetrySample[] = []
-  for (let i = 0; i < n; i++) {
-    const target = (i / (n - 1)) * maxDist
-    let best = 0, bestDiff = Infinity
-    for (let j = 0; j < samples.length; j++) {
-      const diff = Math.abs((samples[j].distance_m ?? 0) - target)
-      if (diff < bestDiff) { bestDiff = diff; best = j }
-    }
-    out.push(samples[best])
-  }
-  return out
-}
-
-/** Build SVG polyline points string */
-function pts(
-  values: (number | null)[],
-  W: number, H: number,
-  min: number, max: number,
-): string {
-  return values.map((v, i) => {
-    const x = PAD + (i / (values.length - 1)) * (W - PAD * 2)
-    const y = v == null
-      ? H - PAD
-      : H - PAD - ((v - min) / (max - min || 1)) * (H - PAD * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-}
-
-/** Compute mini-sector colour per driver: purple=fastest, green=faster, yellow=slower */
-function miniSectors(traces: DriverTrace[], sectors = 18) {
-  if (traces.length < 2) return []
-  const n = traces[0]?.samples.length ?? 0
-  if (n === 0) return []
-  const sz = Math.floor(n / sectors)
-
-  return Array.from({ length: sectors }, (_, s) => {
-    const start = s * sz
-    const end   = start + sz
-    const avgs  = traces.map(t => {
-      const slice  = t.samples.slice(start, end)
-      const speeds = slice.map(x => x.speed_kmh ?? 0).filter(Boolean)
-      return speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0
-    })
-    const fastest = Math.max(...avgs)
-    return traces.map((_, i) => {
-      const spd   = avgs[i]
-      const other = Math.max(...avgs.filter((_, j) => j !== i))
-      return spd === fastest ? '#B347FF'
-           : spd >= other    ? '#22C55E'
-           : '#FFD700'
-    })
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+async function fetchTelemetryCompare(sessionKey: number, drivers: number[]): Promise<any[]> {
+  const res = await fetch(`${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}`)
+  if (!res.ok) throw new Error(`telemetry ${res.status}`)
+  const data = await res.json()
+  // Plain array
+  if (Array.isArray(data)) return data
+  // Shape: { "44": { lap_number, samples: [...] }, "63": { ... } }
+  return Object.entries(data).flatMap(([dn, val]: [string, any]) => {
+    const rows = Array.isArray(val) ? val : (val?.samples ?? [])
+    return rows.map((r: any) => ({ ...r, driver_number: parseInt(dn) }))
   })
 }
 
-// ── Track Map ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
+const CHART_BG    = '#0A0A0A'
+const AXIS_COLOR  = '#1E1E1E'
+const TEXT_DIM    = '#3F3F46'
+const TEXT_MID    = '#71717A'
+const RED_ACCENT  = '#E8002D'
+const GREEN_DRS   = '#22FF88'
+const BRAKE_COLOR = '#FF2D55'
+const CROSSHAIR   = 'rgba(255,255,255,0.12)'
 
-function TrackMap({ traces }: { traces: DriverTrace[] }) {
-  const first = traces[0]
-  if (!first) return null
-
-  const xs = first.samples.map(s => s.x_pos ?? 0).filter(Boolean)
-  const ys = first.samples.map(s => s.y_pos ?? 0).filter(Boolean)
-  if (xs.length < 10) return null
-
-  const W = 240, H = 130
-  const minX = Math.min(...xs), maxX = Math.max(...xs)
-  const minY = Math.min(...ys), maxY = Math.max(...ys)
-  const sx   = (x: number) => PAD + ((x - minX) / (maxX - minX || 1)) * (W - PAD * 2)
-  const sy   = (y: number) => H - PAD - ((y - minY) / (maxY - minY || 1)) * (H - PAD * 2)
-
-  const trackPath = first.samples
-    .filter(s => s.x_pos && s.y_pos)
-    .map((s, i) => `${i === 0 ? 'M' : 'L'}${sx(s.x_pos!).toFixed(1)},${sy(s.y_pos!).toFixed(1)}`)
-    .join(' ')
-
-  return (
-    <div className="bg-surface border border-border rounded-xl p-3">
-      <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Track Map</div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 110 }}>
-        {/* Base track outline */}
-        <path d={trackPath} fill="none" stroke="#2A2A2A" strokeWidth="5"
-          strokeLinecap="round" strokeLinejoin="round" />
-        <path d={trackPath} fill="none" stroke="#444" strokeWidth="3"
-          strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Braking zones — red dots where brake=true */}
-        {traces.map(t =>
-          t.samples
-            .filter(s => s.brake && s.x_pos && s.y_pos)
-            .map((s, i) => (
-              <circle key={i} cx={sx(s.x_pos!)} cy={sy(s.y_pos!)}
-                r={1.5} fill="#E8002D" opacity={0.7} />
-            ))
-        )}
-
-        {/* DRS zones — green dots */}
-        {traces.slice(0, 1).map(t =>
-          t.samples
-            .filter(s => (s.drs ?? 0) > 8 && s.x_pos && s.y_pos)
-            .map((s, i) => (
-              <circle key={i} cx={sx(s.x_pos!)} cy={sy(s.y_pos!)}
-                r={1.5} fill="#22C55E" opacity={0.6} />
-            ))
-        )}
-      </svg>
-      <div className="flex items-center gap-3 mt-1">
-        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red" /><span className="text-[9px] text-zinc-600">Braking</span></div>
-        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" /><span className="text-[9px] text-zinc-600">DRS</span></div>
-      </div>
-    </div>
-  )
+// ── Interpolation ─────────────────────────────────────────────────────────────
+type Interp = {
+  dist: number[]; speed: number[]; throttle: number[];
+  gear: number[]; rpm: number[]; brake: boolean[]; drs: number[];
+  x: number[]; y: number[];
 }
 
-// ── Chart wrapper ────────────────────────────────────────────────────────────
+function interpolateSamples(samples: TelemetrySample[], points = 400): Interp {
+  if (!samples.length) return { dist:[], speed:[], throttle:[], gear:[], rpm:[], brake:[], drs:[], x:[], y:[] }
+  const sorted  = [...samples].sort((a, b) => a.distance_m - b.distance_m)
+  const minDist = sorted[0].distance_m
+  const maxDist = sorted[sorted.length - 1].distance_m
+  const step    = (maxDist - minDist) / (points - 1)
+  const dist    = Array.from({ length: points }, (_, i) => minDist + i * step)
 
-function Panel({ title, unit, min, max, children }: {
-  title: string; unit: string; min: number; max: number; children: React.ReactNode
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-xl p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{title}</span>
-        <span className="font-mono text-[9px] text-zinc-700">{unit}</span>
-      </div>
-      <div className="relative">
-        {children}
-        <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between pointer-events-none">
-          <span className="font-mono text-[9px] text-zinc-700">{max}</span>
-          <span className="font-mono text-[9px] text-zinc-700">{min}</span>
-        </div>
-      </div>
-    </div>
-  )
+  function lerp(field: keyof TelemetrySample, d: number): number {
+    const idx = sorted.findIndex(s => s.distance_m >= d)
+    if (idx <= 0) return (sorted[0]?.[field] as number) ?? 0
+    const a = sorted[idx - 1], b = sorted[idx]
+    const t = (d - a.distance_m) / ((b.distance_m - a.distance_m) || 1)
+    return ((a[field] as number) ?? 0) * (1 - t) + ((b[field] as number) ?? 0) * t
+  }
+
+  return {
+    dist,
+    speed:    dist.map(d => lerp('speed_kmh', d)),
+    throttle: dist.map(d => lerp('throttle_pct', d)),
+    gear:     dist.map(d => Math.round(lerp('gear', d))),
+    rpm:      dist.map(d => lerp('rpm', d)),
+    brake:    dist.map(d => lerp('brake' as any, d) > 0.5),
+    drs:      dist.map(d => lerp('drs', d)),
+    x:        dist.map(d => lerp('x_pos' as any, d)),
+    y:        dist.map(d => lerp('y_pos' as any, d)),
+  }
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ── Drawing helpers ───────────────────────────────────────────────────────────
+const PAD = { top: 10, right: 10, bottom: 26, left: 48 }
 
-export default function TelemetryPage() {
-  const { key }    = useParams<{ key: string }>()
+function chartCoords(W: number, H: number) {
+  return {
+    cW:  W - PAD.left - PAD.right,
+    cH:  H - PAD.top  - PAD.bottom,
+    toX: (nx: number) => PAD.left + nx * (W - PAD.left - PAD.right),
+    toY: (ny: number, cH: number) => PAD.top + cH - ny * cH,
+  }
+}
+
+function drawGridAndAxes(
+  ctx: CanvasRenderingContext2D,
+  W: number, H: number,
+  yMin: number, yMax: number,
+  gridCount: number,
+  isRpm: boolean,
+  sectorLines: number[],
+) {
+  const { cW, cH } = chartCoords(W, H)
+
+  // Background
+  ctx.fillStyle = CHART_BG
+  ctx.fillRect(0, 0, W, H)
+
+  // Horizontal grid
+  for (let i = 0; i <= gridCount; i++) {
+    const y = PAD.top + cH - (i / gridCount) * cH
+    ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
+    ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
+    const val = yMin + (i / gridCount) * (yMax - yMin)
+    ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+    ctx.fillText(isRpm ? `${(val/1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 6, y + 3)
+  }
+
+  // Sector dividers
+  sectorLines.forEach((nx, si) => {
+    const sx = PAD.left + nx * cW
+    ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
+    ctx.setLineDash([3, 4]); ctx.moveTo(sx, PAD.top); ctx.lineTo(sx, PAD.top + cH); ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+    ctx.fillText(`S${si + 2}`, sx, PAD.top + cH + 16)
+  })
+
+  // Distance labels
+  ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+  for (let i = 0; i <= 4; i++) {
+    const nx = i / 4
+    const x  = PAD.left + nx * cW
+    ctx.fillText(`${(nx * 100).toFixed(0)}%`, x, PAD.top + cH + 16)
+  }
+}
+
+function drawLine(ctx: CanvasRenderingContext2D, vals: number[], colour: string, W: number, H: number, yMin: number, yMax: number, lw = 2) {
+  const { cW, cH } = chartCoords(W, H)
+  ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = lw; ctx.lineJoin = 'round'
+  vals.forEach((v, i) => {
+    const nx = i / (vals.length - 1)
+    const ny = (v - yMin) / (yMax - yMin)
+    const cx = PAD.left + nx * cW
+    const cy = PAD.top  + cH - ny * cH
+    i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
+  })
+  ctx.stroke()
+}
+
+function drawCrosshair(ctx: CanvasRenderingContext2D, nx: number, W: number, H: number) {
+  const { cW, cH } = chartCoords(W, H)
+  const cx = PAD.left + nx * cW
+  ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
+  ctx.moveTo(cx, PAD.top); ctx.lineTo(cx, PAD.top + cH); ctx.stroke()
+}
+
+function drawDots(ctx: CanvasRenderingContext2D, nx: number, W: number, H: number, driverData: DriverRenderData[], field: string, yMin: number, yMax: number) {
+  const { cW, cH } = chartCoords(W, H)
+  const cx = PAD.left + nx * cW
+  driverData.forEach(({ interp, colour }) => {
+    const vals = (interp as any)[field] as number[]
+    const idx  = Math.round(nx * (vals.length - 1))
+    const v    = vals[idx] ?? 0
+    const ny   = (v - yMin) / (yMax - yMin)
+    const cy   = PAD.top + cH - ny * cH
+    ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2)
+    ctx.fillStyle = colour; ctx.fill()
+    ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
+  })
+}
+
+type DriverRenderData = { interp: Interp; colour: string; abbr: string }
+
+// ── Chart configs ─────────────────────────────────────────────────────────────
+const CHARTS = [
+  { label: 'SPEED',    unit: 'km/h', field: 'speed',    yMin: 60,   yMax: 360,   height: 200, gridCount: 6, isRpm: false },
+  { label: 'THROTTLE', unit: '%',    field: 'throttle', yMin: 0,    yMax: 100,   height: 120, gridCount: 4, isRpm: false },
+  { label: 'GEAR',     unit: '1–8',  field: 'gear',     yMin: 1,    yMax: 8,     height: 100, gridCount: 7, isRpm: false },
+  { label: 'RPM',      unit: 'rpm',  field: 'rpm',      yMin: 4000, yMax: 13000, height: 130, gridCount: 5, isRpm: true  },
+]
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function TelemetryPage({ params }: { params: Promise<{ key: string }> }) {
+  const { key }    = use(params)
+
   const sessionKey = parseInt(key)
 
-  const [drivers,  setDrivers]  = useState<Driver[]>([])
-  const [selected, setSelected] = useState<number[]>([])
-  const [traces,   setTraces]   = useState<DriverTrace[]>([])
-  const [loading,  setLoading]  = useState(false)
-  const [ready,    setReady]    = useState(false)
+  const [drivers,   setDrivers]   = useState<Driver[]>([])
+  const [selected,  setSelected]  = useState<number[]>([])
+  const [telData,   setTelData]   = useState<Map<number, Interp>>(new Map())
+  const [tooltipNx, setTooltipNx] = useState<number | null>(null)
+  const [tooltipData, setTooltipData] = useState<{ dist: number; values: any[] } | null>(null)
+  const [loading,   setLoading]   = useState(false)
+  const [sessionYear, setSessionYear] = useState<number | null>(null)
 
+  // Derived: 2026 has no DRS and no RPM data
+  const is2026 = sessionYear === 2026
+
+  const chartRefs  = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
+  const deltaRef   = useRef<HTMLCanvasElement | null>(null)
+  const drsRef     = useRef<HTMLCanvasElement | null>(null)
+  const trackRef   = useRef<HTMLCanvasElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Load drivers + session year
   useEffect(() => {
+    api.sessions.get(sessionKey).then(s => setSessionYear(s.year)).catch(() => {})
     api.drivers.list(sessionKey).then(d => {
       setDrivers(d)
-      setSelected(d.slice(0, 2).map(x => x.driver_number))
-      setReady(true)
+      if (d.length >= 2) setSelected([d[0].driver_number, d[1].driver_number])
     })
   }, [sessionKey])
 
+  // Load telemetry
   useEffect(() => {
-    if (!ready || selected.length < 1) return
+    if (!selected.length) return
     setLoading(true)
-    telemetryApi.compare(sessionKey, selected)
-      .then(data => {
-        const result: DriverTrace[] = []
-        for (const num of selected) {
-          const entry  = data[String(num)]
-          const driver = drivers.find(d => d.driver_number === num)
-          if (entry && driver) {
-            result.push({
-              driver_number: num,
-              abbreviation:  driver.abbreviation,
-              colour:        teamColour(driver.team_colour),
-              lap_number:    entry.lap_number,
-              samples:       entry.samples,
-            })
-          }
-        }
-        setTraces(result)
+    fetchTelemetryCompare(sessionKey, selected)
+      .then(samples => {
+        const byDriver = new Map<number, TelemetrySample[]>()
+        samples.forEach(s => {
+          if (!byDriver.has(s.driver_number)) byDriver.set(s.driver_number, [])
+          byDriver.get(s.driver_number)!.push(s)
+        })
+        const interped = new Map<number, Interp>()
+        byDriver.forEach((rows, dn) => interped.set(dn, interpolateSamples(rows)))
+        setTelData(interped)
       })
-      .catch(() => setTraces([]))
       .finally(() => setLoading(false))
-  }, [selected, sessionKey, ready])
+  }, [sessionKey, selected.join(',')])
 
-  // Max distance across all loaded traces
-  const maxDist = useMemo(() =>
-    Math.max(...traces.flatMap(t => t.samples.map(s => s.distance_m ?? 0)), 1),
-    [traces]
-  )
+  // Build driver render data
+  const driverData: DriverRenderData[] = selected
+    .map(dn => {
+      const interp = telData.get(dn)
+      const d      = drivers.find(x => x.driver_number === dn)
+      if (!interp || !d) return null
+      return { interp, colour: teamColour(d.team_colour, d.team_name), abbr: d.abbreviation }
+    })
+    .filter(Boolean) as DriverRenderData[]
 
-  // Normalise all traces to same POINTS grid aligned by distance
-  const norm = useMemo(() =>
-    traces.map(t => ({
-      ...t,
-      samples: interpolateByDistance(t.samples, POINTS, maxDist),
-    })),
-    [traces, maxDist]
-  )
+  const sectorLines = [1/3, 2/3]
 
-  const allSpeeds = norm.flatMap(t => t.samples.map(s => s.speed_kmh)).filter(Boolean) as number[]
-  const minSpd    = allSpeeds.length ? Math.floor(Math.min(...allSpeeds)) : 0
-  const maxSpd    = allSpeeds.length ? Math.ceil(Math.max(...allSpeeds))  : 350
-  const deltas    = miniSectors(norm)
-  const W         = 560
+  // ── Render all canvases ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!driverData.length) return
+    const W = containerRef.current?.clientWidth ?? 900
 
-  if (!ready) return <LoadingSpinner text="Loading session..." />
+    // Speed/throttle/gear/rpm charts
+    CHARTS.forEach((cfg, i) => {
+      const canvas = chartRefs.current[i]
+      if (!canvas) return
+      canvas.width = W; canvas.height = cfg.height
+      const ctx = canvas.getContext('2d')!
+      drawGridAndAxes(ctx, W, cfg.height, cfg.yMin, cfg.yMax, cfg.gridCount, cfg.isRpm, sectorLines)
+
+      // Brake zones behind speed line
+      if (cfg.field === 'speed' && driverData[0]) {
+        const { cW, cH } = chartCoords(W, cfg.height)
+        const br = driverData[0].interp.brake
+        let inBrake = false, bs = 0
+        br.forEach((b, i) => {
+          const nx = i / (br.length - 1)
+          if (b && !inBrake) { inBrake = true; bs = nx }
+          if (!b && inBrake) {
+            inBrake = false
+            ctx.fillStyle = 'rgba(255,45,85,0.08)'
+            ctx.fillRect(PAD.left + bs * cW, PAD.top, (nx - bs) * cW, cH)
+          }
+        })
+      }
+
+      driverData.forEach(d => drawLine(ctx, (d.interp as any)[cfg.field], d.colour, W, cfg.height, cfg.yMin, cfg.yMax))
+      if (tooltipNx !== null) {
+        drawCrosshair(ctx, tooltipNx, W, cfg.height)
+        drawDots(ctx, tooltipNx, W, cfg.height, driverData, cfg.field, cfg.yMin, cfg.yMax)
+      }
+    })
+
+    // Delta chart
+    if (deltaRef.current && driverData.length >= 2) {
+      const canvas = deltaRef.current
+      canvas.width = W; canvas.height = 120
+      const ctx  = canvas.getContext('2d')!
+      const a    = driverData[0].interp.speed
+      const b    = driverData[1].interp.speed
+      const n    = Math.min(a.length, b.length)
+      const deltas  = Array.from({ length: n }, (_, i) => a[i] - b[i])
+      const maxD    = Math.max(...deltas.map(Math.abs), 15)
+      const { cW, cH } = chartCoords(W, 120)
+      const midY   = PAD.top + cH / 2
+
+      ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, 120)
+      // Zero line
+      ctx.beginPath(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1
+      ctx.moveTo(PAD.left, midY); ctx.lineTo(PAD.left + cW, midY); ctx.stroke()
+      // Y labels
+      for (const m of [-1, -0.5, 0.5, 1]) {
+        const y  = PAD.top + cH / 2 - m * cH / 2
+        const lv = (m * maxD).toFixed(0)
+        ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+        ctx.fillText(lv, PAD.left - 6, y + 3)
+        ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
+        ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
+      }
+      // Filled area
+      ctx.beginPath()
+      ctx.moveTo(PAD.left, midY)
+      deltas.forEach((d, i) => {
+        ctx.lineTo(PAD.left + (i/(n-1)) * cW, midY - (d/maxD) * (cH/2))
+      })
+      ctx.lineTo(PAD.left + cW, midY); ctx.closePath()
+      const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
+      grad.addColorStop(0,   driverData[0].colour + '44')
+      grad.addColorStop(0.5, '#0A0A0A')
+      grad.addColorStop(1,   driverData[1].colour + '44')
+      ctx.fillStyle = grad; ctx.fill()
+      // Delta line
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
+      deltas.forEach((d, i) => {
+        const cx = PAD.left + (i/(n-1)) * cW
+        const cy = midY - (d/maxD) * (cH/2)
+        i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
+      })
+      ctx.stroke()
+      // Corner labels
+      ctx.fillStyle = driverData[0].colour + 'CC'; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'left'
+      ctx.fillText(`▲ ${driverData[0].abbr} faster`, PAD.left + 6, PAD.top + 14)
+      ctx.fillStyle = driverData[1].colour + 'CC'
+      ctx.fillText(`▼ ${driverData[1].abbr} faster`, PAD.left + 6, PAD.top + cH - 6)
+      // Crosshair + delta value
+      if (tooltipNx !== null) {
+        const cx  = PAD.left + tooltipNx * cW
+        const idx = Math.round(tooltipNx * (n-1))
+        const d   = deltas[idx] ?? 0
+        const cy  = midY - (d/maxD) * (cH/2)
+        ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
+        ctx.moveTo(cx, PAD.top); ctx.lineTo(cx, PAD.top + cH); ctx.stroke()
+        ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2)
+        ctx.fillStyle = d >= 0 ? driverData[0].colour : driverData[1].colour
+        ctx.fill(); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
+        const label = `${d >= 0 ? '+' : ''}${d.toFixed(1)} km/h`
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px JetBrains Mono, monospace'
+        ctx.textAlign = cx > PAD.left + cW/2 ? 'right' : 'left'
+        ctx.fillText(label, cx + (cx > PAD.left + cW/2 ? -10 : 10), PAD.top + 22)
+      }
+    }
+
+    // DRS chart
+    if (drsRef.current) {
+      const canvas = drsRef.current
+      const rowH   = 20
+      const totalH = driverData.length * (rowH + 6) + PAD.top + PAD.bottom
+      canvas.width = W; canvas.height = totalH
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, totalH)
+      const { cW } = chartCoords(W, totalH)
+
+      driverData.forEach(({ interp, colour, abbr }, di) => {
+        const y = PAD.top + di * (rowH + 6)
+        ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+        ctx.fillText(abbr, PAD.left - 6, y + rowH/2 + 4)
+        ctx.fillStyle = '#1A1A1A'
+        ctx.beginPath(); ctx.roundRect?.(PAD.left, y, cW, rowH, 3); ctx.fill()
+        const n = interp.drs.length
+        let inDrs = false, ds = 0
+        interp.drs.forEach((v, i) => {
+          const open = v > 8
+          if (open && !inDrs) { inDrs = true; ds = i }
+          if (!open && inDrs) {
+            inDrs = false
+            const x1 = PAD.left + (ds/(n-1)) * cW
+            const x2 = PAD.left + (i/(n-1)) * cW
+            ctx.fillStyle = GREEN_DRS
+            ctx.beginPath(); ctx.roundRect?.(x1, y, x2-x1, rowH, 2); ctx.fill()
+          }
+        })
+        if (inDrs) {
+          const x1 = PAD.left + (ds/(n-1)) * cW
+          ctx.fillStyle = GREEN_DRS
+          ctx.beginPath(); ctx.roundRect?.(x1, y, cW - (x1 - PAD.left), rowH, 2); ctx.fill()
+        }
+        if (tooltipNx !== null) {
+          const cx = PAD.left + tooltipNx * cW
+          ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
+          ctx.moveTo(cx, PAD.top); ctx.lineTo(cx, PAD.top + totalH - PAD.bottom); ctx.stroke()
+        }
+      })
+    }
+
+    // Track map
+    if (trackRef.current && driverData[0]?.interp.x.length) {
+      const canvas = trackRef.current
+      canvas.width = W; canvas.height = 340
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, 340)
+
+      const interp = driverData[0].interp
+      const xs = interp.x, ys = interp.y, n = xs.length
+      const xMin = Math.min(...xs), xMax = Math.max(...xs)
+      const yMin = Math.min(...ys), yMax = Math.max(...ys)
+      const mapPad = 48
+      const scale = Math.min((W - mapPad*2) / (xMax - xMin || 1), (340 - mapPad*2) / (yMax - yMin || 1)) * 0.9
+      const offX  = (W   - (xMax - xMin) * scale) / 2 - xMin * scale
+      const offY  = (340 - (yMax - yMin) * scale) / 2 - yMin * scale
+      const tx    = (x: number) => x * scale + offX
+      const ty    = (y: number) => y * scale + offY
+
+      // Base track
+      ctx.beginPath()
+      xs.forEach((x, i) => i === 0 ? ctx.moveTo(tx(x), ty(ys[i])) : ctx.lineTo(tx(x), ty(ys[i])))
+      ctx.closePath()
+      ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke()
+
+      // Sectors S1/S2/S3
+      const sectColours = ['#E8002D55', '#FFD70055', '#B347FF55']
+      sectColours.forEach((col, si) => {
+        const s = Math.floor(si * n / 3), e = Math.floor((si + 1) * n / 3)
+        ctx.beginPath()
+        for (let i = s; i <= e; i++) i === s ? ctx.moveTo(tx(xs[i]), ty(ys[i])) : ctx.lineTo(tx(xs[i]), ty(ys[i]))
+        ctx.strokeStyle = col; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke()
+      })
+
+      // Braking zones
+      let inB = false, bs = 0
+      interp.brake.forEach((b, i) => {
+        if (b && !inB) { inB = true; bs = i }
+        if (!b && inB) {
+          inB = false
+          ctx.beginPath()
+          for (let j = bs; j <= i; j++) j === bs ? ctx.moveTo(tx(xs[j]), ty(ys[j])) : ctx.lineTo(tx(xs[j]), ty(ys[j]))
+          ctx.strokeStyle = BRAKE_COLOR; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke()
+        }
+      })
+
+      // DRS zones
+      let inD = false, ds2 = 0
+      interp.drs.forEach((v, i) => {
+        if (v > 8 && !inD) { inD = true; ds2 = i }
+        if (v <= 8 && inD) {
+          inD = false
+          ctx.beginPath()
+          for (let j = ds2; j <= i; j++) j === ds2 ? ctx.moveTo(tx(xs[j]), ty(ys[j])) : ctx.lineTo(tx(xs[j]), ty(ys[j]))
+          ctx.strokeStyle = GREEN_DRS; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke()
+        }
+      })
+
+      // Current position
+      if (tooltipNx !== null) {
+        const idx = Math.round(tooltipNx * (n - 1))
+        driverData.forEach(({ colour }) => {
+          const ix = tx(xs[idx]), iy = ty(ys[idx])
+          ctx.beginPath(); ctx.arc(ix, iy, 8, 0, Math.PI * 2)
+          ctx.fillStyle = colour
+          ctx.shadowColor = colour; ctx.shadowBlur = 16
+          ctx.fill(); ctx.shadowBlur = 0
+        })
+      }
+
+      // Start dot
+      ctx.beginPath(); ctx.arc(tx(xs[0]), ty(ys[0]), 5, 0, Math.PI*2)
+      ctx.fillStyle = '#fff'; ctx.fill()
+    }
+  }, [driverData.map(d => d.abbr).join(','), tooltipNx, telData])
+
+  // Mouse handlers
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const cW   = rect.width - PAD.left - PAD.right
+    const nx   = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD.left) / cW))
+    setTooltipNx(nx)
+    if (!driverData.length) return
+    const n   = driverData[0].interp.dist.length
+    const idx = Math.round(nx * (n - 1))
+    setTooltipData({
+      dist:   driverData[0].interp.dist[idx],
+      values: driverData.map(d => ({
+        abbr:     d.abbr,
+        colour:   d.colour,
+        speed:    d.interp.speed[idx]    ?? 0,
+        throttle: d.interp.throttle[idx] ?? 0,
+        gear:     d.interp.gear[idx]     ?? 0,
+        rpm:      d.interp.rpm[idx]      ?? 0,
+        brake:    d.interp.brake[idx]    ?? false,
+      })),
+    })
+  }, [driverData])
+
+  const handleMouseLeave = useCallback(() => {
+    setTooltipNx(null); setTooltipData(null)
+  }, [])
+
+  const toggleDriver = (dn: number) =>
+    setSelected(prev => prev.includes(dn)
+      ? prev.filter(d => d !== dn)
+      : prev.length < 4 ? [...prev, dn] : prev)
 
   return (
-    <div className="px-4 py-4 max-w-3xl mx-auto space-y-4">
+    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
 
-      <Link href={`/sessions/${sessionKey}`}
-        className="flex items-center gap-1.5 text-zinc-500 text-sm hover:text-white transition-colors">
-        <ArrowLeft size={14} /> Session
-      </Link>
-
-      <div>
-        <h1 className="font-display font-bold text-2xl text-white">Speed Traces</h1>
-        <p className="text-zinc-500 text-sm">Fastest lap telemetry — distance-aligned overlay</p>
+      {/* Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1 }}>
+          Speed Traces
+        </h1>
+        <p style={{ color: '#52525B', fontSize: '13px', marginTop: '4px', fontFamily: 'monospace' }}>
+          Fastest lap telemetry — distance-aligned overlay
+        </p>
       </div>
 
       {/* Driver selector */}
-      <div className="bg-surface border border-border rounded-xl p-4">
-        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-3">
-          Drivers (max 4)
+      <div style={{
+        background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
+        padding: '14px 16px', marginBottom: '10px',
+      }}>
+        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>
+          DRIVERS (MAX 4)
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {selected.map(num => {
-            const d = drivers.find(x => x.driver_number === num)
-            if (!d) return null
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {drivers.map(d => {
+            const isSel  = selected.includes(d.driver_number)
+            const colour = teamColour(d.team_colour, d.team_name)
             return (
-              <button key={num}
-                onClick={() => setSelected(p => p.filter(n => n !== num))}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
-                style={{ background: teamColour(d.team_colour), color: '#000' }}>
-                {d.abbreviation} ×
+              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
+                display: 'flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', borderRadius: '20px', cursor: 'pointer',
+                border:      isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
+                background:  isSel ? `${colour}18` : 'transparent',
+                color:       isSel ? '#fff' : '#52525B',
+                fontSize:    '12px', fontWeight: isSel ? 700 : 400,
+                fontFamily:  'monospace', transition: 'all 0.12s',
+              }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
+                {d.abbreviation}
+                {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
               </button>
             )
           })}
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {drivers.filter(d => !selected.includes(d.driver_number)).map(d => (
-            <button key={d.driver_number}
-              onClick={() => selected.length < 4 && setSelected(p => [...p, d.driver_number])}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono border border-border text-zinc-400 hover:border-zinc-500 transition-colors">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: teamColour(d.team_colour) }} />
-              {d.abbreviation}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <LoadingSpinner text="Fetching telemetry..." />
-      ) : norm.length === 0 ? (
-        <div className="text-center py-12 text-zinc-600 text-sm bg-surface border border-border rounded-xl">
-          No telemetry loaded for this session.
-          <br /><br />
-          <code className="font-mono text-zinc-500 text-xs bg-surface2 px-2 py-1 rounded">
-            uv run python -m ingestion.ingest_session --year YYYY --gp British --session Q
-          </code>
-        </div>
-      ) : (
-        <div className="space-y-3">
-
-          {/* Legend */}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-4">
-              {norm.map(t => (
-                <div key={t.driver_number} className="flex items-center gap-1.5">
-                  <div className="w-6 h-0.5 rounded" style={{ background: t.colour }} />
-                  <span className="font-mono text-xs text-zinc-300">{t.abbreviation}</span>
-                  <span className="font-mono text-[10px] text-zinc-600">L{t.lap_number}</span>
-                </div>
-              ))}
-            </div>
-            <span className="font-mono text-[10px] text-zinc-600">
-              {maxDist > 0 ? `${(maxDist / 1000).toFixed(2)} km` : ''}
-            </span>
-          </div>
-
-          {/* Speed trace */}
-          <Panel title="Speed" unit="km/h" min={minSpd} max={maxSpd}>
-            <svg viewBox={`0 0 ${W} ${CHART_H}`} className="w-full" style={{ height: CHART_H }}>
-              {[0.25, 0.5, 0.75].map(p => (
-                <line key={p}
-                  x1={PAD} y1={CHART_H - PAD - p * (CHART_H - PAD*2)}
-                  x2={W-PAD} y2={CHART_H - PAD - p * (CHART_H - PAD*2)}
-                  stroke="#1A1A1A" strokeWidth="1" />
-              ))}
-              {/* Brake zones — red strips at bottom */}
-              {norm.slice(0, 1).map(t =>
-                t.samples.map((s, i) => {
-                  if (!s.brake) return null
-                  const x = PAD + (i / (POINTS-1)) * (W - PAD*2)
-                  return <rect key={i} x={x-1} y={CHART_H-PAD-6} width={2} height={6}
-                    fill="#E8002D" opacity={0.5} />
-                })
-              )}
-              {norm.map(t => (
-                <polyline key={t.driver_number}
-                  points={pts(t.samples.map(s => s.speed_kmh), W, CHART_H, minSpd, maxSpd)}
-                  fill="none" stroke={t.colour} strokeWidth="1.5"
-                  strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
-              ))}
-            </svg>
-          </Panel>
-
-          {/* Throttle */}
-          <Panel title="Throttle" unit="%" min={0} max={100}>
-            <svg viewBox={`0 0 ${W} ${MINI_H}`} className="w-full" style={{ height: MINI_H }}>
-              {norm.map(t => (
-                <polyline key={t.driver_number}
-                  points={pts(t.samples.map(s => s.throttle_pct), W, MINI_H, 0, 100)}
-                  fill="none" stroke={t.colour} strokeWidth="1.2" opacity={0.8} />
-              ))}
-            </svg>
-          </Panel>
-
-          {/* Gear */}
-          <Panel title="Gear" unit="1–8" min={1} max={8}>
-            <svg viewBox={`0 0 ${W} ${GEAR_H}`} className="w-full" style={{ height: GEAR_H }}>
-              {norm.map(t => (
-                <polyline key={t.driver_number}
-                  points={pts(t.samples.map(s => s.gear), W, GEAR_H, 1, 8)}
-                  fill="none" stroke={t.colour} strokeWidth="1.2" opacity={0.8}
-                  strokeLinejoin="miter" />
-              ))}
-            </svg>
-          </Panel>
-
-          {/* DRS open indicator */}
-          <div className="bg-surface border border-border rounded-xl p-3">
-            <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">DRS Open</div>
-            {norm.map(t => (
-              <div key={t.driver_number} className="flex items-center gap-2 mb-1.5 last:mb-0">
-                <span className="font-mono text-[10px] text-zinc-500 w-8">{t.abbreviation}</span>
-                <div className="flex-1 h-4 bg-surface2 rounded overflow-hidden flex">
-                  {t.samples.map((s, i) => (
-                    <div key={i} className="flex-1 h-full"
-                      style={{ background: (s.drs ?? 0) > 8 ? '#22C55E' : 'transparent' }} />
-                  ))}
-                </div>
+        {driverData.length > 0 && (
+          <div style={{ display: 'flex', gap: '24px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #1A1A1A' }}>
+            {driverData.map(d => (
+              <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '24px', height: '2px', background: d.colour }} />
+                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#A1A1AA', fontWeight: 600 }}>{d.abbr}</span>
               </div>
             ))}
           </div>
+        )}
+      </div>
 
-          {/* Mini sectors */}
-          {deltas.length > 0 && (
-            <div className="bg-surface border border-border rounded-xl p-3">
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">
-                Mini Sectors — speed advantage per zone
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+          Loading telemetry...
+        </div>
+      )}
+
+      {!loading && driverData.length > 0 && (
+        <>
+          {/* Floating tooltip */}
+          {tooltipData && (
+            <div style={{
+              position: 'fixed', left: 80, top: 80, zIndex: 200, pointerEvents: 'none',
+              background: '#111111ee', border: '1px solid #2A2A2A', borderRadius: '10px',
+              padding: '10px 14px', backdropFilter: 'blur(8px)',
+            }}>
+              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginBottom: '8px' }}>
+                {(tooltipData.dist / 1000).toFixed(2)} km
               </div>
-              <div className="flex gap-0.5 mb-2">
-                {deltas.map((sector, i) => (
-                  <div key={i} className="flex-1 flex flex-col gap-0.5">
-                    {sector.map((colour, j) => (
-                      <div key={j} className="h-3 rounded-sm" style={{ background: colour }} />
-                    ))}
+              {tooltipData.values.map((v: any) => (
+                <div key={v.abbr} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: v.colour, flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '10px', color: v.colour, fontFamily: 'monospace', fontWeight: 700 }}>{v.abbr}</div>
+                    <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>{v.speed.toFixed(0)} km/h</div>
+                    <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A' }}>
+                      G{v.gear} · {v.throttle.toFixed(0)}% thr · {(v.rpm/1000).toFixed(1)}k
+                      {v.brake && <span style={{ color: BRAKE_COLOR, marginLeft: '6px', fontWeight: 700 }}>BRAKE</span>}
+                    </div>
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Charts */}
+          {CHARTS.map((cfg, i) => (
+            <div key={cfg.field} style={{
+              background: '#111111', border: '1px solid #2A2A2A',
+              borderRadius: '12px', overflow: 'hidden', marginBottom: '8px',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px 2px' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>{cfg.label}</span>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>{cfg.unit}</span>
               </div>
-              <div className="flex items-center gap-4">
+              <canvas
+                ref={el => { chartRefs.current[i] = el }}
+                height={cfg.height}
+                style={{ display: 'block', width: '100%', cursor: 'crosshair' }}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+              />
+            </div>
+          ))}
+
+          {/* Speed Delta */}
+          {driverData.length >= 2 && (
+            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px 2px' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>SPEED DELTA</span>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>
+                  {driverData[0].abbr} vs {driverData[1].abbr} · km/h advantage
+                </span>
+              </div>
+              <canvas ref={deltaRef} height={120}
+                style={{ display: 'block', width: '100%', cursor: 'crosshair' }}
+                onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+            </div>
+          )}
+
+          {/* DRS Open — 2026 cars have no DRS */}
+          {!is2026 && (
+          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 8px' }}>
+              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>DRS OPEN</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '14px', height: '6px', borderRadius: '2px', background: GREEN_DRS }} />
+                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>DRS Open zone</span>
+              </div>
+            </div>
+            <div style={{ padding: '0 0 8px 0' }}>
+              <canvas ref={drsRef} height={driverData.length * 26 + 36}
+                style={{ display: 'block', width: '100%' }} />
+            </div>
+          </div>
+          )}
+
+          {/* Sector Comparison — S1 / S2 / S3 */}
+          {driverData.length >= 2 && (
+            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '12px 16px', marginBottom: '8px' }}>
+              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>
+                SECTOR SPEED ADVANTAGE — S1 / S2 / S3
+              </div>
+              {(() => {
+                const SECTOR_COLOURS = ['#E8002D', '#FFD700', '#B347FF']
+                const SECTOR_LABELS  = ['S1', 'S2', 'S3']
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[0, 1, 2].map(si => {
+                      const label = SECTOR_LABELS[si]
+                      const sCol  = SECTOR_COLOURS[si]
+                      // Compare avg speed across all selected drivers in this sector
+                      const sectorAvgs = driverData.map(d => {
+                        const spd = d.interp.speed
+                        const s   = Math.floor(si       * spd.length / 3)
+                        const e   = Math.floor((si + 1) * spd.length / 3)
+                        return spd.slice(s, e).reduce((x, v) => x + v, 0) / (e - s)
+                      })
+                      const fastest  = Math.max(...sectorAvgs)
+                      const slowest  = Math.min(...sectorAvgs)
+                      const winner   = driverData[sectorAvgs.indexOf(fastest)]
+                      const diff     = fastest - slowest
+
+                      return (
+                        <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {/* Sector label */}
+                          <div style={{
+                            width: '28px', flexShrink: 0, fontSize: '10px', fontFamily: 'monospace',
+                            fontWeight: 700, color: sCol, letterSpacing: '0.05em',
+                          }}>{label}</div>
+
+                          {/* Per-driver bars */}
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {driverData.map((d, di) => {
+                              const avg     = sectorAvgs[di]
+                              const barPct  = 40 + ((avg - slowest) / (fastest - slowest + 0.001)) * 60
+                              const isBest  = avg === fastest
+                              return (
+                                <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ width: '30px', fontSize: '10px', fontFamily: 'monospace', color: '#71717A', flexShrink: 0 }}>{d.abbr}</span>
+                                  <div style={{ flex: 1, height: '16px', background: '#1A1A1A', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{
+                                      width: `${barPct}%`, height: '100%', borderRadius: '4px',
+                                      background: isBest ? d.colour : d.colour + '55',
+                                      transition: 'width 0.3s',
+                                    }} />
+                                  </div>
+                                  <span style={{ width: '52px', textAlign: 'right', fontSize: '10px', fontFamily: 'monospace', color: isBest ? '#fff' : '#52525B' }}>
+                                    {avg.toFixed(1)} km/h
+                                  </span>
+                                  {isBest && diff > 0.5 && (
+                                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: sCol, width: '40px' }}>
+                                      +{diff.toFixed(1)}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Legend */}
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '4px', paddingTop: '8px', borderTop: '1px solid #1A1A1A' }}>
+                      {driverData.map(d => (
+                        <div key={d.abbr} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                          <div style={{ width: '12px', height: '6px', borderRadius: '2px', background: d.colour }} />
+                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A' }}>{d.abbr}</span>
+                        </div>
+                      ))}
+                      <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: 'auto' }}>avg speed per sector</span>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Track Map */}
+          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 0' }}>
+              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>TRACK MAP</span>
+              <div style={{ display: 'flex', gap: '14px' }}>
                 {[
-                  { colour: '#B347FF', label: 'Fastest overall' },
-                  { colour: '#22C55E', label: 'Faster'          },
-                  { colour: '#FFD700', label: 'Slower'          },
-                ].map(({ colour, label }) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <div className="w-3 h-2 rounded-sm" style={{ background: colour }} />
-                    <span className="text-[9px] text-zinc-500">{label}</span>
+                  { col: BRAKE_COLOR, label: 'Braking' },
+                  ...(!is2026 ? [{ col: GREEN_DRS, label: 'DRS Zone' }] : []),
+                  { col: '#E8002D88', label: 'S1' },
+                  { col: '#FFD70088', label: 'S2' },
+                  { col: '#B347FF88', label: 'S3' },
+                ].map(({ col, label }) => (
+                  <div key={label} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    <div style={{ width: '14px', height: '4px', borderRadius: '2px', background: col }} />
+                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{label}</span>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+            <canvas ref={trackRef} height={340}
+              style={{ display: 'block', width: '100%', cursor: 'crosshair' }}
+              onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+          </div>
 
-          {/* Track map */}
-          <TrackMap traces={norm} />
-
-          {/* Corner analysis */}
-            <CornerAnalysis
-              sessionKey={sessionKey}
-              drivers={selected}
-              driverMap={Object.fromEntries(
-                drivers.map(d => [d.driver_number, {
-                  abbreviation: d.abbreviation,
-                  team_colour:  d.team_colour,
-                }])
-              )}
-            />
-
-
-
-        </div>
+          {/* Corner Analysis */}
+          <CornerAnalysis
+            sessionKey={sessionKey}
+            drivers={selected}
+            driverMap={Object.fromEntries(
+              drivers.map(d => [d.driver_number, { abbreviation: d.abbreviation, team_colour: d.team_colour }])
+            )}
+          />
+        </>
       )}
     </div>
   )

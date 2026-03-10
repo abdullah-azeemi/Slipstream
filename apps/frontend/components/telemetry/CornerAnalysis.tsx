@@ -2,128 +2,372 @@
 import { useEffect, useState } from 'react'
 import { telemetryApi } from '@/lib/api'
 import { teamColour } from '@/lib/utils'
-import type { DriverTelemetryStats, CornerStat } from '@/types/f1'
+import type { DriverTelemetryStats } from '@/types/f1'
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const RANK_BEST   = '#B347FF'
+const RANK_MID    = '#22C55E'
+const RANK_WORST  = '#E8002D'
+const RANK_NONE   = '#3F3F46'
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
 interface Props {
   sessionKey: number
-  drivers:    number[]     // selected driver numbers
+  drivers:    number[]
   driverMap:  Record<number, { abbreviation: string; team_colour: string | null }>
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function fastest(vals: (number | null)[]): number {
-  const valid = vals.filter((v): v is number => v !== null)
-  return valid.length ? Math.min(...valid) : 0
-}
-
 function rankColour(val: number | null, vals: (number | null)[], higherIsBetter = false): string {
-  if (val === null) return '#3F3F46'
+  if (val === null) return RANK_NONE
   const valid = vals.filter((v): v is number => v !== null)
   if (valid.length < 2) return '#A1A1AA'
   const best  = higherIsBetter ? Math.max(...valid) : Math.min(...valid)
   const worst = higherIsBetter ? Math.min(...valid) : Math.max(...valid)
-  if (val === best)  return '#B347FF'   // purple = best
-  if (val === worst) return '#E8002D'   // red = worst
-  return '#22C55E'                      // green = middle
+  if (val === best)  return RANK_BEST
+  if (val === worst) return RANK_WORST
+  return RANK_MID
 }
 
-// ── Corner Table ─────────────────────────────────────────────────────────────
+// ── Section divider ───────────────────────────────────────────────────────────
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '12px',
+      padding: '4px 0',
+    }}>
+      <div style={{ height: '1px', flex: 1, background: '#1E1E1E' }} />
+      <span style={{
+        fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46',
+        letterSpacing: '0.12em', textTransform: 'uppercase',
+      }}>{label}</span>
+      <div style={{ height: '1px', flex: 1, background: '#1E1E1E' }} />
+    </div>
+  )
+}
 
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({
+  title, subtitle, children,
+}: {
+  title: string; subtitle?: string; children: React.ReactNode
+}) {
+  return (
+    <div style={{
+      background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
+      padding: '14px 16px',
+    }}>
+      <div style={{ marginBottom: subtitle ? '2px' : '12px' }}>
+        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+          {title}
+        </div>
+        {subtitle && (
+          <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', marginTop: '2px', marginBottom: '10px' }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Bar Row ───────────────────────────────────────────────────────────────────
+function BarRow({
+  abbr, value, maxValue, colour, label,
+}: {
+  abbr: string; value: number | null; maxValue: number; colour: string; label: string
+}) {
+  const pct = value !== null ? ((value / maxValue) * 100) : 0
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#71717A', width: '28px', flexShrink: 0 }}>
+        {abbr}
+      </span>
+      <div style={{ flex: 1, height: '6px', background: '#1A1A1A', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{
+          width: `${pct}%`, height: '100%', borderRadius: '3px',
+          background: colour, opacity: 0.85,
+          transition: 'width 0.4s cubic-bezier(0.4,0,0.2,1)',
+        }} />
+      </div>
+      <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#A1A1AA', width: '52px', textAlign: 'right', flexShrink: 0 }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+// ── Summary Stats ─────────────────────────────────────────────────────────────
+function SummaryStats({ stats }: { stats: DriverTelemetryStats[] }) {
+  const rpms   = stats.map(s => s.max_rpm).filter(Boolean) as number[]
+  const brakes = stats.map(s => s.avg_brake_point_pct).filter(Boolean) as number[]
+  const drsList = stats.map(s => s.drs_open_pct).filter(v => v !== null && v < 50) as number[]
+  const maxRpm   = Math.max(...rpms,   1)
+  const maxBrake = Math.max(...brakes, 1)
+  const maxDrs   = Math.max(...drsList, 1)
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+
+      {/* Max RPM */}
+      <StatCard title="Max RPM">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...stats]
+            .sort((a, b) => (b.max_rpm ?? 0) - (a.max_rpm ?? 0))
+            .map(s => (
+              <BarRow
+                key={s.driver_number}
+                abbr={s.abbreviation}
+                value={s.max_rpm}
+                maxValue={maxRpm}
+                colour={teamColour(s.team_colour)}
+                label={s.max_rpm?.toLocaleString() ?? '—'}
+              />
+            ))}
+        </div>
+      </StatCard>
+
+      {/* Late Braking */}
+      <StatCard title="Late Braking" subtitle="avg metres before apex">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...stats]
+            .sort((a, b) => (b.avg_brake_point_pct ?? 0) - (a.avg_brake_point_pct ?? 0))
+            .map(s => (
+              <BarRow
+                key={s.driver_number}
+                abbr={s.abbreviation}
+                value={s.avg_brake_point_pct}
+                maxValue={maxBrake}
+                colour='#FF2D55'
+                label={s.avg_brake_point_pct != null ? `${s.avg_brake_point_pct.toFixed(1)}m` : '—'}
+              />
+            ))}
+        </div>
+      </StatCard>
+
+      {/* DRS Usage */}
+      <StatCard title="DRS Usage" subtitle="% of lap with DRS open">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...stats]
+            .filter(s => (s.drs_open_pct ?? 0) < 50)
+            .sort((a, b) => (b.drs_open_pct ?? 0) - (a.drs_open_pct ?? 0))
+            .map(s => (
+              <BarRow
+                key={s.driver_number}
+                abbr={s.abbreviation}
+                value={s.drs_open_pct}
+                maxValue={maxDrs}
+                colour='#22FF88'
+                label={s.drs_open_pct != null ? `${s.drs_open_pct.toFixed(1)}%` : '—'}
+              />
+            ))}
+        </div>
+      </StatCard>
+
+    </div>
+  )
+}
+
+// ── Corner Detail Panel ───────────────────────────────────────────────────────
+function CornerDetail({
+  cornerNum, stats,
+}: {
+  cornerNum: number; stats: DriverTelemetryStats[]
+}) {
+  const corners = stats
+    .map(s => ({ ...s, corner: s.corners?.find(c => c.corner_num === cornerNum) ?? null }))
+    .filter(s => s.corner !== null)
+
+  if (!corners.length) return null
+
+  const allEntry = corners.map(s => s.corner!.entry_speed_kmh)
+  const allApex  = corners.map(s => s.corner!.min_speed_kmh)
+  const allExit  = corners.map(s => s.corner!.exit_speed_kmh)
+  const allBrake = corners.map(s => {
+    const c = s.corner!
+    return c.brake_point_m ? c.distance_m - c.brake_point_m : null
+  })
+
+  const cols = [
+    { label: 'Entry',       key: 'entry'  },
+    { label: 'Apex',        key: 'apex'   },
+    { label: 'Exit',        key: 'exit'   },
+    { label: 'Brake Dist',  key: 'brake'  },
+  ]
+
+  return (
+    <div style={{
+      borderTop: '1px solid #1E1E1E', padding: '12px 16px',
+      background: '#0D0D0D',
+    }}>
+      <div style={{
+        fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46',
+        letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px',
+      }}>
+        Corner {cornerNum} · {corners[0].corner!.distance_m.toFixed(0)}m into lap
+      </div>
+
+      {/* Header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '60px repeat(4, 1fr)', gap: '8px', marginBottom: '6px' }}>
+        <div />
+        {cols.map(c => (
+          <div key={c.key} style={{
+            fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46',
+            textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.08em',
+          }}>{c.label}</div>
+        ))}
+      </div>
+
+      {/* Rows */}
+      {corners.map(s => {
+        const c = s.corner!
+        const colour = teamColour(s.team_colour)
+        const brakeDist = c.brake_point_m ? c.distance_m - c.brake_point_m : null
+
+        const values = [
+          { val: c.entry_speed_kmh, all: allEntry, label: `${c.entry_speed_kmh}` },
+          { val: c.min_speed_kmh,   all: allApex,  label: `${c.min_speed_kmh}`,  bold: true },
+          { val: c.exit_speed_kmh,  all: allExit,  label: `${c.exit_speed_kmh}` },
+          { val: brakeDist,         all: allBrake, label: brakeDist ? `${brakeDist.toFixed(0)}m` : '—' },
+        ]
+
+        return (
+          <div key={s.driver_number} style={{
+            display: 'grid', gridTemplateColumns: '60px repeat(4, 1fr)',
+            gap: '8px', alignItems: 'center', marginBottom: '6px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '3px', height: '14px', borderRadius: '2px', background: colour }} />
+              <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#fff' }}>
+                {s.abbreviation}
+              </span>
+            </div>
+            {values.map((v, vi) => (
+              <div key={vi} style={{
+                textAlign: 'center', fontFamily: 'monospace',
+                fontSize: v.bold ? '13px' : '11px',
+                fontWeight: v.bold ? 700 : 400,
+                color: rankColour(v.val, v.all, true),
+              }}>
+                {v.label}
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Corner Table ──────────────────────────────────────────────────────────────
 function CornerTable({ stats }: { stats: DriverTelemetryStats[] }) {
   const [selected, setSelected] = useState<number | null>(null)
 
-  // Build corner count — use driver with most corners as reference
   const maxCorners = Math.max(...stats.map(s => s.corners?.length ?? 0))
   if (maxCorners === 0) return null
-
   const cornerNums = Array.from({ length: maxCorners }, (_, i) => i + 1)
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+    <div style={{
+      background: '#111111', border: '1px solid #2A2A2A',
+      borderRadius: '12px', overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px', borderBottom: '1px solid #1E1E1E',
+      }}>
         <div>
-          <div className="text-sm font-semibold text-white">Corner Analysis</div>
-          <div className="text-xs text-zinc-500 mt-0.5">Apex speed · click a corner for detail</div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: '#fff', fontFamily: 'monospace' }}>
+            Corner Analysis
+          </div>
+          <div style={{ fontSize: '10px', color: '#52525B', marginTop: '2px', fontFamily: 'monospace' }}>
+            Apex speed · click a corner for detail
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {[
-            { colour: '#B347FF', label: 'Fastest' },
-            { colour: '#22C55E', label: 'Middle'  },
-            { colour: '#E8002D', label: 'Slowest' },
+            { colour: RANK_BEST,  label: 'Fastest' },
+            { colour: RANK_MID,   label: 'Middle'  },
+            { colour: RANK_WORST, label: 'Slowest' },
           ].map(({ colour, label }) => (
-            <div key={label} className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ background: colour }} />
-              <span className="text-[9px] text-zinc-500">{label}</span>
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: colour }} />
+              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      {/* Table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead>
-            <tr className="border-b border-border">
-              <th className="text-left px-4 py-2 text-zinc-600 font-mono text-[10px] uppercase tracking-widest w-16">
-                Driver
+            <tr style={{ borderBottom: '1px solid #1E1E1E' }}>
+              <th style={{ textAlign: 'left', padding: '8px 16px', fontFamily: 'monospace', fontSize: '10px', color: '#3F3F46', fontWeight: 400, letterSpacing: '0.1em', width: '64px' }}>
+                DRIVER
               </th>
               {cornerNums.map(n => (
                 <th key={n}
-                  className={`text-center px-2 py-2 font-mono text-[10px] cursor-pointer transition-colors
-                    ${selected === n ? 'text-white bg-surface2' : 'text-zinc-600 hover:text-zinc-400'}`}
-                  onClick={() => setSelected(selected === n ? null : n)}>
+                  onClick={() => setSelected(selected === n ? null : n)}
+                  style={{
+                    textAlign: 'center', padding: '8px', fontFamily: 'monospace',
+                    fontSize: '10px', fontWeight: 400, cursor: 'pointer',
+                    color: selected === n ? '#fff' : '#3F3F46',
+                    background: selected === n ? '#1A1A1A' : 'transparent',
+                    transition: 'all 0.12s',
+                    userSelect: 'none',
+                  }}>
                   C{n}
                 </th>
               ))}
-              <th className="text-right px-4 py-2 text-zinc-600 font-mono text-[10px] uppercase tracking-widest">
-                Trap 1
-              </th>
-              <th className="text-right px-4 py-2 text-zinc-600 font-mono text-[10px] uppercase tracking-widest">
-                Max
-              </th>
+              <th style={{ textAlign: 'right', padding: '8px 16px', fontFamily: 'monospace', fontSize: '10px', color: '#3F3F46', fontWeight: 400 }}>TRAP 1</th>
+              <th style={{ textAlign: 'right', padding: '8px 16px', fontFamily: 'monospace', fontSize: '10px', color: '#3F3F46', fontWeight: 400 }}>MAX</th>
             </tr>
           </thead>
           <tbody>
-            {stats.map(s => {
+            {stats.map((s, si) => {
               const colour = teamColour(s.team_colour)
               return (
-                <tr key={s.driver_number}
-                  className="border-b border-border last:border-0 hover:bg-surface2 transition-colors">
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1 h-4 rounded-full" style={{ background: colour }} />
-                      <span className="font-bold text-white">{s.abbreviation}</span>
+                <tr key={s.driver_number} style={{
+                  borderBottom: si < stats.length - 1 ? '1px solid #1A1A1A' : 'none',
+                  transition: 'background 0.1s',
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#161616')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <td style={{ padding: '10px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '3px', height: '16px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff', fontSize: '12px' }}>
+                        {s.abbreviation}
+                      </span>
                     </div>
                   </td>
                   {cornerNums.map(n => {
-                    const corner = s.corners?.find(c => c.corner_num === n)
-                    const allSpeeds = stats.map(st =>
-                      st.corners?.find(c => c.corner_num === n)?.min_speed_kmh ?? null
-                    )
-                    const bg = corner
-                      ? rankColour(corner.min_speed_kmh, allSpeeds, true)
-                      : '#3F3F46'
+                    const corner    = s.corners?.find(c => c.corner_num === n)
+                    const allSpeeds = stats.map(st => st.corners?.find(c => c.corner_num === n)?.min_speed_kmh ?? null)
+                    const col       = corner ? rankColour(corner.min_speed_kmh, allSpeeds, true) : RANK_NONE
                     return (
-                      <td key={n}
-                        className={`text-center px-2 py-2.5 transition-all
-                          ${selected === n ? 'bg-surface2' : ''}`}>
+                      <td key={n} style={{
+                        textAlign: 'center', padding: '10px 8px',
+                        background: selected === n ? '#161616' : 'transparent',
+                      }}>
                         {corner ? (
-                          <span className="font-mono font-bold text-xs"
-                            style={{ color: bg }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '12px', color: col }}>
                             {corner.min_speed_kmh}
                           </span>
                         ) : (
-                          <span className="text-zinc-700">—</span>
+                          <span style={{ color: '#2A2A2A', fontFamily: 'monospace' }}>—</span>
                         )}
                       </td>
                     )
                   })}
-                  <td className="text-right px-4 py-2.5 font-mono text-zinc-400">
+                  <td style={{ textAlign: 'right', padding: '10px 16px', fontFamily: 'monospace', color: '#71717A', fontSize: '11px' }}>
                     {s.speed_trap_1_kmh ?? '—'}
                   </td>
-                  <td className="text-right px-4 py-2.5 font-mono text-white font-bold">
+                  <td style={{ textAlign: 'right', padding: '10px 16px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, fontSize: '12px' }}>
                     {s.max_speed_kmh ?? '—'}
                   </td>
                 </tr>
@@ -133,190 +377,12 @@ function CornerTable({ stats }: { stats: DriverTelemetryStats[] }) {
         </table>
       </div>
 
-      {/* Corner detail panel */}
-      {selected !== null && (
-        <CornerDetail cornerNum={selected} stats={stats} />
-      )}
+      {selected !== null && <CornerDetail cornerNum={selected} stats={stats} />}
     </div>
   )
 }
 
-// ── Corner Detail ─────────────────────────────────────────────────────────────
-
-function CornerDetail({
-  cornerNum,
-  stats,
-}: {
-  cornerNum: number
-  stats:     DriverTelemetryStats[]
-}) {
-  const corners = stats.map(s => ({
-    ...s,
-    corner: s.corners?.find(c => c.corner_num === cornerNum) ?? null,
-  })).filter(s => s.corner !== null)
-
-  if (!corners.length) return null
-
-  const allEntry  = corners.map(s => s.corner!.entry_speed_kmh)
-  const allApex   = corners.map(s => s.corner!.min_speed_kmh)
-  const allExit   = corners.map(s => s.corner!.exit_speed_kmh)
-  const allBrake  = corners.map(s => {
-    const c = s.corner!
-    return c.brake_point_m ? c.distance_m - c.brake_point_m : null
-  })
-
-  return (
-    <div className="border-t border-border px-4 py-3 bg-surface2">
-      <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-3">
-        Corner {cornerNum} detail · {corners[0].corner!.distance_m.toFixed(0)}m into lap
-      </div>
-      <div className="grid grid-cols-4 gap-2 mb-3">
-        {['Entry', 'Apex', 'Exit', 'Brake dist'].map(label => (
-          <div key={label} className="text-[9px] text-zinc-600 text-center uppercase tracking-widest">
-            {label}
-          </div>
-        ))}
-      </div>
-      {corners.map(s => {
-        const c      = s.corner!
-        const colour = teamColour(s.team_colour)
-        const brakeDist = c.brake_point_m ? c.distance_m - c.brake_point_m : null
-        return (
-          <div key={s.driver_number} className="grid grid-cols-4 gap-2 mb-2 items-center">
-            <div className="flex items-center gap-1.5 col-span-1">
-              {/* Reuse abbreviation as label */}
-            </div>
-            {/* Actually show 5 cols: driver + 4 stats */}
-            <div key={s.driver_number}
-              className="col-span-4 grid grid-cols-5 gap-2 items-center -mt-2">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1 h-3 rounded-full" style={{ background: colour }} />
-                <span className="font-bold text-white text-xs">{s.abbreviation}</span>
-              </div>
-              <div className="text-center font-mono text-xs"
-                style={{ color: rankColour(c.entry_speed_kmh, allEntry, true) }}>
-                {c.entry_speed_kmh}
-              </div>
-              <div className="text-center font-mono text-xs font-bold"
-                style={{ color: rankColour(c.min_speed_kmh, allApex, true) }}>
-                {c.min_speed_kmh}
-              </div>
-              <div className="text-center font-mono text-xs"
-                style={{ color: rankColour(c.exit_speed_kmh, allExit, true) }}>
-                {c.exit_speed_kmh}
-              </div>
-              <div className="text-center font-mono text-xs"
-                style={{ color: brakeDist ? rankColour(brakeDist, allBrake, true) : '#3F3F46' }}>
-                {brakeDist ? `${brakeDist.toFixed(0)}m` : '—'}
-              </div>
-            </div>
-          </div>
-        )
-      })}
-      <div className="grid grid-cols-5 gap-2 mt-1">
-        <div />
-        {['entry km/h', 'apex km/h', 'exit km/h', 'late braking'].map(l => (
-          <div key={l} className="text-center text-[9px] text-zinc-700">{l}</div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── RPM + Braking Summary ─────────────────────────────────────────────────────
-
-function SummaryStats({ stats }: { stats: DriverTelemetryStats[] }) {
-  const allRpm   = stats.map(s => s.max_rpm)
-  const allBrake = stats.map(s => s.avg_brake_point_pct)
-  const allDrs   = stats.map(s => s.drs_open_pct)
-
-  return (
-    <div className="grid grid-cols-3 gap-3">
-
-      {/* Max RPM */}
-      <div className="bg-surface border border-border rounded-xl p-3">
-        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-3">Max RPM</div>
-        <div className="space-y-2">
-          {[...stats].sort((a, b) => (b.max_rpm ?? 0) - (a.max_rpm ?? 0)).map(s => (
-            <div key={s.driver_number} className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-zinc-500 w-7">{s.abbreviation}</span>
-              <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
-                <div className="h-full rounded-full"
-                  style={{
-                    width: `${((s.max_rpm ?? 0) / Math.max(...allRpm.filter(Boolean) as number[])) * 100}%`,
-                    background: teamColour(s.team_colour),
-                    opacity: 0.8,
-                  }} />
-              </div>
-              <span className="font-mono text-[10px] text-zinc-400 w-12 text-right">
-                {s.max_rpm?.toLocaleString() ?? '—'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Late braking index */}
-      <div className="bg-surface border border-border rounded-xl p-3">
-        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Late Braking</div>
-        <div className="text-[9px] text-zinc-700 mb-2">avg metres before apex</div>
-        <div className="space-y-2">
-          {[...stats].sort((a, b) => (a.avg_brake_point_pct ?? 0) - (b.avg_brake_point_pct ?? 0))
-            .map(s => {
-              const maxBrake = Math.max(...allBrake.filter(Boolean) as number[])
-              return (
-                <div key={s.driver_number} className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-zinc-500 w-7">{s.abbreviation}</span>
-                  <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-red"
-                      style={{
-                        width: `${((s.avg_brake_point_pct ?? 0) / maxBrake) * 100}%`,
-                        opacity: 0.7,
-                      }} />
-                  </div>
-                  <span className="font-mono text-[10px] text-zinc-400 w-10 text-right">
-                    {s.avg_brake_point_pct?.toFixed(1) ?? '—'}m
-                  </span>
-                </div>
-              )
-            })}
-        </div>
-      </div>
-
-      {/* DRS usage */}
-      <div className="bg-surface border border-border rounded-xl p-3">
-        <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">DRS Usage</div>
-        <div className="text-[9px] text-zinc-700 mb-2">% of lap with DRS open</div>
-        <div className="space-y-2">
-          {[...stats].sort((a, b) => (b.drs_open_pct ?? 0) - (a.drs_open_pct ?? 0))
-            .filter(s => (s.drs_open_pct ?? 0) < 50)  // filter out broken DRS data
-            .map(s => {
-              const maxDrs = Math.max(...allDrs.filter(v => v !== null && v < 50) as number[])
-              return (
-                <div key={s.driver_number} className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-zinc-500 w-7">{s.abbreviation}</span>
-                  <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-green-500"
-                      style={{
-                        width: `${((s.drs_open_pct ?? 0) / maxDrs) * 100}%`,
-                        opacity: 0.7,
-                      }} />
-                  </div>
-                  <span className="font-mono text-[10px] text-zinc-400 w-10 text-right">
-                    {s.drs_open_pct?.toFixed(1) ?? '—'}%
-                  </span>
-                </div>
-              )
-            })}
-        </div>
-      </div>
-
-    </div>
-  )
-}
-
-// ── Main export ───────────────────────────────────────────────────────────────
-
+// ── Main Export ───────────────────────────────────────────────────────────────
 export default function CornerAnalysis({ sessionKey, drivers, driverMap }: Props) {
   const [stats,   setStats]   = useState<DriverTelemetryStats[]>([])
   const [loading, setLoading] = useState(false)
@@ -331,20 +397,19 @@ export default function CornerAnalysis({ sessionKey, drivers, driverMap }: Props
   }, [sessionKey, drivers.join(',')])
 
   if (loading) return (
-    <div className="text-center py-6 text-zinc-600 text-sm">Computing corner analysis...</div>
+    <div style={{
+      textAlign: 'center', padding: '48px',
+      color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px',
+    }}>
+      Computing corner analysis...
+    </div>
   )
+
   if (!stats.length) return null
 
   return (
-    <div className="space-y-3 mt-3">
-      <div className="flex items-center gap-2 px-1">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-[10px] text-zinc-600 uppercase tracking-widest px-2">
-          Corner Analysis
-        </span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+      <SectionDivider label="Corner Analysis" />
       <SummaryStats stats={stats} />
       <CornerTable stats={stats} />
     </div>
