@@ -11,14 +11,14 @@ export default async function SessionPage({ params }: { params: Promise<{ key: s
   const { key: keyStr } = await params
   const key = parseInt(keyStr)
 
-  const [session, fastestLaps] = await Promise.all([
+  const [session, fastestData] = await Promise.all([
     api.sessions.get(key).catch(() => null),
-    api.laps.fastest(key).catch(() => []),
+    api.laps.fastest(key).catch(() => ({ laps: [] })),
   ])
 
   if (!session) notFound()
 
-  const pole = fastestLaps[0]
+  const pole = fastestData.laps[0]
 
   return (
     <div className="px-4 py-4 max-w-2xl mx-auto space-y-4">
@@ -51,10 +51,10 @@ export default async function SessionPage({ params }: { params: Promise<{ key: s
           <span className="col-span-5 text-right">TIME / GAP</span>
         </div>
 
-        {fastestLaps.map((lap, i) => {
-          const colour  = teamColour(lap.team_colour)
+        {fastestData.laps.map((lap, i) => {
+          const colour = teamColour(lap.team_colour)
           const isFirst = i === 0
-          const gap     = isFirst ? null : lap.lap_time_ms - pole!.lap_time_ms
+          const gap = isFirst ? null : lap.lap_time_ms - pole!.lap_time_ms
           return (
             <div key={lap.driver_number}
               className={`grid grid-cols-12 px-4 py-3.5 border-b border-border last:border-0 items-center transition-colors
