@@ -15,7 +15,7 @@ log = structlog.get_logger()
 def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
     fastf1.Cache.enable_cache("./fastf1_cache")
     session = fastf1.get_session(year, gp, session_type)
-    load_weather = session_type in ("R", "Race")
+    load_weather = True
     session.load(telemetry=True, weather=load_weather, messages=False)
     log.info(
         "session.loaded",

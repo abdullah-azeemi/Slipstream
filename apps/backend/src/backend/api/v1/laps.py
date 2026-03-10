@@ -1,13 +1,5 @@
-"""
-Laps API endpoints.
-
-GET /api/v1/sessions/<key>/laps                     → all laps in session
-GET /api/v1/sessions/<key>/drivers/<num>/laps        → one driver's laps
-GET /api/v1/sessions/<key>/fastest                   → top 5 fastest laps
-"""
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
-
 from backend.extensions import engine
 
 laps_bp = Blueprint("laps", __name__)
@@ -15,120 +7,180 @@ laps_bp = Blueprint("laps", __name__)
 
 @laps_bp.get("/sessions/<int:session_key>/laps")
 def list_laps(session_key: int):
-    """
-    All laps for a session, joined with driver abbreviation.
-    Optional query param: ?driver=44 to filter by driver number.
-    """
-    driver_filter = request.args.get("driver", type=int)
-
-    query = """
-        SELECT
-            l.driver_number,
-            d.abbreviation,
-            d.team_name,
-            d.team_colour,
-            l.lap_number,
-            l.lap_time_ms,
-            l.s1_ms,
-            l.s2_ms,
-            l.s3_ms,
-            l.compound,
-            l.tyre_life_laps,
-            l.is_personal_best,
-            l.track_status,
-            l.deleted
-        FROM lap_times l
-        JOIN drivers d
-            ON d.driver_number = l.driver_number
-            AND d.session_key  = l.session_key
-        WHERE l.session_key = :session_key
-    """
-
-    params: dict = {"session_key": session_key}
-
-    if driver_filter:
-        query += " AND l.driver_number = :driver"
-        params["driver"] = driver_filter
-
-    query += " ORDER BY l.driver_number, l.lap_number"
+    driver = request.args.get("driver", type=int)
+    params: dict = {"sk": session_key}
+    driver_filter = ""
+    if driver:
+        driver_filter = "AND lt.driver_number = :driver"
+        params["driver"] = driver
 
     with engine.connect() as conn:
-        rows = conn.execute(text(query), params).mappings().all()
-
+        rows = (
+            conn.execute(
+                text(f"""
+            SELECT
+                lt.driver_number, d.abbreviation,
+                d.team_name, d.team_colour,
+                lt.lap_number, lt.lap_time_ms,
+                lt.s1_ms, lt.s2_ms, lt.s3_ms,
+                lt.compound, lt.tyre_life_laps,
+                lt.is_personal_best, lt.track_status, lt.deleted
+            FROM lap_times lt
+            JOIN drivers d
+                ON d.driver_number = lt.driver_number
+                AND d.session_key  = lt.session_key
+            WHERE lt.session_key = :sk
+              {driver_filter}
+            ORDER BY lt.driver_number, lt.lap_number
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
     return jsonify([dict(r) for r in rows])
-
-
-@laps_bp.get("/sessions/<int:session_key>/drivers/<int:driver_number>/laps")
-def driver_laps(session_key: int, driver_number: int):
-    """
-    All laps for one specific driver in a session.
-    Also returns their theoretical best lap (sum of best sectors).
-    """
-    with engine.connect() as conn:
-        laps = conn.execute(text("""
-            SELECT
-                lap_number, lap_time_ms, s1_ms, s2_ms, s3_ms,
-                compound, tyre_life_laps, is_personal_best,
-                pit_in_time_ms, pit_out_time_ms, track_status, deleted
-            FROM lap_times
-            WHERE session_key   = :session_key
-              AND driver_number = :driver_number
-              AND deleted       = FALSE
-            ORDER BY lap_number
-        """), {"session_key": session_key, "driver_number": driver_number}
-        ).mappings().all()
-
-        # Theoretical best = sum of each driver's best individual sector
-        # This is the "perfect lap" concept — no driver achieves it in practice
-        theoretical = conn.execute(text("""
-            SELECT
-                MIN(s1_ms) AS best_s1,
-                MIN(s2_ms) AS best_s2,
-                MIN(s3_ms) AS best_s3,
-                MIN(s1_ms) + MIN(s2_ms) + MIN(s3_ms) AS theoretical_best_ms
-            FROM lap_times
-            WHERE session_key   = :session_key
-              AND driver_number = :driver_number
-              AND s1_ms IS NOT NULL
-              AND s2_ms IS NOT NULL
-              AND s3_ms IS NOT NULL
-              AND deleted = FALSE
-        """), {"session_key": session_key, "driver_number": driver_number}
-        ).mappings().first()
-
-    return jsonify({
-        "laps": [dict(r) for r in laps],
-        "theoretical_best": dict(theoretical) if theoretical else None,
-    })
 
 
 @laps_bp.get("/sessions/<int:session_key>/fastest")
 def fastest_laps(session_key: int):
     """
-    Top 10 fastest laps in the session — one per driver.
-    This is what the frontend uses for the fastest lap leaderboard.
+    Returns each driver's best lap for the session, ordered by lap time.
+    Also returns fastest_s1, fastest_s2, fastest_s3 driver info at the top level.
     """
     with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT DISTINCT ON (l.driver_number)
-                l.driver_number,
+        # Best lap per driver
+        rows = (
+            conn.execute(
+                text("""
+            SELECT DISTINCT ON (lt.driver_number)
+                lt.driver_number,
                 d.abbreviation,
                 d.team_name,
                 d.team_colour,
-                l.lap_number,
-                l.lap_time_ms,
-                l.compound
-            FROM lap_times l
+                lt.lap_number,
+                lt.lap_time_ms,
+                lt.s1_ms,
+                lt.s2_ms,
+                lt.s3_ms,
+                lt.compound
+            FROM lap_times lt
             JOIN drivers d
-                ON d.driver_number = l.driver_number
-                AND d.session_key  = l.session_key
-            WHERE l.session_key  = :session_key
-              AND l.lap_time_ms  IS NOT NULL
-              AND l.deleted      = FALSE
-            ORDER BY l.driver_number, l.lap_time_ms ASC
-        """), {"session_key": session_key}).mappings().all()
+                ON d.driver_number = lt.driver_number
+                AND d.session_key  = lt.session_key
+            WHERE lt.session_key  = :sk
+              AND lt.lap_time_ms IS NOT NULL
+              AND lt.deleted = false
+            ORDER BY lt.driver_number, lt.lap_time_ms ASC
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
 
-    # Sort by lap time after deduplication
-    sorted_rows = sorted([dict(r) for r in rows], key=lambda x: x["lap_time_ms"])
+        laps = [dict(r) for r in rows]
+        laps.sort(key=lambda x: x["lap_time_ms"] or float("inf"))
 
-    return jsonify(sorted_rows[:10])
+        # Fastest individual sectors (may be different drivers)
+        s1_row = (
+            conn.execute(
+                text("""
+            SELECT lt.driver_number, d.abbreviation, d.team_name, d.team_colour, lt.s1_ms
+            FROM lap_times lt
+            JOIN drivers d ON d.driver_number = lt.driver_number AND d.session_key = lt.session_key
+            WHERE lt.session_key = :sk AND lt.s1_ms IS NOT NULL AND lt.deleted = false
+            ORDER BY lt.s1_ms ASC LIMIT 1
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .first()
+        )
+
+        s2_row = (
+            conn.execute(
+                text("""
+            SELECT lt.driver_number, d.abbreviation, d.team_name, d.team_colour, lt.s2_ms
+            FROM lap_times lt
+            JOIN drivers d ON d.driver_number = lt.driver_number AND d.session_key = lt.session_key
+            WHERE lt.session_key = :sk AND lt.s2_ms IS NOT NULL AND lt.deleted = false
+            ORDER BY lt.s2_ms ASC LIMIT 1
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .first()
+        )
+
+        s3_row = (
+            conn.execute(
+                text("""
+            SELECT lt.driver_number, d.abbreviation, d.team_name, d.team_colour, lt.s3_ms
+            FROM lap_times lt
+            JOIN drivers d ON d.driver_number = lt.driver_number AND d.session_key = lt.session_key
+            WHERE lt.session_key = :sk AND lt.s3_ms IS NOT NULL AND lt.deleted = false
+            ORDER BY lt.s3_ms ASC LIMIT 1
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .first()
+        )
+
+    return jsonify(
+        {
+            "laps": laps,
+            "fastest_s1": dict(s1_row) if s1_row else None,
+            "fastest_s2": dict(s2_row) if s2_row else None,
+            "fastest_s3": dict(s3_row) if s3_row else None,
+        }
+    )
+
+
+@laps_bp.get("/sessions/<int:session_key>/drivers/<int:driver_number>/laps")
+def driver_laps(session_key: int, driver_number: int):
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+            SELECT
+                lt.lap_number, lt.lap_time_ms,
+                lt.s1_ms, lt.s2_ms, lt.s3_ms,
+                lt.compound, lt.tyre_life_laps,
+                lt.is_personal_best, lt.track_status, lt.deleted
+            FROM lap_times lt
+            WHERE lt.session_key   = :sk
+              AND lt.driver_number = :dn
+            ORDER BY lt.lap_number
+        """),
+                {"sk": session_key, "dn": driver_number},
+            )
+            .mappings()
+            .all()
+        )
+
+        best = (
+            conn.execute(
+                text("""
+            SELECT
+                MIN(lap_time_ms) AS best_lap,
+                MIN(s1_ms) AS best_s1,
+                MIN(s2_ms) AS best_s2,
+                MIN(s3_ms) AS best_s3
+            FROM lap_times
+            WHERE session_key   = :sk
+              AND driver_number = :dn
+              AND deleted = false
+        """),
+                {"sk": session_key, "dn": driver_number},
+            )
+            .mappings()
+            .first()
+        )
+
+    return jsonify(
+        {
+            "laps": [dict(r) for r in rows],
+            "theoretical_best": dict(best) if best else None,
+        }
+    )
