@@ -65,3 +65,137 @@ def get_session(session_key: int):
     if not row:
         return {"error": "Session not found"}, 404
     return jsonify(dict(row))
+
+
+@sessions_bp.get("/sessions/<int:session_key>/race-results")
+def race_results(session_key: int):
+    """
+    Race finishing order.
+
+    Uses the `position` column (FastF1 live position per lap) — 
+    takes each driver's position on their final lap as finishing position.
+    Falls back to total laps completed + cumulative time if position is null.
+    """
+    with engine.connect() as conn:
+        # Check if position data exists
+        has_position = conn.execute(text("""
+            SELECT COUNT(*) FROM lap_times
+            WHERE session_key = :sk AND position IS NOT NULL
+        """), {"sk": session_key}).scalar()
+
+        if has_position:
+            # Use position on the final lap for each driver
+            rows = conn.execute(text("""
+                WITH final_lap AS (
+                    SELECT DISTINCT ON (l.driver_number)
+                        l.driver_number,
+                        l.lap_number   AS total_laps,
+                        l.position     AS finish_pos,
+                        l.compound,
+                        l.lap_time_ms  AS last_lap_ms
+                    FROM lap_times l
+                    WHERE l.session_key = :sk
+                    ORDER BY l.driver_number, l.lap_number DESC
+                ),
+                best_lap AS (
+                    SELECT driver_number, MIN(lap_time_ms) AS best_lap_ms
+                    FROM lap_times
+                    WHERE session_key = :sk AND lap_time_ms IS NOT NULL
+                    GROUP BY driver_number
+                )
+                SELECT
+                    fl.driver_number,
+                    d.full_name,
+                    d.abbreviation,
+                    d.team_name,
+                    d.team_colour,
+                    fl.total_laps,
+                    fl.finish_pos,
+                    fl.compound,
+                    bl.best_lap_ms
+                FROM final_lap fl
+                JOIN drivers d ON d.driver_number = fl.driver_number AND d.session_key = :sk
+                JOIN best_lap bl ON bl.driver_number = fl.driver_number
+                ORDER BY fl.finish_pos ASC NULLS LAST, fl.total_laps DESC
+            """), {"sk": session_key}).mappings().all()
+        else:
+            # Fallback: order by total laps then cumulative time
+            rows = conn.execute(text("""
+                WITH last_lap AS (
+                    SELECT DISTINCT ON (l.driver_number)
+                        l.driver_number,
+                        l.lap_number AS total_laps,
+                        l.compound,
+                        l.recorded_at AS finished_at
+                    FROM lap_times l
+                    WHERE l.session_key = :sk
+                    ORDER BY l.driver_number, l.lap_number DESC
+                ),
+                race_time AS (
+                    SELECT driver_number, SUM(lap_time_ms) AS total_ms
+                    FROM lap_times
+                    WHERE session_key = :sk AND lap_time_ms IS NOT NULL AND deleted = FALSE
+                    GROUP BY driver_number
+                ),
+                best_lap AS (
+                    SELECT driver_number, MIN(lap_time_ms) AS best_lap_ms
+                    FROM lap_times
+                    WHERE session_key = :sk AND lap_time_ms IS NOT NULL
+                    GROUP BY driver_number
+                )
+                SELECT
+                    ll.driver_number,
+                    d.full_name,
+                    d.abbreviation,
+                    d.team_name,
+                    d.team_colour,
+                    ll.total_laps,
+                    NULL::int AS finish_pos,
+                    ll.compound,
+                    bl.best_lap_ms,
+                    rt.total_ms
+                FROM last_lap ll
+                JOIN drivers d ON d.driver_number = ll.driver_number AND d.session_key = :sk
+                JOIN best_lap bl ON bl.driver_number = ll.driver_number
+                LEFT JOIN race_time rt ON rt.driver_number = ll.driver_number
+                ORDER BY ll.total_laps DESC, rt.total_ms ASC NULLS LAST
+            """), {"sk": session_key}).mappings().all()
+
+        if not rows:
+            return jsonify([])
+
+        results = [dict(r) for r in rows]
+        
+        # Resolve team colours
+        from backend.api.v1.strategy import _resolve
+        for r in results:
+            r["team_colour"] = _resolve(r.get("team_colour"), r.get("team_name"))
+
+        # Calculate gaps to winner using cumulative lap time
+        sums = conn.execute(text("""
+            SELECT driver_number, SUM(lap_time_ms) AS total_ms
+            FROM lap_times
+            WHERE session_key = :sk AND lap_time_ms IS NOT NULL AND deleted = FALSE
+            GROUP BY driver_number
+        """), {"sk": session_key}).mappings().all()
+        sum_map = {r["driver_number"]: r["total_ms"] for r in sums}
+
+        winner_total = sum_map.get(results[0]["driver_number"])
+        max_laps = results[0]["total_laps"]
+
+        for i, r in enumerate(results):
+            driver_total = sum_map.get(r["driver_number"])
+            if i == 0:
+                r["gap_ms"] = None
+                r["laps_down"] = 0
+            elif r["total_laps"] < max_laps:
+                r["gap_ms"] = None
+                r["laps_down"] = int(max_laps - r["total_laps"])
+            elif driver_total and winner_total:
+                r["gap_ms"] = float(driver_total - winner_total)
+                r["laps_down"] = 0
+            else:
+                r["gap_ms"] = None
+                r["laps_down"] = 0
+
+    return jsonify(results)

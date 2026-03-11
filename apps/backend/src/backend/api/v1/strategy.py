@@ -1,11 +1,5 @@
 """
-Tyre strategy endpoints.
-
-GET /api/v1/sessions/<key>/strategy
-→ Returns every driver's stint breakdown:
-  driver, stint number, compound, start lap, end lap, lap count
-
-This is exactly what the Gantt chart on the frontend needs.
+Strategy API — tyre stints per driver for race sessions.
 """
 from flask import Blueprint, jsonify
 from sqlalchemy import text
@@ -13,102 +7,97 @@ from backend.extensions import engine
 
 strategy_bp = Blueprint("strategy", __name__)
 
+# Fallback colours if team_colour is null in DB
+TEAM_COLOURS = {
+    'McLaren': 'FF8000', 'Ferrari': 'E8002D', 'Red Bull Racing': '3671C6',
+    'Mercedes': '27F4D2', 'Aston Martin': '229971', 'Alpine': 'FF87BC',
+    'Williams': '64C4FF', 'Haas F1 Team': 'B6BABD', 'Haas': 'B6BABD',
+    'Kick Sauber': '52E252', 'Sauber': '52E252', 'RB': '6692FF',
+    'Racing Bulls': '6692FF', 'Cadillac': 'C8A217', 'Audi': 'C8A217',
+}
+
+
+def _resolve(colour, team_name):
+    if colour and colour.strip():
+        return colour.lstrip('#')
+    for k, v in TEAM_COLOURS.items():
+        if team_name and (k in team_name or team_name in k):
+            return v
+    return '666666'
+
 
 @strategy_bp.get("/sessions/<int:session_key>/strategy")
-def get_strategy(session_key: int):
-    """
-    Build stint data from lap_times.
-
-    We don't have a separate stints table — we derive stints by detecting
-    compound changes within each driver's lap sequence.
-    A new stint starts when: compound changes OR pit_out_time is not null.
-    """
+def race_strategy(session_key: int):
     with engine.connect() as conn:
-        # Pull every lap with compound + stint info, ordered correctly
-        laps = conn.execute(text("""
-            SELECT
-                l.driver_number,
-                d.abbreviation,
-                d.team_colour,
-                l.lap_number,
-                l.compound,
-                l.stint,
-                l.tyre_life_laps,
-                l.pit_in_time_ms,
-                l.pit_out_time_ms
-            FROM lap_times l
-            JOIN drivers d
-                ON d.driver_number = l.driver_number
-                AND d.session_key  = l.session_key
-            WHERE l.session_key = :key
-              AND l.lap_number  IS NOT NULL
-            ORDER BY l.driver_number, l.lap_number
-        """), {"key": session_key}).mappings().all()
+        has_stints = conn.execute(text("""
+            SELECT COUNT(*) FROM lap_times
+            WHERE session_key = :sk AND stint IS NOT NULL
+        """), {"sk": session_key}).scalar()
 
-    if not laps:
-        return jsonify([])
-
-    # Group into stints per driver
-    # A stint = contiguous sequence of same compound for same driver
-    stints = []
-    current: dict | None = None
-
-    for lap in laps:
-        lap = dict(lap)
-        key = (lap["driver_number"], lap["compound"], lap.get("stint"))
-
-        if current is None or (
-            lap["driver_number"] != current["driver_number"] or
-            lap["compound"]      != current["compound"] or
-            (lap.get("stint") and lap["stint"] != current["stint_num"])
-        ):
-            if current:
-                stints.append(current)
-            current = {
-                "driver_number": lap["driver_number"],
-                "abbreviation":  lap["abbreviation"],
-                "team_colour":   lap["team_colour"],
-                "compound":      lap["compound"],
-                "stint_num":     lap.get("stint") or 1,
-                "lap_start":     lap["lap_number"],
-                "lap_end":       lap["lap_number"],
-                "lap_count":     1,
-            }
+        if has_stints:
+            rows = conn.execute(text("""
+                SELECT
+                    l.driver_number,
+                    d.abbreviation,
+                    d.team_name,
+                    d.team_colour,
+                    MIN(l.position) FILTER (WHERE l.position IS NOT NULL) AS grid_pos,
+                    l.stint,
+                    l.compound,
+                    l.fresh_tyre,
+                    MIN(l.lap_number) AS start_lap,
+                    MAX(l.lap_number) AS end_lap,
+                    COUNT(*)          AS laps
+                FROM lap_times l
+                JOIN drivers d
+                    ON d.driver_number = l.driver_number
+                    AND d.session_key  = l.session_key
+                WHERE l.session_key = :sk
+                  AND l.compound    IS NOT NULL
+                  AND l.deleted     = FALSE
+                GROUP BY
+                    l.driver_number, d.abbreviation, d.team_name,
+                    d.team_colour, l.stint, l.compound, l.fresh_tyre
+                ORDER BY
+                    MIN(l.position) ASC NULLS LAST,
+                    l.driver_number,
+                    l.stint ASC NULLS LAST
+            """), {"sk": session_key}).mappings().all()
         else:
-            current["lap_end"]   = lap["lap_number"]
-            current["lap_count"] += 1
+            rows = conn.execute(text("""
+                WITH stint_calc AS (
+                    SELECT driver_number, lap_number, compound, fresh_tyre,
+                        SUM(CASE WHEN compound != LAG(compound) OVER w
+                                    OR LAG(compound) OVER w IS NULL
+                             THEN 1 ELSE 0 END) OVER w AS stint
+                    FROM lap_times
+                    WHERE session_key = :sk AND compound IS NOT NULL AND deleted = FALSE
+                    WINDOW w AS (PARTITION BY driver_number ORDER BY lap_number)
+                )
+                SELECT
+                    sc.driver_number, d.abbreviation, d.team_name, d.team_colour,
+                    sc.stint, sc.compound, sc.fresh_tyre,
+                    MIN(sc.lap_number) AS start_lap,
+                    MAX(sc.lap_number) AS end_lap,
+                    COUNT(*) AS laps
+                FROM stint_calc sc
+                JOIN drivers d ON d.driver_number = sc.driver_number AND d.session_key = :sk
+                GROUP BY sc.driver_number, d.abbreviation, d.team_name, d.team_colour,
+                         sc.stint, sc.compound, sc.fresh_tyre
+                ORDER BY sc.driver_number, sc.stint
+            """), {"sk": session_key}).mappings().all()
 
-    if current:
-        stints.append(current)
+        if not rows:
+            return jsonify({"total_laps": 0, "stints": []})
 
-    return jsonify(stints)
+        total_laps = conn.execute(text("""
+            SELECT MAX(lap_number) FROM lap_times WHERE session_key = :sk
+        """), {"sk": session_key}).scalar() or 0
 
+    stints = []
+    for r in rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        stints.append(d)
 
-@strategy_bp.get("/sessions/<int:session_key>/race-order")
-def race_order(session_key: int):
-    """
-    Final race finishing order — last recorded position per driver.
-    Used to order drivers on the strategy diagram (P1 at top).
-    """
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT DISTINCT ON (l.driver_number)
-                l.driver_number,
-                d.abbreviation,
-                d.team_colour,
-                d.team_name,
-                l.position
-            FROM lap_times l
-            JOIN drivers d
-                ON d.driver_number = l.driver_number
-                AND d.session_key  = l.session_key
-            WHERE l.session_key = :key
-              AND l.position    IS NOT NULL
-            ORDER BY l.driver_number, l.lap_number DESC
-        """), {"key": session_key}).mappings().all()
-
-    sorted_rows = sorted(
-        [dict(r) for r in rows],
-        key=lambda x: x["position"] or 99
-    )
-    return jsonify(sorted_rows)
+    return jsonify({"total_laps": total_laps, "stints": stints})
