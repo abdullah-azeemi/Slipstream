@@ -1,12 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Flag, BarChart2, Zap } from 'lucide-react'
+import { Home, Flag, Activity, Zap } from 'lucide-react'
 
 const NAV = [
   { href: '/',            label: 'Home',        icon: Home     },
   { href: '/sessions',    label: 'Sessions',    icon: Flag     },
-  { href: '/compare',     label: 'Compare',     icon: BarChart2 },
+  { href: '/telemetry',   label: 'Telemetry',   icon: Activity },
   { href: '/predictions', label: 'Predictions', icon: Zap      },
 ]
 
@@ -27,10 +27,7 @@ export default function BottomNav() {
               {active && (
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-red rounded-full" />
               )}
-              <Icon
-                size={20}
-                className={active ? 'text-red' : 'text-zinc-500'}
-              />
+              <Icon size={20} className={active ? 'text-red' : 'text-zinc-500'} />
               <span className={`text-[10px] font-medium tracking-wide ${active ? 'text-white' : 'text-zinc-600'}`}>
                 {label}
               </span>
