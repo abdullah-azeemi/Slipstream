@@ -2,21 +2,43 @@
 
 import { use, useEffect, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { teamColour } from '@/lib/utils'
+import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
 import CornerAnalysis from '@/components/telemetry/CornerAnalysis'
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-async function fetchTelemetryCompare(sessionKey: number, drivers: number[]): Promise<any[]> {
-  const res = await fetch(`${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}`)
+
+// ── CHANGE 1 ─────────────────────────────────────────────────────────────────
+// fetchTelemetryCompare now also returns lap_number per driver.
+// We need this so we can look up the *correct* lap's sector times from the DB.
+// Previously we were throwing away the lap_number — now we surface it.
+async function fetchTelemetryCompare(
+  sessionKey: number,
+  drivers: number[]
+): Promise<{ samples: any[]; lapNumbers: Map<number, number> }> {
+  const res = await fetch(
+    `${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}`
+  )
   if (!res.ok) throw new Error(`telemetry ${res.status}`)
   const data = await res.json()
-  // Plain array
-  if (Array.isArray(data)) return data
-  // Shape: { "44": { lap_number, samples: [...] }, "63": { ... } }
-  return Object.entries(data).flatMap(([dn, val]: [string, any]) => {
-    const rows = Array.isArray(val) ? val : (val?.samples ?? [])
-    return rows.map((r: any) => ({ ...r, driver_number: parseInt(dn) }))
-  })
+
+  const lapNumbers = new Map<number, number>()
+  let samples: any[] = []
+
+  if (Array.isArray(data)) {
+    // Flat array — no lap_number metadata available, fall back gracefully
+    samples = data
+  } else {
+    // Shape: { "44": { lap_number: 24, samples: [...] }, "63": { ... } }
+    samples = Object.entries(data).flatMap(([dn, val]: [string, any]) => {
+      const driverNum = parseInt(dn)
+      const rows = Array.isArray(val) ? val : (val?.samples ?? [])
+      if (val?.lap_number) lapNumbers.set(driverNum, val.lap_number)
+      return rows.map((r: any) => ({ ...r, driver_number: driverNum }))
+    })
+  }
+
+  return { samples, lapNumbers }
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -87,11 +109,9 @@ function drawGridAndAxes(
 ) {
   const { cW, cH } = chartCoords(W, H)
 
-  // Background
   ctx.fillStyle = CHART_BG
   ctx.fillRect(0, 0, W, H)
 
-  // Horizontal grid
   for (let i = 0; i <= gridCount; i++) {
     const y = PAD.top + cH - (i / gridCount) * cH
     ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
@@ -101,7 +121,6 @@ function drawGridAndAxes(
     ctx.fillText(isRpm ? `${(val/1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 6, y + 3)
   }
 
-  // Sector dividers
   sectorLines.forEach((nx, si) => {
     const sx = PAD.left + nx * cW
     ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
@@ -111,7 +130,6 @@ function drawGridAndAxes(
     ctx.fillText(`S${si + 2}`, sx, PAD.top + cH + 16)
   })
 
-  // Distance labels
   ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'center'
   for (let i = 0; i <= 4; i++) {
     const nx = i / 4
@@ -165,27 +183,43 @@ const CHARTS = [
   { label: 'RPM',      unit: 'rpm',  field: 'rpm',      yMin: 4000, yMax: 13000, height: 130, gridCount: 5, isRpm: true  },
 ]
 
+// ── CHANGE 2 ─────────────────────────────────────────────────────────────────
+// Type for the sector times we'll fetch from the laps API.
+// s1_ms / s2_ms / s3_ms come from FastF1 → lap_times table.
+type DriverSectorTimes = {
+  s1_ms: number | null
+  s2_ms: number | null
+  s3_ms: number | null
+  lap_number: number
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function TelemetryPage({ params }: { params: Promise<{ key: string }> }) {
   const { key }    = use(params)
-
   const sessionKey = parseInt(key)
 
-  const [drivers,   setDrivers]   = useState<Driver[]>([])
-  const [selected,  setSelected]  = useState<number[]>([])
-  const [telData,   setTelData]   = useState<Map<number, Interp>>(new Map())
-  const [tooltipNx, setTooltipNx] = useState<number | null>(null)
-  const [tooltipData, setTooltipData] = useState<{ dist: number; values: any[] } | null>(null)
-  const [loading,   setLoading]   = useState(false)
-  const [sessionYear, setSessionYear] = useState<number | null>(null)
+  const [drivers,      setDrivers]      = useState<Driver[]>([])
+  const [selected,     setSelected]     = useState<number[]>([])
+  const [telData,      setTelData]      = useState<Map<number, Interp>>(new Map())
+  const [tooltipNx,    setTooltipNx]    = useState<number | null>(null)
+  const [tooltipData,  setTooltipData]  = useState<{ dist: number; values: any[] } | null>(null)
+  const [loading,      setLoading]      = useState(false)
+  const [sessionYear,  setSessionYear]  = useState<number | null>(null)
 
-  // Derived: 2026 has no DRS and no RPM data
+  // ── CHANGE 2 (cont.) ───────────────────────────────────────────────────────
+  // New state: Map<driverNumber, DriverSectorTimes>
+  // Populated after telemetry loads — we need lap_number from telemetry first
+  // so we fetch the right lap's sector times, not just the fastest on record.
+  const [sectorTimes, setSectorTimes] = useState<Map<number, DriverSectorTimes>>(new Map())
+  // Also store lap_numbers from the telemetry response (which lap's telemetry we're showing)
+  const [telLapNumbers, setTelLapNumbers] = useState<Map<number, number>>(new Map())
+
   const is2026 = sessionYear === 2026
 
-  const chartRefs  = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
-  const deltaRef   = useRef<HTMLCanvasElement | null>(null)
-  const drsRef     = useRef<HTMLCanvasElement | null>(null)
-  const trackRef   = useRef<HTMLCanvasElement | null>(null)
+  const chartRefs    = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
+  const deltaRef     = useRef<HTMLCanvasElement | null>(null)
+  const drsRef       = useRef<HTMLCanvasElement | null>(null)
+  const trackRef     = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   // Load drivers + session year
@@ -197,12 +231,17 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     })
   }, [sessionKey])
 
-  // Load telemetry
+  // ── CHANGE 2 (cont.) ───────────────────────────────────────────────────────
+  // Load telemetry — now also captures lap_numbers from the response
+  // so we know exactly which lap each driver's telemetry corresponds to.
   useEffect(() => {
     if (!selected.length) return
     setLoading(true)
     fetchTelemetryCompare(sessionKey, selected)
-      .then(samples => {
+      .then(({ samples, lapNumbers }) => {
+        // Store which lap number the telemetry is for, per driver
+        setTelLapNumbers(lapNumbers)
+
         const byDriver = new Map<number, TelemetrySample[]>()
         samples.forEach(s => {
           if (!byDriver.has(s.driver_number)) byDriver.set(s.driver_number, [])
@@ -214,6 +253,52 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       })
       .finally(() => setLoading(false))
   }, [sessionKey, selected.join(',')])
+
+  // ── CHANGE 2 (cont.) ───────────────────────────────────────────────────────
+  // Fetch real sector times once we know which lap numbers the telemetry uses.
+  // We call GET /api/v1/sessions/<key>/laps?driver=<num> for each selected driver,
+  // then pick the lap that matches the telemetry lap_number.
+  //
+  // WHY a separate useEffect? Because telLapNumbers is set async after telemetry loads.
+  // We need to wait for both: (1) selected drivers, (2) their telemetry lap numbers.
+  useEffect(() => {
+    if (!selected.length || !telLapNumbers.size) return
+
+    const fetchAll = selected.map(async (driverNum) => {
+      try {
+        // api.laps.list returns Lap[] — each has lap_number, s1_ms, s2_ms, s3_ms
+        const laps = await api.laps.list(sessionKey, driverNum)
+        const telLap = telLapNumbers.get(driverNum)
+
+        // Find the lap matching the one shown in telemetry
+        // Fall back to the overall fastest lap if no match (edge case)
+        const matchedLap = laps.find(l => l.lap_number === telLap)
+          ?? laps.reduce((best, l) =>
+            (l.lap_time_ms ?? Infinity) < (best.lap_time_ms ?? Infinity) ? l : best
+          , laps[0])
+
+        if (!matchedLap) return null
+
+        return {
+          driverNum,
+          times: {
+            s1_ms:      matchedLap.s1_ms      ?? null,
+            s2_ms:      matchedLap.s2_ms      ?? null,
+            s3_ms:      matchedLap.s3_ms      ?? null,
+            lap_number: matchedLap.lap_number,
+          } as DriverSectorTimes,
+        }
+      } catch {
+        return null
+      }
+    })
+
+    Promise.all(fetchAll).then(results => {
+      const map = new Map<number, DriverSectorTimes>()
+      results.forEach(r => { if (r) map.set(r.driverNum, r.times) })
+      setSectorTimes(map)
+    })
+  }, [sessionKey, selected.join(','), telLapNumbers])
 
   // Build driver render data
   const driverData: DriverRenderData[] = selected
@@ -232,7 +317,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     if (!driverData.length) return
     const W = containerRef.current?.clientWidth ?? 900
 
-    // Speed/throttle/gear/rpm charts
     CHARTS.forEach((cfg, i) => {
       const canvas = chartRefs.current[i]
       if (!canvas) return
@@ -240,7 +324,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const ctx = canvas.getContext('2d')!
       drawGridAndAxes(ctx, W, cfg.height, cfg.yMin, cfg.yMax, cfg.gridCount, cfg.isRpm, sectorLines)
 
-      // Brake zones behind speed line
       if (cfg.field === 'speed' && driverData[0]) {
         const { cW, cH } = chartCoords(W, cfg.height)
         const br = driverData[0].interp.brake
@@ -277,10 +360,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const midY   = PAD.top + cH / 2
 
       ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, 120)
-      // Zero line
       ctx.beginPath(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, midY); ctx.lineTo(PAD.left + cW, midY); ctx.stroke()
-      // Y labels
       for (const m of [-1, -0.5, 0.5, 1]) {
         const y  = PAD.top + cH / 2 - m * cH / 2
         const lv = (m * maxD).toFixed(0)
@@ -289,7 +370,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
         ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
       }
-      // Filled area
       ctx.beginPath()
       ctx.moveTo(PAD.left, midY)
       deltas.forEach((d, i) => {
@@ -301,7 +381,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       grad.addColorStop(0.5, '#0A0A0A')
       grad.addColorStop(1,   driverData[1].colour + '44')
       ctx.fillStyle = grad; ctx.fill()
-      // Delta line
       ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
       deltas.forEach((d, i) => {
         const cx = PAD.left + (i/(n-1)) * cW
@@ -309,12 +388,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
       })
       ctx.stroke()
-      // Corner labels
       ctx.fillStyle = driverData[0].colour + 'CC'; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'left'
       ctx.fillText(`▲ ${driverData[0].abbr} faster`, PAD.left + 6, PAD.top + 14)
       ctx.fillStyle = driverData[1].colour + 'CC'
       ctx.fillText(`▼ ${driverData[1].abbr} faster`, PAD.left + 6, PAD.top + cH - 6)
-      // Crosshair + delta value
       if (tooltipNx !== null) {
         const cx  = PAD.left + tooltipNx * cW
         const idx = Math.round(tooltipNx * (n-1))
@@ -392,13 +469,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const tx    = (x: number) => x * scale + offX
       const ty    = (y: number) => y * scale + offY
 
-      // Base track
       ctx.beginPath()
       xs.forEach((x, i) => i === 0 ? ctx.moveTo(tx(x), ty(ys[i])) : ctx.lineTo(tx(x), ty(ys[i])))
       ctx.closePath()
       ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke()
 
-      // Sectors S1/S2/S3
       const sectColours = ['#E8002D55', '#FFD70055', '#B347FF55']
       sectColours.forEach((col, si) => {
         const s = Math.floor(si * n / 3), e = Math.floor((si + 1) * n / 3)
@@ -407,7 +482,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         ctx.strokeStyle = col; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke()
       })
 
-      // Braking zones
       let inB = false, bs = 0
       interp.brake.forEach((b, i) => {
         if (b && !inB) { inB = true; bs = i }
@@ -419,7 +493,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         }
       })
 
-      // DRS zones
       let inD = false, ds2 = 0
       interp.drs.forEach((v, i) => {
         if (v > 8 && !inD) { inD = true; ds2 = i }
@@ -431,7 +504,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         }
       })
 
-      // Current position
       if (tooltipNx !== null) {
         const idx = Math.round(tooltipNx * (n - 1))
         driverData.forEach(({ colour }) => {
@@ -443,7 +515,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         })
       }
 
-      // Start dot
       ctx.beginPath(); ctx.arc(tx(xs[0]), ty(ys[0]), 5, 0, Math.PI*2)
       ctx.fillStyle = '#fff'; ctx.fill()
     }
@@ -569,7 +640,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             </div>
           )}
 
-          {/* Charts */}
+          {/* Speed / Throttle / Gear / RPM charts */}
           {CHARTS.map((cfg, i) => (
             <div key={cfg.field} style={{
               background: '#111111', border: '1px solid #2A2A2A',
@@ -604,98 +675,176 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             </div>
           )}
 
-          {/* DRS Open — 2026 cars have no DRS */}
+          {/* DRS Open — hidden for 2026 (no DRS in new regs) */}
           {!is2026 && (
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 8px' }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>DRS OPEN</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <div style={{ width: '14px', height: '6px', borderRadius: '2px', background: GREEN_DRS }} />
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>DRS Open zone</span>
+            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 8px' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>DRS OPEN</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ width: '14px', height: '6px', borderRadius: '2px', background: GREEN_DRS }} />
+                  <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>DRS Open zone</span>
+                </div>
+              </div>
+              <div style={{ padding: '0 0 8px 0' }}>
+                <canvas ref={drsRef} height={driverData.length * 26 + 36}
+                  style={{ display: 'block', width: '100%' }} />
               </div>
             </div>
-            <div style={{ padding: '0 0 8px 0' }}>
-              <canvas ref={drsRef} height={driverData.length * 26 + 36}
-                style={{ display: 'block', width: '100%' }} />
-            </div>
-          </div>
           )}
 
-          {/* Sector Comparison — S1 / S2 / S3 */}
+          {/* ── CHANGE 3 ────────────────────────────────────────────────────────
+              SECTOR TIMES — replaces the old "sector speed average" block.
+
+              What changed and why:
+              - Old: sliced telemetry speed arrays into thirds, averaged speed.
+                That was a proxy metric, not a real sector time.
+              - New: reads s1_ms / s2_ms / s3_ms from the lap_times DB table
+                via GET /laps?driver=N, for the exact lap shown in telemetry.
+              - formatLapTime(ms) from utils.ts formats ms → "23.456s" correctly.
+              - Delta shown in ms, formatted to 3 decimal places in seconds.
+              - If sector data hasn't loaded yet, we show a subtle skeleton.
+          ── */}
           {driverData.length >= 2 && (
             <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '12px 16px', marginBottom: '8px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>
-                SECTOR SPEED ADVANTAGE — S1 / S2 / S3
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '14px' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>
+                  SECTOR TIMES
+                </span>
+                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>
+                  fastest telemetry lap · from timing data
+                </span>
               </div>
+
+              {/* Sector rows — one per S1 / S2 / S3 */}
               {(() => {
+                const SECTOR_KEYS   = ['s1_ms', 's2_ms', 's3_ms'] as const
+                const SECTOR_LABELS = ['S1', 'S2', 'S3']
                 const SECTOR_COLOURS = ['#E8002D', '#FFD700', '#B347FF']
-                const SECTOR_LABELS  = ['S1', 'S2', 'S3']
+                const hasSectorData = sectorTimes.size > 0
+
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[0, 1, 2].map(si => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {SECTOR_KEYS.map((key, si) => {
                       const label = SECTOR_LABELS[si]
                       const sCol  = SECTOR_COLOURS[si]
-                      // Compare avg speed across all selected drivers in this sector
-                      const sectorAvgs = driverData.map(d => {
-                        const spd = d.interp.speed
-                        const s   = Math.floor(si       * spd.length / 3)
-                        const e   = Math.floor((si + 1) * spd.length / 3)
-                        return spd.slice(s, e).reduce((x, v) => x + v, 0) / (e - s)
+
+                      // Collect each driver's sector time for this sector
+                      const driverSectors = driverData.map(d => {
+                        const dn    = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
+                        const times = dn !== undefined ? sectorTimes.get(dn) : undefined
+                        return {
+                          abbr:   d.abbr,
+                          colour: d.colour,
+                          ms:     times?.[key] ?? null,
+                        }
                       })
-                      const fastest  = Math.max(...sectorAvgs)
-                      const slowest  = Math.min(...sectorAvgs)
-                      const winner   = driverData[sectorAvgs.indexOf(fastest)]
-                      const diff     = fastest - slowest
+
+                      // Find the fastest time in this sector across shown drivers
+                      const validMs   = driverSectors.map(d => d.ms).filter((v): v is number => v !== null)
+                      const fastestMs = validMs.length ? Math.min(...validMs) : null
+                      const slowestMs = validMs.length ? Math.max(...validMs) : null
+                      const deltaMs   = fastestMs !== null && slowestMs !== null ? slowestMs - fastestMs : null
 
                       return (
-                        <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          {/* Sector label */}
-                          <div style={{
-                            width: '28px', flexShrink: 0, fontSize: '10px', fontFamily: 'monospace',
-                            fontWeight: 700, color: sCol, letterSpacing: '0.05em',
-                          }}>{label}</div>
+                        <div key={si}>
+                          {/* Sector header */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                            <div style={{
+                              width: '4px', height: '16px', borderRadius: '2px',
+                              background: sCol, flexShrink: 0,
+                            }} />
+                            <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, color: sCol, letterSpacing: '0.08em' }}>
+                              {label}
+                            </span>
+                            {deltaMs !== null && deltaMs > 0 && (
+                              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', marginLeft: 'auto' }}>
+                                Δ {(deltaMs / 1000).toFixed(3)}s
+                              </span>
+                            )}
+                          </div>
 
-                          {/* Per-driver bars */}
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            {driverData.map((d, di) => {
-                              const avg     = sectorAvgs[di]
-                              const barPct  = 40 + ((avg - slowest) / (fastest - slowest + 0.001)) * 60
-                              const isBest  = avg === fastest
+                          {/* Per-driver time rows */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '14px' }}>
+                            {driverSectors.map(({ abbr, colour, ms }) => {
+                              const isFastest = ms !== null && ms === fastestMs
+                              const isLoading = !hasSectorData
+
+                              // Bar width: fastest driver = 100%, slowest = 60%.
+                              // We invert the delta so a lower (better) time = wider bar.
+                              // Formula: fastest gets (slowestMs - fastestMs) / range = 1.0 → 100%
+                              //          slowest gets 0 / range = 0.0 → 60%
+                              const barPct = ms !== null && fastestMs !== null && slowestMs !== null
+                                ? 60 + ((slowestMs - ms) / ((slowestMs - fastestMs) || 1)) * 40
+                                : 60
+
                               return (
-                                <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ width: '30px', fontSize: '10px', fontFamily: 'monospace', color: '#71717A', flexShrink: 0 }}>{d.abbr}</span>
-                                  <div style={{ flex: 1, height: '16px', background: '#1A1A1A', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{
-                                      width: `${barPct}%`, height: '100%', borderRadius: '4px',
-                                      background: isBest ? d.colour : d.colour + '55',
-                                      transition: 'width 0.3s',
-                                    }} />
-                                  </div>
-                                  <span style={{ width: '52px', textAlign: 'right', fontSize: '10px', fontFamily: 'monospace', color: isBest ? '#fff' : '#52525B' }}>
-                                    {avg.toFixed(1)} km/h
+                                <div key={abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {/* Driver abbreviation */}
+                                  <span style={{
+                                    width: '30px', fontSize: '10px', fontFamily: 'monospace',
+                                    color: isFastest ? '#fff' : '#52525B', flexShrink: 0, fontWeight: isFastest ? 700 : 400,
+                                  }}>
+                                    {abbr}
                                   </span>
-                                  {isBest && diff > 0.5 && (
-                                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: sCol, width: '40px' }}>
-                                      +{diff.toFixed(1)}
+
+                                  {/* Bar */}
+                                  <div style={{ flex: 1, height: '18px', background: '#1A1A1A', borderRadius: '4px', overflow: 'hidden' }}>
+                                    {isLoading ? (
+                                      // Skeleton shimmer while data loads
+                                      <div style={{
+                                        width: '40%', height: '100%', borderRadius: '4px',
+                                        background: `linear-gradient(90deg, #1A1A1A 25%, #2A2A2A 50%, #1A1A1A 75%)`,
+                                        backgroundSize: '200% 100%',
+                                        animation: 'shimmer 1.4s infinite',
+                                      }} />
+                                    ) : (
+                                      <div style={{
+                                        width: `${barPct}%`, height: '100%', borderRadius: '4px',
+                                        background: isFastest ? colour : colour + '40',
+                                        transition: 'width 0.4s ease',
+                                      }} />
+                                    )}
+                                  </div>
+
+                                  {/* Sector time */}
+                                  <span style={{
+                                    width: '64px', textAlign: 'right', fontSize: '11px',
+                                    fontFamily: 'monospace', fontWeight: isFastest ? 700 : 400,
+                                    color: isFastest ? '#fff' : '#52525B', flexShrink: 0,
+                                  }}>
+                                    {ms !== null ? formatLapTime(ms) : '—'}
+                                  </span>
+
+                                  {/* Fastest indicator */}
+                                  {isFastest && (
+                                    <span style={{ fontSize: '8px', fontFamily: 'monospace', color: sCol, width: '14px', flexShrink: 0 }}>
+                                      ▲
                                     </span>
                                   )}
                                 </div>
                               )
                             })}
                           </div>
+
+                          {/* Divider between sectors */}
+                          {si < 2 && (
+                            <div style={{ height: '1px', background: '#1A1A1A', marginTop: '10px' }} />
+                          )}
                         </div>
                       )
                     })}
 
-                    {/* Legend */}
-                    <div style={{ display: 'flex', gap: '16px', marginTop: '4px', paddingTop: '8px', borderTop: '1px solid #1A1A1A' }}>
+                    {/* Footer legend */}
+                    <div style={{ display: 'flex', gap: '16px', paddingTop: '8px', borderTop: '1px solid #1A1A1A', alignItems: 'center' }}>
                       {driverData.map(d => (
                         <div key={d.abbr} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                          <div style={{ width: '12px', height: '6px', borderRadius: '2px', background: d.colour }} />
+                          <div style={{ width: '12px', height: '4px', borderRadius: '2px', background: d.colour }} />
                           <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A' }}>{d.abbr}</span>
                         </div>
                       ))}
-                      <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: 'auto' }}>avg speed per sector</span>
+                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: 'auto' }}>
+                        ▲ fastest in sector
+                      </span>
                     </div>
                   </div>
                 )
@@ -737,6 +886,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           />
         </>
       )}
+
+      {/* Shimmer keyframe — injected once, used by sector skeleton */}
+      <style>{`
+        @keyframes shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   )
 }

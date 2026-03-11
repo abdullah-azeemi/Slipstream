@@ -49,6 +49,7 @@ def compare_telemetry(session_key: int):
                     throttle_pct,
                     brake,
                     gear,
+                    rpm,
                     drs,
                     distance_m,
                     x_pos,
@@ -166,3 +167,4 @@ def telemetry_stats(session_key: int):
         return {"error": "No stats computed for this session yet"}, 404
 
     return jsonify([dict(r) for r in rows])
+
