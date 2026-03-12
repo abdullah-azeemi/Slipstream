@@ -26,19 +26,23 @@ def create_app() -> Flask:
         pool_pre_ping=True,
     )
 
-    from backend.api.v1.sessions  import sessions_bp
-    from backend.api.v1.laps      import laps_bp
-    from backend.api.v1.drivers   import drivers_bp
-    from backend.api.v1.telemetry import telemetry_bp
-    from backend.api.v1.strategy  import strategy_bp
-    from backend.health           import health_bp
+    from backend.api.v1.sessions    import sessions_bp
+    from backend.api.v1.laps        import laps_bp
+    from backend.api.v1.drivers     import drivers_bp
+    from backend.api.v1.telemetry   import telemetry_bp
+    from backend.api.v1.strategy    import strategy_bp
+    from backend.api.v1.analysis    import analysis_bp
+    from backend.api.v1.predictions import predictions_bp
+    from backend.health             import health_bp
 
     app.register_blueprint(health_bp)
-    app.register_blueprint(sessions_bp,  url_prefix="/api/v1")
-    app.register_blueprint(laps_bp,      url_prefix="/api/v1")
-    app.register_blueprint(drivers_bp,   url_prefix="/api/v1")
-    app.register_blueprint(telemetry_bp, url_prefix="/api/v1")
-    app.register_blueprint(strategy_bp,  url_prefix="/api/v1")
+    app.register_blueprint(sessions_bp,    url_prefix="/api/v1")
+    app.register_blueprint(laps_bp,        url_prefix="/api/v1")
+    app.register_blueprint(drivers_bp,     url_prefix="/api/v1")
+    app.register_blueprint(telemetry_bp,   url_prefix="/api/v1")
+    app.register_blueprint(strategy_bp,    url_prefix="/api/v1")
+    app.register_blueprint(analysis_bp,    url_prefix="/api/v1")
+    app.register_blueprint(predictions_bp, url_prefix="/api/v1")
 
     @app.errorhandler(404)
     def not_found(e):
