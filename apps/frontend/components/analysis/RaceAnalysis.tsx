@@ -90,28 +90,6 @@ type DriverInfo = {
   team_colour: string
 }
 
-type LapTooltipEntry = {
-  abbr: string
-  colour: string
-  lap_time_ms: number | null
-  compound: string | null
-  prev_compound: string | null
-  position: number | null
-  is_pit: boolean
-}
-
-type PosTooltipEntry = {
-  abbr: string
-  colour: string
-  position: number | null
-}
-
-type GapTooltipEntry = {
-  abbr: string
-  colour: string
-  gap_s: number | null
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CHART_BG   = '#0A0A0A'
@@ -128,13 +106,13 @@ const COMPOUND_COLOUR: Record<string, string> = {
 const VERDICT_STYLE = {
   undercut: { bg: '#2CF4C522', border: '#2CF4C544', text: '#2CF4C5', label: 'UNDERCUT ↑' },
   overcut:  { bg: '#E8002D22', border: '#E8002D44', text: '#E8002D', label: 'LOST OUT ↓' },
-  neutral:  { bg: '#52525B22', border: '#52525B44', text: '#71717A', label: 'NEUTRAL →' },
+  neutral:  { bg: '#52525B22', border: '#52525B44', text: '#71717A', label: 'NEUTRAL →'  },
 }
 
-// Shared padding — same left/right on all charts so x-axes align
+// All charts share identical left/right padding so x-axes align pixel-perfect
 const PAD = { top: 24, right: 110, bottom: 44, left: 72 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Canvas helpers ────────────────────────────────────────────────────────────
 
 function clearCanvas(canvas: HTMLCanvasElement, W: number, H: number) {
   canvas.width = W; canvas.height = H
@@ -158,6 +136,52 @@ function lapFromNx(nx: number, maxLap: number) {
   return Math.round(nx * (maxLap - 1)) + 1
 }
 
+// ── Tooltip card — uses fixed positioning so it's always above canvas ─────────
+// Canvas elements create their own stacking context and sit above
+// position:absolute children of the same container. Using position:fixed
+// with coordinates converted to viewport space solves this permanently.
+
+function TooltipCard({
+  anchorRef,
+  canvasOffsetX,
+  canvasOffsetY,
+  children,
+}: {
+  anchorRef: React.RefObject<HTMLDivElement | null>
+  canvasOffsetX: number
+  canvasOffsetY: number
+  children: React.ReactNode
+}) {
+  const [vx, setVx] = useState(0)
+  const [vy, setVy] = useState(0)
+
+  useEffect(() => {
+    const container = anchorRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    setVx(rect.left + canvasOffsetX)
+    setVy(rect.top  + canvasOffsetY)
+  }, [canvasOffsetX, canvasOffsetY])
+
+  return (
+    <div style={{
+      position:       'fixed',
+      left:           vx,
+      top:            vy,
+      pointerEvents:  'none',
+      zIndex:         9999,
+      background:     '#111111EE',
+      border:         '1px solid #2A2A2A',
+      borderRadius:   '10px',
+      padding:        '10px 14px',
+      backdropFilter: 'blur(8px)',
+      minWidth:       '148px',
+    }}>
+      {children}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RaceAnalysis({
@@ -176,20 +200,26 @@ export default function RaceAnalysis({
   const [fastestLaps, setFastestLaps] = useState<FastestLapRow[]>([])
   const [loading,     setLoading]     = useState(false)
 
-  // Shared hover
-  const [hovLap,      setHovLap]      = useState<number | null>(null)
-  const [lapTooltip,  setLapTooltip]  = useState<{ lap: number; entries: LapTooltipEntry[] } | null>(null)
-  const [posTooltip,  setPosTooltip]  = useState<{ lap: number; entries: PosTooltipEntry[] } | null>(null)
-  const [gapTooltip,  setGapTooltip]  = useState<{ lap: number; entries: GapTooltipEntry[] } | null>(null)
-  const [lapTipPos,   setLapTipPos]   = useState({ x: 0, y: 0 })
-  const [posTipPos,   setPosTipPos]   = useState({ x: 0, y: 0 })
-  const [gapTipPos,   setGapTipPos]   = useState({ x: 0, y: 0 })
+  // Single hovered lap drives ALL charts simultaneously
+  const [hovLap, setHovLap] = useState<number | null>(null)
 
-  const lapRef       = useRef<HTMLCanvasElement | null>(null)
-  const posRef       = useRef<HTMLCanvasElement | null>(null)
-  const gapRef       = useRef<HTMLCanvasElement | null>(null)
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  // Per-chart tooltip data + canvas-relative pixel position
+  const [lapTip,  setLapTip]  = useState<{ lap: number; entries: any[] } | null>(null)
+  const [posTip,  setPosTip]  = useState<{ lap: number; entries: any[] } | null>(null)
+  const [gapTip,  setGapTip]  = useState<{ lap: number; entries: any[] } | null>(null)
+  const [lapTipXY, setLapTipXY] = useState({ x: 0, y: 0 })
+  const [posTipXY, setPosTipXY] = useState({ x: 0, y: 0 })
+  const [gapTipXY, setGapTipXY] = useState({ x: 0, y: 0 })
 
+  const lapRef        = useRef<HTMLCanvasElement | null>(null)
+  const posRef        = useRef<HTMLCanvasElement | null>(null)
+  const gapRef        = useRef<HTMLCanvasElement | null>(null)
+  const lapCardRef    = useRef<HTMLDivElement | null>(null)
+  const posCardRef    = useRef<HTMLDivElement | null>(null)
+  const gapCardRef    = useRef<HTMLDivElement | null>(null)
+  const containerRef  = useRef<HTMLDivElement | null>(null)
+
+  // Stable geometry for mouse handlers — avoids stale closures
   const geomRef = useRef<{
     maxLap: number
     lapYMin: number; lapYMax: number
@@ -200,14 +230,14 @@ export default function RaceAnalysis({
     gapDrivers: Record<string, GapDriver>
   } | null>(null)
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init selection ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (allDrivers.length >= 2)
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
   }, [allDrivers.map(d => d.driver_number).join(',')])
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch all race data ───────────────────────────────────────────────────
 
   useEffect(() => {
     if (!selected.length) return
@@ -238,7 +268,7 @@ export default function RaceAnalysis({
       prev.includes(dn) ? prev.filter(d => d !== dn) : prev.length < 4 ? [...prev, dn] : prev
     )
 
-  // ── Shared maxLap ─────────────────────────────────────────────────────────
+  // ── Single maxLap for ALL charts ──────────────────────────────────────────
 
   const maxLap = Math.max(
     posData.total_laps,
@@ -246,6 +276,21 @@ export default function RaceAnalysis({
     ...Object.values(lapData).flatMap(d => d.laps.map(l => l.lap_number)),
     2
   )
+
+  // ── Live leaderboard at hovLap (or final lap) ─────────────────────────────
+
+  const leaderboardLap = hovLap ?? maxLap
+  const leaderboard = Object.entries(posData.drivers)
+    .map(([dn, data]) => ({
+      driver_number: parseInt(dn),
+      abbreviation:  data.abbreviation,
+      team_colour:   data.team_colour,
+      team_name:     data.team_name,
+      position:      data.positions[String(leaderboardLap)] ?? null,
+      gap:           gapData.drivers[dn]?.gaps[String(leaderboardLap)] ?? null,
+    }))
+    .filter(d => d.position !== null)
+    .sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
 
   // ── Draw: lap time evolution ──────────────────────────────────────────────
 
@@ -267,20 +312,15 @@ export default function RaceAnalysis({
     const yMin = allMs[Math.floor(allMs.length * 0.05)] - 1500
     const yMax = allMs[Math.floor(allMs.length * 0.95)] + 4000
 
-    if (geomRef.current) {
-      geomRef.current.lapYMin = yMin; geomRef.current.lapYMax = yMax
-      geomRef.current.lapDrivers = Object.values(lapData)
-      geomRef.current.maxLap = maxLap
-    } else {
-      geomRef.current = { maxLap, lapYMin: yMin, lapYMax: yMax, gapYMax: 60, numDrivers: 0, lapDrivers: Object.values(lapData), posDrivers: {}, gapDrivers: {} }
-    }
+    const g = geomRef.current
+    if (g) { g.lapYMin = yMin; g.lapYMax = yMax; g.lapDrivers = Object.values(lapData); g.maxLap = maxLap }
+    else geomRef.current = { maxLap, lapYMin: yMin, lapYMax: yMax, gapYMax: 60, numDrivers: 0, lapDrivers: Object.values(lapData), posDrivers: {}, gapDrivers: {} }
 
     const toX = makeToX(maxLap, W)
     const toY = (ms: number) => PAD.top + cH - ((ms - yMin) / (yMax - yMin)) * cH
 
     for (let i = 0; i <= 5; i++) {
-      const ms = yMin + (i / 5) * (yMax - yMin)
-      const y  = toY(ms)
+      const ms = yMin + (i / 5) * (yMax - yMin); const y = toY(ms)
       ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
       ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
@@ -295,36 +335,28 @@ export default function RaceAnalysis({
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
-      const hx = toX(hovLap)
       ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
-      ctx.moveTo(hx, PAD.top); ctx.lineTo(hx, PAD.top + cH); ctx.stroke()
+      ctx.moveTo(toX(hovLap), PAD.top); ctx.lineTo(toX(hovLap), PAD.top + cH); ctx.stroke()
     }
 
     Object.values(lapData).forEach(driver => {
       const colour = '#' + driver.team_colour
-      const valid  = driver.laps
-        .filter(l => l.lap_time_ms && !l.deleted && l.lap_time_ms >= yMin && l.lap_time_ms <= yMax)
-        .sort((a, b) => a.lap_number - b.lap_number)
+      const valid = driver.laps.filter(l => l.lap_time_ms && !l.deleted && l.lap_time_ms >= yMin && l.lap_time_ms <= yMax).sort((a, b) => a.lap_number - b.lap_number)
       if (!valid.length) return
-
       ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.lineJoin = 'round'
       valid.forEach((l, i) => { i === 0 ? ctx.moveTo(toX(l.lap_number), toY(l.lap_time_ms!)) : ctx.lineTo(toX(l.lap_number), toY(l.lap_time_ms!)) })
       ctx.stroke()
-
       valid.forEach(l => {
-        const x = toX(l.lap_number); const y = toY(l.lap_time_ms!)
         const dot = COMPOUND_COLOUR[l.compound ?? ''] ?? '#555'
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = dot; ctx.fill()
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.strokeStyle = colour + '99'; ctx.lineWidth = 1; ctx.stroke()
+        ctx.beginPath(); ctx.arc(toX(l.lap_number), toY(l.lap_time_ms!), 3, 0, Math.PI * 2); ctx.fillStyle = dot; ctx.fill()
+        ctx.beginPath(); ctx.arc(toX(l.lap_number), toY(l.lap_time_ms!), 3, 0, Math.PI * 2); ctx.strokeStyle = colour + '99'; ctx.lineWidth = 1; ctx.stroke()
       })
-
       if (hovLap !== null) {
         const row = valid.find(l => l.lap_number === hovLap)
         if (row) {
-          const hx = toX(row.lap_number); const hy = toY(row.lap_time_ms!)
-          ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
-          ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
-          ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
+          ctx.beginPath(); ctx.arc(toX(row.lap_number), toY(row.lap_time_ms!), 7, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
+          ctx.beginPath(); ctx.arc(toX(row.lap_number), toY(row.lap_time_ms!), 5, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
+          ctx.beginPath(); ctx.arc(toX(row.lap_number), toY(row.lap_time_ms!), 5, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
         }
       }
     })
@@ -336,43 +368,28 @@ export default function RaceAnalysis({
     const canvas = gapRef.current
     if (!canvas || !Object.keys(gapData.drivers).length) return
     const W = containerRef.current?.clientWidth ?? 900
-    const H = 220
+    const H = 200
     const ctx = clearCanvas(canvas, W, H)
     const cW = W - PAD.left - PAD.right
     const cH = H - PAD.top  - PAD.bottom
 
-    // Y: 0 (leader) at top, max gap at bottom. Cap at 60s to hide lapped cars.
     const allGaps: number[] = []
-    Object.values(gapData.drivers).forEach(d =>
-      Object.values(d.gaps).forEach(g => { if (g < 120) allGaps.push(g) })
-    )
-    const rawMax = Math.max(...allGaps, 5)
-    const yMax   = Math.min(rawMax * 1.05, 60)   // cap at 60s
-    if (geomRef.current) {
-      geomRef.current.gapYMax = yMax
-      geomRef.current.gapDrivers = gapData.drivers
-    }
+    Object.values(gapData.drivers).forEach(d => Object.values(d.gaps).forEach(g => { if (g > 0 && g < 120) allGaps.push(g) }))
+    const yMax = Math.min(Math.max(...allGaps, 5) * 1.08, 60)
+
+    if (geomRef.current) { geomRef.current.gapYMax = yMax; geomRef.current.gapDrivers = gapData.drivers; geomRef.current.maxLap = maxLap }
 
     const toX = makeToX(maxLap, W)
     const toY = (gap: number) => PAD.top + (Math.min(gap, yMax) / yMax) * cH
 
-    // Grid — every 10s
-    const gridStep = yMax <= 15 ? 5 : yMax <= 30 ? 10 : 20
+    const gridStep = yMax <= 10 ? 2 : yMax <= 20 ? 5 : yMax <= 40 ? 10 : 20
     for (let g = 0; g <= yMax; g += gridStep) {
       const y = toY(g)
-      ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.strokeStyle = g === 0 ? '#2A2A2A' : AXIS_COLOR; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
       ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-      ctx.fillText(`${g}s`, PAD.left - 6, y + 3)
+      ctx.fillText(g === 0 ? 'LEAD' : `${g}s`, PAD.left - 6, y + 3)
     }
-
-    // Leader line at 0
-    ctx.beginPath(); ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 1; ctx.setLineDash([4, 4])
-    ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left + cW, PAD.top); ctx.stroke()
-    ctx.setLineDash([])
-    ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-    ctx.fillText('LEADER', PAD.left - 6, PAD.top + 3)
-
     const lapStep = Math.max(1, Math.ceil(maxLap / 10))
     for (let lap = 1; lap <= maxLap; lap += lapStep) {
       ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
@@ -382,47 +399,32 @@ export default function RaceAnalysis({
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
-      const hx = toX(hovLap)
       ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
-      ctx.moveTo(hx, PAD.top); ctx.lineTo(hx, PAD.top + cH); ctx.stroke()
+      ctx.moveTo(toX(hovLap), PAD.top); ctx.lineTo(toX(hovLap), PAD.top + cH); ctx.stroke()
     }
 
-    // Draw unselected dim, selected on top
     const sorted = [...Object.entries(gapData.drivers)].sort(([a], [b]) =>
       (selected.includes(parseInt(a)) ? 1 : 0) - (selected.includes(parseInt(b)) ? 1 : 0)
     )
-
     sorted.forEach(([dn, data]) => {
       const isSel  = selected.includes(parseInt(dn))
       const colour = '#' + data.team_colour
-      const pts    = Object.entries(data.gaps)
-        .map(([lap, gap]) => ({ lap: parseInt(lap), gap }))
-        .filter(p => p.gap < 120)
-        .sort((a, b) => a.lap - b.lap)
+      const pts    = Object.entries(data.gaps).map(([lap, gap]) => ({ lap: parseInt(lap), gap })).filter(p => p.gap >= 0 && p.gap < 120).sort((a, b) => a.lap - b.lap)
       if (!pts.length) return
-
-      ctx.beginPath()
-      ctx.strokeStyle = isSel ? colour : colour + '28'
-      ctx.lineWidth   = isSel ? 2 : 0.8
-      ctx.lineJoin    = 'round'
-      pts.forEach(({ lap, gap }, i) => {
-        i === 0 ? ctx.moveTo(toX(lap), toY(gap)) : ctx.lineTo(toX(lap), toY(gap))
-      })
+      ctx.beginPath(); ctx.strokeStyle = isSel ? colour : colour + '28'; ctx.lineWidth = isSel ? 2 : 0.8; ctx.lineJoin = 'round'
+      pts.forEach(({ lap, gap }, i) => { i === 0 ? ctx.moveTo(toX(lap), toY(gap)) : ctx.lineTo(toX(lap), toY(gap)) })
       ctx.stroke()
-
       if (isSel && pts.length) {
         const last = pts[pts.length - 1]
         ctx.fillStyle = colour; ctx.font = 'bold 10px JetBrains Mono, monospace'; ctx.textAlign = 'left'
         ctx.fillText(data.abbreviation, toX(last.lap) + 8, toY(last.gap) + 4)
       }
-
       if (isSel && hovLap !== null) {
         const gap = data.gaps[String(hovLap)]
-        if (gap !== undefined && gap < 120) {
-          const hx = toX(hovLap); const hy = toY(gap)
-          ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
-          ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
-          ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
+        if (gap !== undefined && gap >= 0 && gap < 120) {
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(gap), 6, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(gap), 4, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(gap), 4, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
         }
       }
     })
@@ -434,7 +436,7 @@ export default function RaceAnalysis({
     const canvas = posRef.current
     if (!canvas || !posData.total_laps) return
     const W = containerRef.current?.clientWidth ?? 900
-    const H = 260
+    const H = 240
     const ctx = clearCanvas(canvas, W, H)
     const cW = W - PAD.left - PAD.right
     const cH = H - PAD.top  - PAD.bottom
@@ -443,11 +445,7 @@ export default function RaceAnalysis({
     const numDrivers = allDriverEntries.length
     if (numDrivers < 2 || maxLap < 2) return
 
-    if (geomRef.current) {
-      geomRef.current.numDrivers = numDrivers
-      geomRef.current.posDrivers = posData.drivers
-      geomRef.current.maxLap     = maxLap
-    }
+    if (geomRef.current) { geomRef.current.numDrivers = numDrivers; geomRef.current.posDrivers = posData.drivers; geomRef.current.maxLap = maxLap }
 
     const toX = makeToX(maxLap, W)
     const toY = (pos: number) => PAD.top + ((pos - 1) / (numDrivers - 1)) * cH
@@ -468,43 +466,32 @@ export default function RaceAnalysis({
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
-      const hx = toX(hovLap)
       ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
-      ctx.moveTo(hx, PAD.top); ctx.lineTo(hx, PAD.top + cH); ctx.stroke()
+      ctx.moveTo(toX(hovLap), PAD.top); ctx.lineTo(toX(hovLap), PAD.top + cH); ctx.stroke()
     }
 
     const sorted = [...allDriverEntries].sort(([a], [b]) =>
       (selected.includes(parseInt(a)) ? 1 : 0) - (selected.includes(parseInt(b)) ? 1 : 0)
     )
-
     sorted.forEach(([dn, data]) => {
       const isSel  = selected.includes(parseInt(dn))
       const colour = '#' + data.team_colour
-      const pts    = Object.entries(data.positions)
-        .map(([lap, pos]) => ({ lap: parseInt(lap), pos }))
-        .sort((a, b) => a.lap - b.lap)
+      const pts    = Object.entries(data.positions).map(([lap, pos]) => ({ lap: parseInt(lap), pos })).sort((a, b) => a.lap - b.lap)
       if (!pts.length) return
-
-      ctx.beginPath()
-      ctx.strokeStyle = isSel ? colour : colour + '28'
-      ctx.lineWidth   = isSel ? 2.5 : 0.8
-      ctx.lineJoin    = 'round'
+      ctx.beginPath(); ctx.strokeStyle = isSel ? colour : colour + '28'; ctx.lineWidth = isSel ? 2.5 : 0.8; ctx.lineJoin = 'round'
       pts.forEach(({ lap, pos }, i) => { i === 0 ? ctx.moveTo(toX(lap), toY(pos)) : ctx.lineTo(toX(lap), toY(pos)) })
       ctx.stroke()
-
       if (isSel && pts.length) {
         const last = pts[pts.length - 1]
         ctx.fillStyle = colour; ctx.font = 'bold 10px JetBrains Mono, monospace'; ctx.textAlign = 'left'
         ctx.fillText(data.abbreviation, toX(last.lap) + 8, toY(last.pos) + 4)
       }
-
       if (isSel && hovLap !== null) {
         const pos = data.positions[String(hovLap)]
         if (pos !== undefined) {
-          const hx = toX(hovLap); const hy = toY(pos)
-          ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
-          ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
-          ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(pos), 6, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(pos), 4, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
+          ctx.beginPath(); ctx.arc(toX(hovLap), toY(pos), 4, 0, Math.PI * 2); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
         }
       }
     })
@@ -517,140 +504,50 @@ export default function RaceAnalysis({
     const nx   = nxFromEvent(e, W)
     const geom = geomRef.current
     if (!geom) return
-
     const lap = lapFromNx(nx, geom.maxLap)
     setHovLap(lap)
 
-    // Lap tooltip
-    const lapEntries: LapTooltipEntry[] = geom.lapDrivers
-      .filter(d => selected.includes(d.driver_number))
-      .map(d => {
-        const sorted = [...d.laps].sort((a, b) => a.lap_number - b.lap_number)
-        const cur    = sorted.find(l => l.lap_number === lap)
-        const prev   = sorted.find(l => l.lap_number === lap - 1)
-        const isPit  = !cur || cur.deleted || cur.lap_time_ms === null
-        const tyrChanged = cur?.compound !== prev?.compound && prev?.compound != null
-        return {
-          abbr: d.abbreviation, colour: '#' + d.team_colour,
-          lap_time_ms: isPit ? null : (cur?.lap_time_ms ?? null),
-          compound: cur?.compound ?? prev?.compound ?? null,
-          prev_compound: prev?.compound ?? null,
-          position: cur?.position ?? null,
-          is_pit: isPit || tyrChanged,
-        }
-      })
-    setLapTooltip({ lap, entries: lapEntries })
+    // Lap tooltip entries
+    const lapEntries = geom.lapDrivers.filter(d => selected.includes(d.driver_number)).map(d => {
+      const sorted = [...d.laps].sort((a, b) => a.lap_number - b.lap_number)
+      const cur  = sorted.find(l => l.lap_number === lap)
+      const prev = sorted.find(l => l.lap_number === lap - 1)
+      const isPit = !cur || cur.deleted || cur.lap_time_ms === null
+      const tyrChanged = cur?.compound !== prev?.compound && prev?.compound != null
+      return { abbr: d.abbreviation, colour: '#' + d.team_colour, lap_time_ms: isPit ? null : (cur?.lap_time_ms ?? null), compound: cur?.compound ?? prev?.compound ?? null, position: cur?.position ?? null, is_pit: isPit || tyrChanged, tyre_changed: tyrChanged && !isPit }
+    })
+    setLapTip({ lap, entries: lapEntries })
 
     // Position tooltip
-    const posEntries: PosTooltipEntry[] = Object.entries(geom.posDrivers)
-      .filter(([dn]) => selected.includes(parseInt(dn)))
-      .map(([, data]) => ({ abbr: data.abbreviation, colour: '#' + data.team_colour, position: data.positions[String(lap)] ?? null }))
-      .sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
-    setPosTooltip({ lap, entries: posEntries })
+    const posEntries = Object.entries(geom.posDrivers).filter(([dn]) => selected.includes(parseInt(dn))).map(([, data]) => ({ abbr: data.abbreviation, colour: '#' + data.team_colour, position: data.positions[String(lap)] ?? null })).sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
+    setPosTip({ lap, entries: posEntries })
 
     // Gap tooltip
-    const gapEntries: GapTooltipEntry[] = Object.entries(geom.gapDrivers)
-      .filter(([dn]) => selected.includes(parseInt(dn)))
-      .map(([, data]) => {
-        const gap = data.gaps[String(lap)]
-        return { abbr: data.abbreviation, colour: '#' + data.team_colour, gap_s: gap !== undefined && gap < 120 ? gap : null }
-      })
-      .sort((a, b) => (a.gap_s ?? 999) - (b.gap_s ?? 999))
-    setGapTooltip({ lap, entries: gapEntries })
+    const gapEntries = Object.entries(geom.gapDrivers).filter(([dn]) => selected.includes(parseInt(dn))).map(([, data]) => ({ abbr: data.abbreviation, colour: '#' + data.team_colour, gap_s: data.gaps[String(lap)] ?? null })).sort((a, b) => (a.gap_s ?? 999) - (b.gap_s ?? 999))
+    setGapTip({ lap, entries: gapEntries })
 
-    const rect  = e.currentTarget.getBoundingClientRect()
-    const tipX  = Math.min(e.clientX - rect.left + 16, W - 175)
-    const tipY  = Math.max(e.clientY - rect.top - 20, 8)
-    if (e.currentTarget === lapRef.current) setLapTipPos({ x: tipX, y: tipY })
-    if (e.currentTarget === posRef.current) setPosTipPos({ x: tipX, y: tipY })
-    if (e.currentTarget === gapRef.current) setGapTipPos({ x: tipX, y: tipY })
+    // Store canvas-relative positions for each tooltip
+    // We convert to viewport coords in TooltipCard via the container's getBoundingClientRect
+    const rect = e.currentTarget.getBoundingClientRect()
+    const rawX = e.clientX - rect.left + 16
+    const rawY = Math.max(e.clientY - rect.top - 20, 8)
+    const clampX = Math.min(rawX, W - 175)
+
+    if (e.currentTarget === lapRef.current) setLapTipXY({ x: clampX, y: rawY })
+    if (e.currentTarget === posRef.current) setPosTipXY({ x: clampX, y: rawY })
+    if (e.currentTarget === gapRef.current) setGapTipXY({ x: clampX, y: rawY })
   }, [lapData, posData, gapData, selected])
 
   const handleMouseLeave = useCallback(() => {
-    setHovLap(null); setLapTooltip(null); setPosTooltip(null); setGapTooltip(null)
+    setHovLap(null); setLapTip(null); setPosTip(null); setGapTip(null)
   }, [])
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const selectedStints   = stintPace.filter(s => selected.includes(s.driver_number)).sort((a, b) => a.driver_number - b.driver_number || a.stint - b.stint)
   const selectedUndercut = undercut.filter(u => selected.includes(u.driver_number))
-  const top5Fastest      = fastestLaps.slice(0, 5)
   const overallFastest   = fastestLaps[0] ?? null
-
-  // ── Tooltip card ──────────────────────────────────────────────────────────
-
-  function LapTip() {
-    if (!lapTooltip) return null
-    return (
-      <div style={{ position: 'absolute', left: lapTipPos.x, top: lapTipPos.y, pointerEvents: 'none', zIndex: 100, background: '#111111EE', border: '1px solid #2A2A2A', borderRadius: '10px', padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: '148px' }}>
-        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTooltip.lap}</div>
-        {lapTooltip.entries.map(entry => {
-          const compCol    = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
-          const isPitLap   = entry.lap_time_ms === null
-          const isTyreChg  = entry.is_pit && !isPitLap
-          return (
-            <div key={entry.abbr} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
-                  {entry.abbr}{entry.position !== null && <span style={{ color: '#52525B', fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
-                </div>
-                {isPitLap ? (
-                  <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
-                ) : (
-                  <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms!)}</div>
-                )}
-                {entry.compound && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
-                    {isTyreChg && <span style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', background: compCol + '33', color: compCol }}>NEW</span>}
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  function PosTip() {
-    if (!posTooltip) return null
-    return (
-      <div style={{ position: 'absolute', left: posTipPos.x, top: posTipPos.y, pointerEvents: 'none', zIndex: 100, background: '#111111EE', border: '1px solid #2A2A2A', borderRadius: '10px', padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: '110px' }}>
-        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTooltip.lap}</div>
-        {posTooltip.entries.map(e => (
-          <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-              <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  function GapTip() {
-    if (!gapTooltip) return null
-    return (
-      <div style={{ position: 'absolute', left: gapTipPos.x, top: gapTipPos.y, pointerEvents: 'none', zIndex: 100, background: '#111111EE', border: '1px solid #2A2A2A', borderRadius: '10px', padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: '120px' }}>
-        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTooltip.lap}</div>
-        {gapTooltip.entries.map(e => (
-          <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-              <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>
-                {e.gap_s !== null ? (e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`) : '—'}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
+  const top5Fastest      = fastestLaps.slice(0, 5)
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -662,17 +559,10 @@ export default function RaceAnalysis({
         <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>DRIVERS (MAX 4)</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           {allDrivers.map(d => {
-            const isSel = selected.includes(d.driver_number)
+            const isSel  = selected.includes(d.driver_number)
             const colour = teamColour(d.team_colour, d.team_name)
             return (
-              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
-                display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px',
-                borderRadius: '20px', cursor: 'pointer', transition: 'all 0.12s',
-                border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
-                background: isSel ? `${colour}18` : 'transparent',
-                color: isSel ? '#fff' : '#52525B',
-                fontSize: '12px', fontWeight: isSel ? 700 : 400, fontFamily: 'monospace',
-              }}>
+              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.12s', border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A', background: isSel ? `${colour}18` : 'transparent', color: isSel ? '#fff' : '#52525B', fontSize: '12px', fontWeight: isSel ? 700 : 400, fontFamily: 'monospace' }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
                 {d.abbreviation}
                 {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
@@ -690,16 +580,60 @@ export default function RaceAnalysis({
         </div>
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>Loading race data...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace' }}>Loading race data...</div>}
 
       {!loading && (
         <>
-          {/* ── FASTEST LAP CARD ─────────────────────────────────────── */}
+
+        {/* ── LIVE LEADERBOARD ───────────────────────────────────── */}
+          {leaderboard.length > 0 && (
+            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>
+                  RACE ORDER
+                </span>
+                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: hovLap ? '#2CF4C5' : '#3F3F46' }}>
+                  {hovLap ? `LAP ${hovLap}` : `FINAL · LAP ${maxLap}`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                {leaderboard.map((d) => {
+                  const colour   = '#' + d.team_colour
+                  const isSel    = selected.includes(d.driver_number)
+                  const isLeader = d.position === 1
+                  return (
+                    <div key={d.driver_number} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px', borderRadius: '6px', background: isSel ? colour + '12' : 'transparent', border: isSel ? `1px solid ${colour}33` : '1px solid transparent' }}>
+                      {/* Position number */}
+                      <span style={{ width: '20px', fontSize: '11px', fontFamily: 'monospace', color: isLeader ? '#FFD700' : isSel ? '#fff' : '#52525B', fontWeight: isLeader || isSel ? 700 : 400, textAlign: 'right', flexShrink: 0 }}>
+                        {isLeader ? '①' : `${d.position}`}
+                      </span>
+                      {/* Team colour dot */}
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: colour, flexShrink: 0 }} />
+                      {/* Abbreviation */}
+                      <span style={{ width: '32px', fontSize: '11px', fontFamily: 'monospace', color: isSel ? colour : '#A1A1AA', fontWeight: isSel ? 700 : 400 }}>
+                        {d.abbreviation}
+                      </span>
+                      {/* Gap bar */}
+                      <div style={{ flex: 1, height: '3px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
+                        {d.gap !== null && d.gap > 0 && (
+                          <div style={{ width: `${Math.min(100, (d.gap / 60) * 100)}%`, height: '100%', background: isSel ? colour + 'AA' : colour + '33', borderRadius: '2px' }} />
+                        )}
+                      </div>
+                      {/* Gap value */}
+                      <span style={{ width: '64px', fontSize: '10px', fontFamily: 'monospace', color: isLeader ? '#FFD700' : isSel ? '#fff' : '#52525B', textAlign: 'right', fontWeight: isSel ? 700 : 400 }}>
+                        {isLeader ? 'LEADER' : d.gap !== null ? `+${d.gap.toFixed(1)}s` : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {/* ── FASTEST LAP CARD ───────────────────────────────────── */}
           {overallFastest && (
             <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
               <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>FASTEST LAP</div>
-              {/* Hero row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#0D0D0D', borderRadius: '10px', border: `1px solid #${'3671C6' === overallFastest.team_colour ? overallFastest.team_colour : overallFastest.team_colour}33`, marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#0D0D0D', borderRadius: '10px', border: `1px solid #${ overallFastest.team_colour}33`, marginBottom: '10px' }}>
                 <div style={{ width: '4px', height: '56px', borderRadius: '2px', background: '#' + overallFastest.team_colour, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -707,44 +641,30 @@ export default function RaceAnalysis({
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B' }}>{overallFastest.team_name}</span>
                     <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#2CF4C5', background: '#2CF4C522', padding: '1px 6px', borderRadius: '4px', border: '1px solid #2CF4C544', marginLeft: 'auto' }}>🏆 FASTEST</span>
                   </div>
-                  <div style={{ fontSize: '26px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1 }}>
-                    {formatLapTime(overallFastest.lap_time_ms)}
-                  </div>
+                  <div style={{ fontSize: '26px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1 }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
                   <div style={{ display: 'flex', gap: '14px', marginTop: '5px' }}>
                     <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>LAP {overallFastest.lap_number}</span>
-                    {overallFastest.compound && (
-                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[overallFastest.compound] ?? '#666' }}>
-                        ● {overallFastest.compound}
-                      </span>
-                    )}
-                    {overallFastest.tyre_life_laps !== null && (
-                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>
-                        {overallFastest.tyre_life_laps} lap{overallFastest.tyre_life_laps !== 1 ? 's' : ''} old
-                      </span>
-                    )}
-                    {overallFastest.position_on_lap !== null && (
-                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>P{overallFastest.position_on_lap} at the time</span>
-                    )}
+                    {overallFastest.compound && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[overallFastest.compound] ?? '#666' }}>● {overallFastest.compound}</span>}
+                    {overallFastest.tyre_life_laps !== null && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{overallFastest.tyre_life_laps} lap{overallFastest.tyre_life_laps !== 1 ? 's' : ''} old</span>}
+                    {overallFastest.position_on_lap !== null && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>P{overallFastest.position_on_lap} at the time</span>}
                   </div>
                 </div>
               </div>
-
-              {/* Top 5 comparison */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {top5Fastest.slice(1).map((fl, i) => {
-                  const colour    = '#' + fl.team_colour
-                  const compCol   = COMPOUND_COLOUR[fl.compound ?? ''] ?? '#666'
-                  const barWidth  = Math.max(10, 100 - (fl.gap_ms / (top5Fastest[top5Fastest.length - 1]?.gap_ms || 1)) * 80)
+                  const colour = '#' + fl.team_colour
+                  const compCol = COMPOUND_COLOUR[fl.compound ?? ''] ?? '#666'
+                  const barW = Math.max(10, 100 - (fl.gap_ms / (top5Fastest[top5Fastest.length - 1]?.gap_ms || 1)) * 80)
                   return (
                     <div key={fl.driver_number} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: '#0A0A0A', borderRadius: '6px' }}>
                       <span style={{ width: '18px', fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', textAlign: 'right' }}>P{i + 2}</span>
                       <span style={{ width: '28px', fontSize: '10px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{fl.abbreviation}</span>
                       <div style={{ flex: 1, height: '4px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ width: `${barWidth}%`, height: '100%', background: colour + '88', borderRadius: '2px' }} />
+                        <div style={{ width: `${barW}%`, height: '100%', background: colour + '88', borderRadius: '2px' }} />
                       </div>
                       <span style={{ width: '68px', fontSize: '11px', fontFamily: 'monospace', color: '#A1A1AA', textAlign: 'right' }}>{formatLapTime(fl.lap_time_ms)}</span>
-                      <span style={{ width: '50px', fontSize: '9px', fontFamily: 'monospace', color: '#E8002D', textAlign: 'right' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</span>
-                      {fl.compound && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol, width: '40px' }}>● {fl.compound.slice(0, 1)}</span>}
+                      <span style={{ width: '54px', fontSize: '9px', fontFamily: 'monospace', color: '#E8002D', textAlign: 'right' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</span>
+                      {fl.compound && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol, width: '16px' }}>●</span>}
                     </div>
                   )
                 })}
@@ -752,58 +672,111 @@ export default function RaceAnalysis({
             </div>
           )}
 
-          {/* ── LAP TIME EVOLUTION ───────────────────────────────────── */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+          
+
+          {/* ── LAP TIME EVOLUTION ─────────────────────────────────── */}
+          <div ref={lapCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
               <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>LAP TIME EVOLUTION</span>
               <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>dots = tyre compound · pit laps excluded</span>
             </div>
             <canvas ref={lapRef} height={280} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-            <LapTip />
           </div>
+          {lapTip && (
+            <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
+              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
+              {lapTip.entries.map((entry: any) => {
+                const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
+                return (
+                  <div key={entry.abbr} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
+                        {entry.abbr}{entry.position !== null && <span style={{ color: '#52525B', fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
+                      </div>
+                      {entry.lap_time_ms === null
+                        ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
+                        : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
+                      }
+                      {entry.compound && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
+                          {entry.tyre_changed && <span style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', background: compCol + '33', color: compCol }}>NEW</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </TooltipCard>
+          )}
 
-          {/* ── GAP TO LEADER ────────────────────────────────────────── */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+          {/* ── GAP TO LEADER ──────────────────────────────────────── */}
+          <div ref={gapCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
               <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>GAP TO LEADER</span>
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>cumulative time gap · pit laps excluded · capped 60s</span>
+              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>seconds behind race leader · pit laps excluded · capped 60s</span>
             </div>
-            <canvas ref={gapRef} height={220} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-            <GapTip />
+            <canvas ref={gapRef} height={200} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
           </div>
+          {gapTip && (
+            <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
+              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
+              {gapTip.entries.map((e: any) => (
+                <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
+                    <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>
+                      {e.gap_s === null ? '—' : e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </TooltipCard>
+          )}
 
-          {/* ── POSITION CHANGES ─────────────────────────────────────── */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+          {/* ── POSITION CHANGES ───────────────────────────────────── */}
+          <div ref={posCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ padding: '10px 16px 4px' }}>
               <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>POSITION CHANGES</span>
               <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: '12px' }}>full field · selected drivers highlighted</span>
             </div>
-            <canvas ref={posRef} height={260} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-            <PosTip />
+            <canvas ref={posRef} height={240} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
           </div>
+          {posTip && (
+            <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
+              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
+              {posTip.entries.map((e: any) => (
+                <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
+                    <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
+                  </div>
+                </div>
+              ))}
+            </TooltipCard>
+          )}
 
-          {/* ── UNDERCUT / OVERCUT ANALYSIS ──────────────────────────── */}
+          {/* ── PIT STOP ANALYSIS ──────────────────────────────────── */}
           {selectedUndercut.length > 0 && (
             <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>
-                PIT STOP ANALYSIS — position before vs 3 laps after pit
-              </div>
+              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>PIT STOP ANALYSIS — position before vs 3 laps after pit</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {selectedUndercut.map((u, i) => {
-                  const colour     = teamColour(u.team_colour, u.team_name)
-                  const vs         = VERDICT_STYLE[u.verdict]
+                  const colour = teamColour(u.team_colour, u.team_name)
+                  const vs = VERDICT_STYLE[u.verdict]
                   const compInCol  = COMPOUND_COLOUR[u.compound_in  ?? ''] ?? '#666'
                   const compOutCol = COMPOUND_COLOUR[u.compound_out ?? ''] ?? '#666'
-                  const posGain    = u.pos_gain ?? 0
+                  const posGain = u.pos_gain ?? 0
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#0D0D0D', borderRadius: '8px', border: '1px solid #1A1A1A' }}>
                       <div style={{ width: '3px', height: '52px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
-                        {/* Row 1: driver, lap, tyre swap */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                           <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{u.abbreviation}</span>
                           <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>Pit lap {u.pit_lap}</span>
-                          {/* Tyre swap arrow */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
                             <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compInCol }}>● {u.compound_in?.slice(0,1) ?? '?'}</span>
                             <span style={{ fontSize: '9px', color: '#3F3F46' }}>→</span>
@@ -811,15 +784,10 @@ export default function RaceAnalysis({
                             {u.tyre_life_laps !== null && <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace' }}>({u.tyre_life_laps}L in)</span>}
                           </div>
                         </div>
-                        {/* Row 2: position before → after + verdict */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#A1A1AA' }}>
-                            P{u.pos_before ?? '?'}
-                          </span>
+                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#A1A1AA' }}>P{u.pos_before ?? '?'}</span>
                           <span style={{ fontSize: '10px', color: '#3F3F46' }}>→</span>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>
-                            P{u.pos_after ?? '?'}
-                          </span>
+                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>P{u.pos_after ?? '?'}</span>
                           {u.pos_before !== null && u.pos_after !== null && (
                             <span style={{ fontSize: '11px', fontFamily: 'monospace', color: posGain > 0 ? '#2CF4C5' : posGain < 0 ? '#E8002D' : '#71717A', fontWeight: 700 }}>
                               {posGain > 0 ? `+${posGain}` : posGain < 0 ? `${posGain}` : '±0'}
@@ -837,17 +805,14 @@ export default function RaceAnalysis({
             </div>
           )}
 
-          {/* ── STINT PACE ───────────────────────────────────────────── */}
+          {/* ── STINT PACE ─────────────────────────────────────────── */}
           {selectedStints.length > 0 && (
             <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>
-                STINT PACE — clean laps only · deg = ms lost per lap
-              </div>
+              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>STINT PACE — clean laps only · deg = ms lost per lap</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {selectedStints.map((s, i) => {
                   const colour     = teamColour(s.team_colour, s.team_name)
                   const degVal     = parseFloat(s.deg_ms_per_lap)
-                  const degSign    = degVal >= 0 ? '+' : ''
                   const degColour  = degVal > 100 ? '#E8002D' : degVal > 30 ? '#FFD700' : '#2CF4C5'
                   const compColour = COMPOUND_COLOUR[s.compound] ?? '#666666'
                   return (
@@ -862,7 +827,7 @@ export default function RaceAnalysis({
                         </div>
                         <div style={{ display: 'flex', gap: '20px', alignItems: 'baseline' }}>
                           <span style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>{formatLapTime(parseFloat(s.avg_ms))}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: degColour }}>{degSign}{degVal.toFixed(0)} ms/lap</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: degColour }}>{degVal >= 0 ? '+' : ''}{degVal.toFixed(0)} ms/lap</span>
                           <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>best {formatLapTime(s.best_ms)}</span>
                         </div>
                       </div>

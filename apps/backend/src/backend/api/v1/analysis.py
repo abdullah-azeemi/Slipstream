@@ -515,39 +515,38 @@ def gap_to_leader(session_key: int):
     """
     with engine.connect() as conn:
         rows = conn.execute(text("""
-            WITH driver_median AS (
-                SELECT driver_number,
-                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY lap_time_ms) AS median_ms
-                FROM lap_times
-                WHERE session_key = :sk
-                  AND lap_time_ms IS NOT NULL
-                  AND deleted     = FALSE
-                GROUP BY driver_number
-            ),
-            clean_laps AS (
-                SELECT l.driver_number, l.lap_number, l.lap_time_ms
+            WITH all_laps AS (
+                -- Include ALL laps (pit laps too) for correct cumulative race time
+                SELECT
+                    l.driver_number,
+                    l.lap_number,
+                    l.lap_time_ms,
+                    l.position
                 FROM lap_times l
-                JOIN driver_median dm ON dm.driver_number = l.driver_number
-                WHERE l.session_key  = :sk
-                  AND l.lap_time_ms  IS NOT NULL
-                  AND l.deleted      = FALSE
-                  -- exclude pit in/out laps (>15% slower than median)
-                  AND l.lap_time_ms  <= dm.median_ms * 1.15
+                WHERE l.session_key = :sk
+                  AND l.lap_time_ms IS NOT NULL
             ),
             cumulative AS (
-                SELECT driver_number,
-                       lap_number,
-                       SUM(lap_time_ms) OVER (
-                           PARTITION BY driver_number
-                           ORDER BY lap_number
-                           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                       ) AS cum_ms
-                FROM clean_laps
+                -- Running total of race time per driver including pit laps
+                SELECT
+                    driver_number,
+                    lap_number,
+                    position,
+                    SUM(lap_time_ms) OVER (
+                        PARTITION BY driver_number
+                        ORDER BY lap_number
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS cum_ms
+                FROM all_laps
             ),
             leader_cum AS (
-                SELECT lap_number, MIN(cum_ms) AS leader_ms
+                -- P1 driver's cumulative race time each lap
+                SELECT DISTINCT ON (lap_number)
+                    lap_number,
+                    cum_ms AS leader_ms
                 FROM cumulative
-                GROUP BY lap_number
+                WHERE position = 1
+                ORDER BY lap_number
             )
             SELECT
                 c.driver_number,
@@ -555,7 +554,7 @@ def gap_to_leader(session_key: int):
                 d.team_colour,
                 d.team_name,
                 c.lap_number,
-                ROUND(((c.cum_ms - lc.leader_ms) / 1000.0)::numeric, 3) AS gap_s
+                GREATEST(0, ROUND(((c.cum_ms - lc.leader_ms) / 1000.0)::numeric, 3)) AS gap_s
             FROM cumulative c
             JOIN leader_cum lc ON lc.lap_number = c.lap_number
             JOIN drivers d
