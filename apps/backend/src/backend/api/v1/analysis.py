@@ -494,3 +494,262 @@ def sector_stints(session_key: int):
         results.append(d)
 
     return jsonify(results)
+
+
+# ── Race: gap to leader ───────────────────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/gap-to-leader")
+def gap_to_leader(session_key: int):
+    """
+    Gap to race leader in seconds, per lap, per driver.
+
+    Method: cumulative sum of lap_time_ms per driver, minus the leader's
+    cumulative at the same lap. Leader = driver with smallest cumulative time
+    on each lap (most accurate for lapped cars vs position column).
+
+    Excludes deleted laps and pit laps (>115% of driver median) from
+    cumulative so one slow lap doesn't corrupt the entire gap trace.
+
+    Returns:
+        { total_laps, drivers: { "63": { abbreviation, team_colour, gaps: { "1": 0.0, "2": 1.2, ... } } } }
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH driver_median AS (
+                SELECT driver_number,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY lap_time_ms) AS median_ms
+                FROM lap_times
+                WHERE session_key = :sk
+                  AND lap_time_ms IS NOT NULL
+                  AND deleted     = FALSE
+                GROUP BY driver_number
+            ),
+            clean_laps AS (
+                SELECT l.driver_number, l.lap_number, l.lap_time_ms
+                FROM lap_times l
+                JOIN driver_median dm ON dm.driver_number = l.driver_number
+                WHERE l.session_key  = :sk
+                  AND l.lap_time_ms  IS NOT NULL
+                  AND l.deleted      = FALSE
+                  -- exclude pit in/out laps (>15% slower than median)
+                  AND l.lap_time_ms  <= dm.median_ms * 1.15
+            ),
+            cumulative AS (
+                SELECT driver_number,
+                       lap_number,
+                       SUM(lap_time_ms) OVER (
+                           PARTITION BY driver_number
+                           ORDER BY lap_number
+                           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                       ) AS cum_ms
+                FROM clean_laps
+            ),
+            leader_cum AS (
+                SELECT lap_number, MIN(cum_ms) AS leader_ms
+                FROM cumulative
+                GROUP BY lap_number
+            )
+            SELECT
+                c.driver_number,
+                d.abbreviation,
+                d.team_colour,
+                d.team_name,
+                c.lap_number,
+                ROUND(((c.cum_ms - lc.leader_ms) / 1000.0)::numeric, 3) AS gap_s
+            FROM cumulative c
+            JOIN leader_cum lc ON lc.lap_number = c.lap_number
+            JOIN drivers d
+                ON d.driver_number = c.driver_number
+                AND d.session_key  = :sk
+            ORDER BY c.driver_number, c.lap_number
+        """), {"sk": session_key}).mappings().all()
+
+        total_laps = conn.execute(text("""
+            SELECT MAX(lap_number) FROM lap_times WHERE session_key = :sk
+        """), {"sk": session_key}).scalar() or 0
+
+    if not rows:
+        return jsonify({"total_laps": 0, "drivers": {}})
+
+    from backend.api.v1.strategy import _resolve
+    drivers: dict = {}
+    for r in rows:
+        dn = str(r["driver_number"])
+        if dn not in drivers:
+            drivers[dn] = {
+                "driver_number": r["driver_number"],
+                "abbreviation":  r["abbreviation"],
+                "team_colour":   _resolve(r["team_colour"], r["team_name"]),
+                "team_name":     r["team_name"],
+                "gaps":          {},
+            }
+        drivers[dn]["gaps"][r["lap_number"]] = float(r["gap_s"])
+
+    return jsonify({"total_laps": total_laps, "drivers": drivers})
+
+
+# ── Race: undercut / overcut analysis ────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/undercut")
+def undercut_analysis(session_key: int):
+    """
+    For each pit stop, was it an undercut, overcut, or neutral?
+
+    Method:
+      - Find each driver's pit stop laps via pit_in_time_ms IS NOT NULL
+      - Compare position 2 laps before pit vs 3 laps after pit
+        (3 laps gives pitted cars time to cycle through)
+      - pos_gain > 0 = undercut worked, < 0 = overcut / lost out, 0 = neutral
+
+    Also returns who they pitted against (nearest rival that pitted within
+    3 laps either side) for context.
+
+    Returns list of pit stop events ordered by lap number.
+    """
+    with engine.connect() as conn:
+        pit_rows = conn.execute(text("""
+            WITH pit_laps AS (
+                SELECT
+                    l.driver_number,
+                    d.abbreviation,
+                    d.team_name,
+                    d.team_colour,
+                    l.lap_number          AS pit_lap,
+                    l.compound            AS compound_in,   -- compound going IN (being removed)
+                    l.stint               AS stint_in,
+                    l.pit_in_time_ms
+                FROM lap_times l
+                JOIN drivers d
+                    ON d.driver_number = l.driver_number
+                    AND d.session_key  = l.session_key
+                WHERE l.session_key      = :sk
+                  AND l.pit_in_time_ms   IS NOT NULL
+            ),
+            pos_before AS (
+                SELECT DISTINCT ON (l.driver_number, pl.pit_lap)
+                    l.driver_number,
+                    pl.pit_lap,
+                    l.position AS pos_before
+                FROM lap_times l
+                JOIN pit_laps pl ON pl.driver_number = l.driver_number
+                WHERE l.session_key = :sk
+                  AND l.lap_number  = pl.pit_lap - 1
+                  AND l.position    IS NOT NULL
+            ),
+            compound_after AS (
+                SELECT DISTINCT ON (l.driver_number, pl.pit_lap)
+                    l.driver_number,
+                    pl.pit_lap,
+                    l.compound AS compound_out,
+                    l.tyre_life_laps
+                FROM lap_times l
+                JOIN pit_laps pl ON pl.driver_number = l.driver_number
+                WHERE l.session_key = :sk
+                  AND l.lap_number  = pl.pit_lap + 1
+            ),
+            pos_after AS (
+                SELECT DISTINCT ON (l.driver_number, pl.pit_lap)
+                    l.driver_number,
+                    pl.pit_lap,
+                    l.position AS pos_after
+                FROM lap_times l
+                JOIN pit_laps pl ON pl.driver_number = l.driver_number
+                WHERE l.session_key = :sk
+                  AND l.lap_number  = pl.pit_lap + 3
+                  AND l.position    IS NOT NULL
+            )
+            SELECT
+                pl.driver_number,
+                pl.abbreviation,
+                pl.team_name,
+                pl.team_colour,
+                pl.pit_lap,
+                pl.compound_in,
+                ca.compound_out,
+                ca.tyre_life_laps,
+                pb.pos_before,
+                pa.pos_after,
+                (pb.pos_before - pa.pos_after) AS pos_gain
+            FROM pit_laps pl
+            LEFT JOIN pos_before    pb ON pb.driver_number = pl.driver_number AND pb.pit_lap = pl.pit_lap
+            LEFT JOIN pos_after     pa ON pa.driver_number = pl.driver_number AND pa.pit_lap = pl.pit_lap
+            LEFT JOIN compound_after ca ON ca.driver_number = pl.driver_number AND ca.pit_lap = pl.pit_lap
+            ORDER BY pl.pit_lap ASC, pl.driver_number ASC
+        """), {"sk": session_key}).mappings().all()
+
+    if not pit_rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+    results = []
+    for r in pit_rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        pos_gain = d.get("pos_gain")
+        d["verdict"] = (
+            "undercut"  if pos_gain is not None and pos_gain > 0 else
+            "overcut"   if pos_gain is not None and pos_gain < 0 else
+            "neutral"
+        )
+        results.append(d)
+
+    return jsonify(results)
+
+
+# ── Race: fastest lap card ────────────────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fastest-lap")
+def fastest_lap(session_key: int):
+    """
+    Fastest lap of the race — who set it, when, on what compound,
+    how far into their tyre stint, and how it compares to other drivers.
+
+    Returns ordered list (fastest first) with gap to fastest.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH best AS (
+                SELECT DISTINCT ON (l.driver_number)
+                    l.driver_number,
+                    l.lap_number,
+                    l.lap_time_ms,
+                    l.compound,
+                    l.tyre_life_laps,
+                    l.position
+                FROM lap_times l
+                WHERE l.session_key  = :sk
+                  AND l.lap_time_ms  IS NOT NULL
+                  AND l.deleted      = FALSE
+                  AND l.lap_time_ms  < 200000   -- exclude obvious outlaps
+                ORDER BY l.driver_number, l.lap_time_ms ASC
+            )
+            SELECT
+                b.driver_number,
+                d.full_name,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                b.lap_number,
+                b.lap_time_ms,
+                b.compound,
+                b.tyre_life_laps,
+                b.position                          AS position_on_lap,
+                b.lap_time_ms - MIN(b.lap_time_ms) OVER () AS gap_ms
+            FROM best b
+            JOIN drivers d
+                ON d.driver_number = b.driver_number
+                AND d.session_key  = :sk
+            ORDER BY b.lap_time_ms ASC
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        results.append(d)
+
+    return jsonify(results)
