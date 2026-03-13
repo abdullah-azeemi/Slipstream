@@ -576,11 +576,11 @@ export default function RaceAnalysis({
                             </span>
                             {isTyreChange && (
                               <span style={{
-                                fontSize: '8px', fontFamily: 'monospace', fontWeight: 700,
-                                padding: '1px 4px', borderRadius: '3px',
-                                background: compCol + '33', color: compCol,
+                                fontSize: '10px', fontFamily: 'monospace', fontWeight: 900,
+                                padding: '2px 4px', borderRadius: '4px',
+                                background: '#E8002D22', color: '#E8002D',
                               }}>
-                                NEW
+                                PIT
                               </span>
                             )}
                           </div>
