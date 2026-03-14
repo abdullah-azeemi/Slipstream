@@ -752,3 +752,364 @@ def fastest_lap(session_key: int):
         results.append(d)
 
     return jsonify(results)
+
+
+# ── Practice: lap scatter ─────────────────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-scatter")
+def fp_scatter(session_key: int):
+    """
+    Every individual lap as a data point — lap number, lap time, compound.
+    Used for scatter plot. Includes outlaps/inlaps flagged so frontend
+    can show/hide them. No reconstruction from averages — raw lap data.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT
+                l.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                l.lap_number,
+                l.lap_time_ms,
+                l.compound,
+                l.tyre_life_laps,
+                l.stint,
+                l.deleted,
+                l.is_personal_best,
+                -- Flag outlap/inlap: first or last lap of stint, or >110% of driver median
+                CASE WHEN l.tyre_life_laps <= 1 THEN true
+                     WHEN l.pit_in_time_ms IS NOT NULL THEN true
+                     WHEN l.lap_time_ms > (
+                         SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY l2.lap_time_ms) * 1.10
+                         FROM lap_times l2
+                         WHERE l2.session_key    = l.session_key
+                           AND l2.driver_number  = l.driver_number
+                           AND l2.lap_time_ms    IS NOT NULL
+                           AND l2.deleted        = FALSE
+                     ) THEN true
+                     ELSE false
+                END AS is_outlier
+            FROM lap_times l
+            JOIN drivers d
+                ON d.driver_number = l.driver_number
+                AND d.session_key  = l.session_key
+            WHERE l.session_key  = :sk
+              AND l.lap_time_ms  IS NOT NULL
+              AND l.compound     IS NOT NULL
+            ORDER BY l.driver_number, l.lap_number
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        results.append(d)
+    return jsonify(results)
+
+
+# ── Practice: compound strategy reveal ───────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-compounds")
+def fp_compounds(session_key: int):
+    """
+    Per team: how many laps on each compound, and which drivers ran what.
+    Reveals planned race strategy before anyone announces it.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT
+                d.team_name,
+                d.team_colour,
+                d.driver_number,
+                d.abbreviation,
+                l.compound,
+                COUNT(*)                                    AS laps,
+                MIN(l.lap_time_ms)                          AS best_ms,
+                ROUND(AVG(l.lap_time_ms)::numeric, 1)       AS avg_ms
+            FROM lap_times l
+            JOIN drivers d
+                ON d.driver_number = l.driver_number
+                AND d.session_key  = l.session_key
+            WHERE l.session_key  = :sk
+              AND l.compound     IS NOT NULL
+              AND l.lap_time_ms  IS NOT NULL
+              AND l.deleted      = FALSE
+            GROUP BY
+                d.team_name, d.team_colour,
+                d.driver_number, d.abbreviation,
+                l.compound
+            ORDER BY d.team_name, l.compound
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+
+    # Group by team
+    teams: dict = {}
+    for r in rows:
+        tn = r["team_name"]
+        if tn not in teams:
+            teams[tn] = {
+                "team_name":   tn,
+                "team_colour": _resolve(r["team_colour"], tn),
+                "compounds":   {},
+                "drivers":     [],
+            }
+        # Accumulate compound laps at team level
+        c = r["compound"]
+        if c not in teams[tn]["compounds"]:
+            teams[tn]["compounds"][c] = {"laps": 0, "best_ms": None}
+        teams[tn]["compounds"][c]["laps"] += r["laps"]
+        best = r["best_ms"]
+        prev = teams[tn]["compounds"][c]["best_ms"]
+        if best and (prev is None or best < prev):
+            teams[tn]["compounds"][c]["best_ms"] = float(best)
+
+        # Per-driver breakdown
+        driver_entry = next((x for x in teams[tn]["drivers"] if x["driver_number"] == r["driver_number"]), None)
+        if not driver_entry:
+            driver_entry = {"driver_number": r["driver_number"], "abbreviation": r["abbreviation"], "compounds": {}}
+            teams[tn]["drivers"].append(driver_entry)
+        driver_entry["compounds"][c] = {"laps": r["laps"], "best_ms": float(r["best_ms"]) if r["best_ms"] else None, "avg_ms": float(r["avg_ms"]) if r["avg_ms"] else None}
+
+    return jsonify(list(teams.values()))
+
+
+# ── Practice: race sim detection ─────────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-racesim")
+def fp_racesim(session_key: int):
+    """
+    Identify genuine race simulation stints in practice.
+
+    Criteria for a race sim stint:
+      - 8+ consecutive laps on the same compound
+      - Not on SOFT (teams don't race sim on softs)
+      - Consistent pace (stddev < 1.5s)
+      - Lap times within 107% of session best (not installation laps)
+
+    Returns stints with per-lap data so frontend can plot the actual
+    lap time trace — this is the key Friday evening intelligence.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH driver_median AS (
+                -- Use each driver's own median to filter outlaps/inlaps
+                -- Session best is too strict for FP where installation laps exist
+                SELECT driver_number,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY lap_time_ms) AS median_ms
+                FROM lap_times
+                WHERE session_key = :sk
+                  AND lap_time_ms IS NOT NULL
+                  AND deleted     = FALSE
+                GROUP BY driver_number
+            ),
+            lagged AS (
+                -- Step 1: compute LAG separately (can't nest window functions)
+                SELECT
+                    l.driver_number,
+                    l.lap_number,
+                    l.lap_time_ms,
+                    l.compound,
+                    l.tyre_life_laps,
+                    LAG(l.compound) OVER (
+                        PARTITION BY l.driver_number ORDER BY l.lap_number
+                    ) AS prev_compound
+                FROM lap_times l
+                JOIN driver_median dm ON dm.driver_number = l.driver_number
+                WHERE l.session_key  = :sk
+                  AND l.lap_time_ms  IS NOT NULL
+                  AND l.deleted      = FALSE
+                  AND l.compound     IS NOT NULL
+                  AND l.compound     != 'SOFT'
+                  AND l.lap_time_ms  <= dm.median_ms * 1.15
+            ),
+            stint_laps AS (
+                -- Step 2: now derive stint number from the pre-computed LAG
+                SELECT
+                    driver_number,
+                    lap_number,
+                    lap_time_ms,
+                    compound,
+                    tyre_life_laps,
+                    SUM(CASE WHEN compound != prev_compound
+                                  OR prev_compound IS NULL
+                             THEN 1 ELSE 0 END
+                    ) OVER (PARTITION BY driver_number ORDER BY lap_number) AS stint_num
+                FROM lagged
+            ),
+            valid_stints AS (
+                SELECT
+                    driver_number,
+                    stint_num,
+                    compound,
+                    COUNT(*)                                         AS laps,
+                    MIN(lap_number)                                  AS start_lap,
+                    MAX(lap_number)                                  AS end_lap,
+                    MIN(lap_time_ms)                                 AS best_ms,
+                    ROUND(AVG(lap_time_ms)::numeric, 1)              AS avg_ms,
+                    ROUND(STDDEV(lap_time_ms)::numeric, 1)           AS stddev_ms,
+                    ROUND(REGR_SLOPE(lap_time_ms, lap_number)::numeric, 2) AS deg_ms_per_lap
+                FROM stint_laps
+                GROUP BY driver_number, stint_num, compound
+                HAVING COUNT(*) >= 6
+                   AND STDDEV(lap_time_ms) < 3000
+            ),
+            lap_detail AS (
+                SELECT
+                    sl.driver_number,
+                    sl.stint_num,
+                    sl.lap_number,
+                    sl.lap_time_ms,
+                    sl.tyre_life_laps
+                FROM stint_laps sl
+                JOIN valid_stints vs
+                    ON vs.driver_number = sl.driver_number
+                    AND vs.stint_num    = sl.stint_num
+            )
+            SELECT
+                vs.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                vs.stint_num,
+                vs.compound,
+                vs.laps,
+                vs.start_lap,
+                vs.end_lap,
+                vs.best_ms,
+                vs.avg_ms,
+                vs.stddev_ms,
+                vs.deg_ms_per_lap,
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'lap_number',    ld.lap_number,
+                        'lap_time_ms',   ld.lap_time_ms,
+                        'tyre_life_laps', ld.tyre_life_laps
+                    ) ORDER BY ld.lap_number
+                ) AS lap_times
+            FROM valid_stints vs
+            JOIN drivers d
+                ON d.driver_number = vs.driver_number
+                AND d.session_key  = :sk
+            JOIN lap_detail ld
+                ON ld.driver_number = vs.driver_number
+                AND ld.stint_num    = vs.stint_num
+            GROUP BY
+                vs.driver_number, d.abbreviation, d.team_name,
+                d.team_colour, vs.stint_num, vs.compound,
+                vs.laps, vs.start_lap, vs.end_lap,
+                vs.best_ms, vs.avg_ms, vs.stddev_ms, vs.deg_ms_per_lap
+            ORDER BY vs.avg_ms ASC
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+    import json as json_mod
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        # lap_times comes back as JSON string from postgres
+        lt = d.get("lap_times")
+        if isinstance(lt, str):
+            d["lap_times"] = json_mod.loads(lt)
+        elif lt is None:
+            d["lap_times"] = []
+        results.append(d)
+    return jsonify(results)
+
+
+# ── Practice: sector time progression ────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-sectors")
+def fp_sectors(session_key: int):
+    """
+    Sector time progression through the session.
+    Shows whether a driver is improving setup (getting faster) or struggling.
+
+    For each driver: their best S1/S2/S3 in each tercile of the session
+    (early / middle / late) so you can see direction of travel.
+
+    Also returns overall best sector per driver for the session delta table.
+    """
+    with engine.connect() as conn:
+        max_lap = conn.execute(text("""
+            SELECT MAX(lap_number) FROM lap_times WHERE session_key = :sk
+        """), {"sk": session_key}).scalar() or 1
+
+        rows = conn.execute(text("""
+            WITH terciles AS (
+                SELECT
+                    l.driver_number,
+                    d.abbreviation,
+                    d.team_name,
+                    d.team_colour,
+                    l.lap_number,
+                    l.s1_ms,
+                    l.s2_ms,
+                    l.s3_ms,
+                    l.compound,
+                    CASE
+                        WHEN l.lap_number <= :max_lap / 3             THEN 'early'
+                        WHEN l.lap_number <= (:max_lap * 2) / 3       THEN 'middle'
+                        ELSE                                               'late'
+                    END AS phase
+                FROM lap_times l
+                JOIN drivers d
+                    ON d.driver_number = l.driver_number
+                    AND d.session_key  = l.session_key
+                WHERE l.session_key  = :sk
+                  AND l.deleted      = FALSE
+                  AND (l.s1_ms IS NOT NULL OR l.s2_ms IS NOT NULL OR l.s3_ms IS NOT NULL)
+            )
+            SELECT
+                driver_number,
+                abbreviation,
+                team_name,
+                team_colour,
+                phase,
+                MIN(s1_ms) AS best_s1,
+                MIN(s2_ms) AS best_s2,
+                MIN(s3_ms) AS best_s3,
+                COUNT(*)   AS laps
+            FROM terciles
+            GROUP BY driver_number, abbreviation, team_name, team_colour, phase
+            ORDER BY driver_number,
+                CASE phase WHEN 'early' THEN 1 WHEN 'middle' THEN 2 ELSE 3 END
+        """), {"sk": session_key, "max_lap": max_lap}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+
+    # Group by driver, phases as keys
+    drivers: dict = {}
+    for r in rows:
+        dn  = str(r["driver_number"])
+        if dn not in drivers:
+            drivers[dn] = {
+                "driver_number": r["driver_number"],
+                "abbreviation":  r["abbreviation"],
+                "team_name":     r["team_name"],
+                "team_colour":   _resolve(r["team_colour"], r["team_name"]),
+                "phases":        {},
+            }
+        drivers[dn]["phases"][r["phase"]] = {
+            "best_s1": r["best_s1"],
+            "best_s2": r["best_s2"],
+            "best_s3": r["best_s3"],
+            "laps":    r["laps"],
+        }
+
+    return jsonify(list(drivers.values()))
