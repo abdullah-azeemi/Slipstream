@@ -2,7 +2,7 @@
 
 **Open-source F1 post-race analytics platform.**
 
-Qualifying telemetry, tyre strategy, lap-by-lap breakdowns, and ML-powered race predictions — all from public data, zero paid APIs.
+Qualifying telemetry, tyre strategy, race analysis, and practice intelligence — all from public data, zero paid APIs.
 
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square)
 ![Flask](https://img.shields.io/badge/Flask-3-lightgrey?style=flat-square)
@@ -13,27 +13,41 @@ Qualifying telemetry, tyre strategy, lap-by-lap breakdowns, and ML-powered race 
 
 ## What it does
 
-| Feature | Description |
-|---|---|
-| **Session leaderboard** | Fastest laps, gaps to pole, tyre compounds per driver |
-| **Speed traces** | Distance-aligned telemetry overlay for up to 4 drivers — throttle, brake, DRS, gear, mini-sectors, track map |
-| **Tyre strategy** | Stint Gantt chart with pit stop timing and race position evolution |
-| **Driver comparison** | Head-to-head sector analysis with theoretical best lap |
-| **Race predictions** | FLAML AutoML model trained on 5 circuits × 4 years — predicts finishing order from qualifying with win probabilities and SHAP explanations |
+### Qualifying — Speed Traces
+Distance-aligned telemetry overlay for up to 4 drivers. Speed, throttle, brake, gear, RPM, DRS zones, sector times from timing data, and an interactive track map with braking markers. Hover any point to see all drivers' values simultaneously.
+
+![Qualifying telemetry showing ANT vs RUS speed traces](.github/assets/qualifying-telemetry.png)
+
+### Race — Lap-by-Lap Intelligence
+- **Lap time evolution** — every lap as a time series, compound-coloured dots, pit laps flagged
+- **Gap to leader** — cumulative time behind P1 per lap, correct across pit windows
+- **Position changes** — full field battle chart, selected drivers highlighted
+- **Fastest lap card** — who set it, on what compound, how old the tyre was, top 5 with gaps
+- **Pit stop analysis** — undercut/overcut verdict for each stop: position before vs 3 laps after
+- **Stint pace** — clean lap averages + degradation rate (ms/lap) per stint
+
+### Practice — Friday Intelligence
+- **Gap to session best** — every lap as a dot showing gap to the fastest time of the session
+- **Compound delta table** — each driver's best time per compound and gap to session fastest on that tyre
+- **Tyre degradation comparison** — stint traces normalised to baseline so you see pure deg shape, all drivers overlaid
+- **Compound strategy reveal** — laps per compound per team, shows planned race strategy before Sunday
+- **Sector progression** — early/mid/late session sector time improvement, shows who found setup
+
+### Championship Standings
+Live driver and constructor standings from the official Jolpica F1 API. Updates every race weekend automatically — no ingestion needed for standings.
 
 ---
 
 ## Stack
 
 ```
-Frontend    Next.js 14 (App Router) + Tailwind CSS
-Backend     Flask 3 + SQLAlchemy + Flask-SocketIO
-Database    TimescaleDB (PostgreSQL) + Redis
-ML          FLAML AutoML + XGBoost + SHAP
-Data        FastF1 + OpenF1 + Jolpica
-Streaming   Apache Kafka + Quix Streams
+Frontend    Next.js 14 (App Router) — inline styles, no Tailwind required
+Backend     Flask 3 + SQLAlchemy
+Database    TimescaleDB (PostgreSQL 15) + Redis
+Data        FastF1 + Jolpica (official F1 standings)
+Streaming   Apache Kafka (infrastructure ready, live mode in roadmap)
 Infra       Docker Compose — zero paid services
-Package mgr uv workspaces (monorepo)
+Package mgr uv workspaces (Python monorepo)
 ```
 
 ---
@@ -43,44 +57,42 @@ Package mgr uv workspaces (monorepo)
 ```
 pitwall/
 ├── apps/
-│   ├── backend/                  # Flask API
+│   ├── backend/
 │   │   ├── src/backend/
-│   │   │   ├── api/v1/           # sessions, laps, drivers, strategy, telemetry, predictions
-│   │   │   ├── config.py
-│   │   │   ├── extensions.py
-│   │   │   └── health.py
-│   │   ├── migrations/           # Alembic (0001→0007)
-│   │   └── tests/                # 23 pytest tests
-│   └── frontend/                 # Next.js app
+│   │   │   ├── __init__.py          ← Flask app factory
+│   │   │   └── api/v1/
+│   │   │       ├── sessions.py      ← sessions, race-results, standings
+│   │   │       ├── laps.py
+│   │   │       ├── drivers.py
+│   │   │       ├── telemetry.py
+│   │   │       ├── strategy.py
+│   │   │       ├── analysis.py      ← all race + FP analysis endpoints
+│   │   │       └── predictions.py   ← ML stub (roadmap)
+│   │   └── tests/                   ← 23 pytest tests, all passing
+│   └── frontend/
 │       ├── app/
-│       │   ├── page.tsx                        # Home
-│       │   ├── sessions/page.tsx               # Session list
-│       │   ├── sessions/[key]/page.tsx         # Leaderboard
-│       │   ├── sessions/[key]/strategy/        # Tyre strategy
-│       │   ├── sessions/[key]/telemetry/       # Speed traces
-│       │   ├── compare/page.tsx               # Driver comparison
-│       │   └── predictions/page.tsx           # ML predictions
-│       ├── lib/api.ts
-│       └── types/f1.ts
+│       │   ├── page.tsx             ← Home + championship standings
+│       │   ├── sessions/page.tsx    ← Session browser, grouped by GP
+│       │   ├── sessions/[key]/      ← Session detail + telemetry + strategy
+│       │   └── predictions/page.tsx ← ML predictions (roadmap)
+│       └── components/
+│           ├── analysis/
+│           │   ├── RaceAnalysis.tsx
+│           │   └── PracticeAnalysis.tsx
+│           └── telemetry/
+│               └── CornerAnalysis.tsx
 ├── packages/
-│   ├── ingestion/                # FastF1 → TimescaleDB pipeline
-│   │   └── src/ingestion/
-│   │       ├── fastf1_client.py
-│   │       ├── loader.py         # DELETE-then-INSERT (hypertable safe)
-│   │       ├── models.py         # Pydantic v2 validators
-│   │       └── ingest_session.py
-│   ├── ml/                       # FLAML AutoML pipeline
-│   │   └── src/ml/
-│   │       ├── features.py       # Feature engineering
-│   │       ├── train.py          # Training + cross-validation
-│   │       ├── predict.py        # Inference + Monte Carlo simulation
-│   │       └── explain.py        # SHAP factor extraction
-│   └── stream/                   # Kafka live streaming (WIP)
+│   └── ingestion/
+│       └── src/ingestion/
+│           ├── ingest_session.py    ← main entry point
+│           ├── fastf1_client.py
+│           ├── loader.py
+│           └── models.py
 ├── infra/
 │   ├── docker-compose.yml
 │   ├── kafka/create-topics.sh
 │   └── postgres/init.sql
-├── pyproject.toml                # uv workspace root
+├── pyproject.toml                   ← uv workspace root
 └── Makefile
 ```
 
@@ -108,87 +120,60 @@ cp .env.example .env
 make up
 ```
 
-This starts TimescaleDB, Redis, Kafka, and MLflow. Wait ~15 seconds for TimescaleDB to initialise.
+Starts TimescaleDB, Redis, Kafka, and MLflow. Wait ~15 seconds for TimescaleDB to initialise.
 
-### 3. Run database migrations
-
-```bash
-make migrate
-```
-
-### 4. Ingest your first session
-
-```bash
-# 2024 British GP qualifying — downloads and caches via FastF1
-uv run python -m ingestion.ingest_session --year 2024 --gp British --session Q
-
-# 2024 British GP race (skip telemetry for speed)
-uv run python -m ingestion.ingest_session --year 2024 --gp British --session R --skip-telemetry
-```
-
-FastF1 caches session data locally at `~/Library/Caches/fastf1` — subsequent runs are instant.
-
-### 5. Start the backend
+### 3. Start the backend
 
 ```bash
 make backend
-# API running at http://localhost:8000
+# API at http://localhost:8000
+# Health check: curl http://localhost:8000/health
 ```
 
-### 6. Start the frontend
+### 4. Start the frontend
 
 ```bash
 cd apps/frontend
 pnpm install
 pnpm dev
-# App running at http://localhost:3000
+# App at http://localhost:3000
 ```
+
+### 5. Ingest your first session
+
+```bash
+# 2026 Australian GP — qualifying (includes telemetry for speed traces)
+uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session Q
+
+# Race (lap times + strategy, no telemetry)
+uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session R
+
+# Practice (for FP analysis panels)
+uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session FP2
+```
+
+FastF1 caches session data locally at `./fastf1_cache` — subsequent runs are instant.
 
 ---
 
-## Loading more data
+## Loading historical data
 
-The ML predictions model improves significantly with more circuits. To replicate the full training dataset (5 circuits × 4 years):
-
-```bash
-# Run for each combination of year (2022-2025) and circuit
-uv run python -m ingestion.ingest_session --year 2023 --gp Monaco   --session Q
-uv run python -m ingestion.ingest_session --year 2023 --gp Monaco   --session R --skip-telemetry
-uv run python -m ingestion.ingest_session --year 2023 --gp Italian  --session Q
-uv run python -m ingestion.ingest_session --year 2023 --gp Italian  --session R --skip-telemetry
-# ... etc
-```
-
-Supported `--gp` values: `British`, `Monaco`, `Italian`, `Spanish`, `Belgian` (and any other FastF1-supported grand prix name).
-
----
-
-## Training the ML model
-
-Once you have qualifying + race pairs loaded:
+For the full race analysis suite, you need paired qualifying + race sessions. Each GP takes ~30–90 seconds to ingest depending on session size.
 
 ```bash
-uv run python -m ml.train
+# Example: ingest a full season of key circuits
+for year in 2022 2023 2024 2025; do
+  for gp in "Australian" "Monaco" "British" "Italian" "Belgian"; do
+    uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session Q
+    uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session R
+    uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session FP2
+  done
+done
 ```
 
-Output:
-```
-Shape: (385, 19)
-MAE:            2.49 ± 0.32 positions
-Top-3 accuracy: 58.3%
-Best algorithm: extra_tree (selected by FLAML AutoML)
+Storage estimate: ~200MB for 5 circuits × 4 seasons (lap times only, no telemetry for historical races).
 
-✅  Model saved → ml_models/race_predictor.pkl
-```
-
-The model uses leave-one-year-out cross-validation — it never trains on future data to predict past data.
-
-### How predictions work
-
-1. **Features** are engineered from qualifying: grid position, gap to pole, sector time gaps and ranks, tyre compound, circuit type (street / power / mixed)
-2. **FLAML AutoML** tries XGBoost, LightGBM, ExtraTree, RandomForest and selects the best by MAE
-3. **Monte Carlo simulation** (1000 runs with gaussian noise) converts point predictions into probability distributions
-4. **SHAP values** explain the top 3 factors driving each driver's prediction
+**Telemetry note:** Telemetry is large (~2-3M rows per qualifying session). Ingest it only for sessions where you want the speed traces page. All other analysis panels (race, FP) use only `lap_times` which is compact.
 
 ---
 
@@ -197,108 +182,96 @@ The model uses leave-one-year-out cross-validation — it never trains on future
 Base URL: `http://localhost:8000`
 
 ```
-GET  /health
-GET  /api/v1/sessions
-GET  /api/v1/sessions/:key
-GET  /api/v1/sessions/:key/drivers
-GET  /api/v1/sessions/:key/drivers/compare?drivers=44,63
-GET  /api/v1/sessions/:key/laps
-GET  /api/v1/sessions/:key/laps?driver=44
-GET  /api/v1/sessions/:key/fastest
-GET  /api/v1/sessions/:key/strategy
-GET  /api/v1/sessions/:key/race-order
-GET  /api/v1/sessions/:key/telemetry/compare?drivers=44,63
-GET  /api/v1/sessions/:key/telemetry/:driver_number
-GET  /api/v1/sessions/:key/predict
-POST /api/v1/sessions/:key/predict/simulate
-```
+GET /health
 
-### What-If simulator
+# Sessions
+GET /api/v1/sessions
+GET /api/v1/sessions/:key
+GET /api/v1/sessions/:key/race-results
+GET /api/v1/sessions/:key/drivers
+GET /api/v1/sessions/:key/laps?driver=<num>
+GET /api/v1/sessions/:key/fastest
+GET /api/v1/sessions/:key/strategy
 
-```bash
-curl -X POST http://localhost:8000/api/v1/sessions/9554/predict/simulate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "grid_overrides": {"44": 1, "63": 2},
-    "weather": "wet",
-    "safety_car": "high"
-  }'
+# Standings (live from Jolpica, no ingestion needed)
+GET /api/v1/standings/drivers?year=2026
+GET /api/v1/standings/constructors?year=2026
+
+# Qualifying telemetry
+GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63
+GET /api/v1/sessions/:key/telemetry/stats?drivers=12,63
+
+# Race analysis
+GET /api/v1/sessions/:key/analysis/lap-evolution?drivers=12,63
+GET /api/v1/sessions/:key/analysis/gap-to-leader
+GET /api/v1/sessions/:key/analysis/position-changes
+GET /api/v1/sessions/:key/analysis/stint-pace
+GET /api/v1/sessions/:key/analysis/undercut
+GET /api/v1/sessions/:key/analysis/fastest-lap
+
+# Practice analysis
+GET /api/v1/sessions/:key/analysis/fp-scatter
+GET /api/v1/sessions/:key/analysis/fp-compound-delta
+GET /api/v1/sessions/:key/analysis/fp-tyre-deg
+GET /api/v1/sessions/:key/analysis/fp-compounds
+GET /api/v1/sessions/:key/analysis/fp-sectors
 ```
 
 ---
 
-## Development
+## Dev commands
 
 ```bash
-make up          # start Docker services
-make down        # stop Docker services
-make migrate     # run Alembic migrations
-make backend     # start Flask dev server (port 8000)
-make test-backend # run pytest (23 tests)
+make up          # start Docker services (TimescaleDB, Redis, Kafka, MLflow)
+make down        # stop all services
+make backend     # Flask dev server on :8000
+make test        # run 23 pytest tests
 make db-shell    # psql into TimescaleDB
-```
-
-### Running tests
-
-```bash
-uv run pytest apps/backend/tests/ -v
-```
-
-### Environment variables
-
-Copy `.env.example` to `.env`. Key variables:
-
-```bash
-DATABASE_URL=postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall
-REDIS_URL=redis://localhost:6379/0
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-MLFLOW_TRACKING_URI=http://localhost:5001
-NEXT_PUBLIC_API_URL=http://localhost:8000
+lsof -ti:8000 | xargs kill -9   # kill stuck backend port
 ```
 
 ---
 
 ## Design decisions
 
-**TimescaleDB over plain PostgreSQL** — `lap_times` and `telemetry` are hypertables partitioned by time. This makes range queries over multi-season data fast without manual partitioning.
+**TimescaleDB over plain PostgreSQL** — `lap_times` and `telemetry` are hypertables partitioned by time. Multi-season queries stay fast without manual partitioning.
 
-**DELETE-then-INSERT over ON CONFLICT** — TimescaleDB hypertables require the partition key (`recorded_at`) in any unique constraint. Since we don't want time-based deduplication, we DELETE all rows for a session before re-inserting. Ingestion is idempotent and safe to rerun.
+**DELETE-then-INSERT** — TimescaleDB hypertables require the partition key in unique constraints. Rather than complex upsert logic, ingestion deletes all rows for a session before re-inserting. Safe to rerun.
 
-**Distance-aligned telemetry** — two drivers' fastest laps have different sample counts (FastF1 samples at ~10Hz per car, actual count varies). We interpolate both to 300 evenly-spaced distance points before rendering, so the speed trace overlay is spatially correct.
+**Distance-aligned telemetry** — two drivers' fastest laps have different sample counts (FastF1 samples at ~10Hz, actual count varies by car/lap). Both are interpolated to 400 evenly-spaced distance points before rendering so the overlay is spatially accurate.
 
-**FLAML AutoML** — rather than picking an algorithm upfront, FLAML tries the full candidate set (XGBoost, LightGBM, ExtraTree, RandomForest) within a time budget and returns the best. The winning algorithm has changed across training runs as data volume grew.
+**Official standings via Jolpica** — calculating points from ingested race results only works for sessions you've loaded. Jolpica gives the full season standings regardless of what you've ingested, and updates automatically after each race.
 
-**Leave-one-year-out CV** — standard k-fold would leak future race results into training (e.g. training on 2024 data to predict a 2023 race). LYOCV ensures the test set is always chronologically after the training set.
+**Gap to leader via cumulative time** — uses each lap's `position = 1` driver as the leader reference. Cumulative lap times including pit laps give the true time gap. `GREATEST(0, ...)` clamps negative values from pit timing noise.
 
 ---
 
 ## Roadmap
 
-- [ ] What-If simulator UI — drag grid positions, toggle weather, rerun inference
-- [ ] Celery workers — async ingestion triggered via API
+- [ ] Bulk ingestion script — ingest full 2022–2025 archive in one command
+- [ ] Auto-ingest 2026 — Celery beat task that detects new sessions and ingests automatically
+- [ ] ML predictions — FLAML podium predictions from qualifying results + historical data
+- [ ] What-If simulator — drag grid positions, toggle weather, rerun predictions
 - [ ] Live mode — OpenF1 streaming during race weekends via Kafka
-- [ ] More circuits — Suzuka, Singapore, Interlagos
-- [ ] Driver historical features — DNF rate, wet weather performance
-- [ ] Deployment guide — Docker Compose on a VPS
 
 ---
 
 ## Data sources
 
 - **[FastF1](https://github.com/theOehrly/Fast-F1)** — timing, telemetry, tyre data
-- **[OpenF1](https://openf1.org/)** — live timing API
-- **[Jolpica](https://jolpi.ca/)** — Ergast-compatible historical data
+- **[OpenF1](https://openf1.org/)** — live timing API (roadmap)
+- **[Jolpica](https://jolpi.ca/)** — official F1 standings
 
-All data is sourced from public APIs. Pitwall stores processed data locally in TimescaleDB — no data is redistributed.
+All data is sourced from public APIs. Pitwall stores processed data locally — no data is redistributed.
+
+---
+
+## Contributing
+
+Issues and PRs welcome. If you hit ingestion errors on a circuit not listed here, open an issue with the circuit name and error — compound constraint violations are common and easy to fix.
 
 ---
 
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
----
-
-## Contributing
-
-Issues and PRs welcome. If you load sessions for circuits not listed here and hit ingestion errors, please open an issue with the error and the circuit name — compound constraint violations are the most common cause and easy to fix.

@@ -1,308 +1,170 @@
 'use client'
+
 import { useEffect, useState } from 'react'
-import { predictionsApi } from '@/lib/api'
-import type { DriverPrediction, PredictionResponse } from '@/types/f1'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { Brain, Database, GitBranch, Zap, Lock } from 'lucide-react'
 
-// ── Session registry ─────────────────────────────────────────────────────────
-
-type CircuitType = 'street' | 'power' | 'mixed'
-
-interface CircuitMeta {
-  name:  string
-  type:  CircuitType
-  badge: string
-  tip:   string
-}
-
-const CIRCUITS: Record<string, CircuitMeta> = {
-  'Monaco Grand Prix':   { name: 'Monaco',      type: 'street', badge: 'Street', tip: 'Grid position locks in race outcome — overtaking nearly impossible' },
-  'Italian Grand Prix':  { name: 'Monza',       type: 'power',  badge: 'Power',  tip: 'Slipstream-dependent, high overtaking, qualifying gap matters less' },
-  'Belgian Grand Prix':  { name: 'Spa',         type: 'power',  badge: 'Power',  tip: 'Long circuit, weather variance, safety cars common' },
-  'Spanish Grand Prix':  { name: 'Barcelona',   type: 'mixed',  badge: 'Mixed',  tip: 'Representative circuit, strong benchmark for car pace' },
-  'British Grand Prix':  { name: 'Silverstone', type: 'mixed',  badge: 'Mixed',  tip: 'High-speed, mixed characteristics, tyre deg significant' },
-}
-
-const BADGE_STYLES: Record<CircuitType, string> = {
-  street: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  power:  'bg-blue-500/10  text-blue-400  border-blue-500/20',
-  mixed:  'bg-zinc-500/10  text-zinc-400  border-zinc-500/20',
-}
-
-const SESSIONS = [
-  { year: 2025, gp_name: 'Belgian Grand Prix',  session_key: 9935 },
-  { year: 2025, gp_name: 'British Grand Prix',  session_key: 9943 },
-  { year: 2025, gp_name: 'Italian Grand Prix',  session_key: 9908 },
-  { year: 2025, gp_name: 'Monaco Grand Prix',   session_key: 9975 },
-  { year: 2025, gp_name: 'Spanish Grand Prix',  session_key: 9967 },
-  { year: 2024, gp_name: 'Belgian Grand Prix',  session_key: 9570 },
-  { year: 2024, gp_name: 'British Grand Prix',  session_key: 9554 },
-  { year: 2024, gp_name: 'Italian Grand Prix',  session_key: 9586 },
-  { year: 2024, gp_name: 'Monaco Grand Prix',   session_key: 9519 },
-  { year: 2024, gp_name: 'Spanish Grand Prix',  session_key: 9535 },
-  { year: 2023, gp_name: 'Belgian Grand Prix',  session_key: 9135 },
-  { year: 2023, gp_name: 'British Grand Prix',  session_key: 9122 },
-  { year: 2023, gp_name: 'Italian Grand Prix',  session_key: 9153 },
-  { year: 2023, gp_name: 'Monaco Grand Prix',   session_key: 9090 },
-  { year: 2023, gp_name: 'Spanish Grand Prix',  session_key: 9098 },
-  { year: 2022, gp_name: 'Belgian Grand Prix',  session_key: 7150 },
-  { year: 2022, gp_name: 'British Grand Prix',  session_key: 7107 },
-  { year: 2022, gp_name: 'Italian Grand Prix',  session_key: 7124 },
-  { year: 2022, gp_name: 'Monaco Grand Prix',   session_key: 7052 },
-  { year: 2022, gp_name: 'Spanish Grand Prix',  session_key: 7043 },
-]
-
-const CIRCUITS_UNIQUE = [...new Set(SESSIONS.map(s => s.gp_name))]
-const YEARS_UNIQUE    = [...new Set(SESSIONS.map(s => s.year))].sort((a, b) => b - a)
-
-// ── Sub-components ───────────────────────────────────────────────────────────
-
-function ProbBar({ value, max = 1 }: { value: number; max?: number }) {
-  const pct = max > 0 ? value / max : 0
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
-        <div className="h-full rounded-full bg-red transition-all duration-500"
-          style={{ width: `${pct * 100}%` }} />
-      </div>
-      <span className="font-mono text-xs text-zinc-400 w-10 text-right">
-        {(value * 100).toFixed(1)}%
-      </span>
-    </div>
-  )
-}
-
-function PositionDist({ probs }: { probs: Record<string, number> }) {
-  const max = Math.max(...Object.values(probs))
-  return (
-    <div className="flex items-end gap-px h-8">
-      {Array.from({ length: 20 }, (_, i) => {
-        const p = probs[String(i + 1)] ?? 0
-        const h = max > 0 ? (p / max) * 100 : 0
-        return (
-          <div key={i} className="flex-1 rounded-sm"
-            style={{
-              height: `${Math.max(h, 4)}%`,
-              background: p > 0.05 ? '#E8002D' : '#2A2A2A',
-              opacity: p > 0 ? 0.6 + p * 0.4 : 0.25,
-            }}
-            title={`P${i + 1}: ${(p * 100).toFixed(1)}%`}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
-function DriverCard({ pred, rank, maxWinProb }: {
-  pred: DriverPrediction; rank: number; maxWinProb: number
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const medalColour = rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : rank === 3 ? '#CD7F32' : null
-
-  return (
-    <div className={`bg-surface border rounded-xl overflow-hidden
-      ${rank <= 3 ? 'border-zinc-600' : 'border-border'}`}>
-
-      <div
-        className="grid grid-cols-12 px-4 py-3.5 items-center cursor-pointer hover:bg-surface2 transition-colors"
-        onClick={() => setExpanded(e => !e)}
-      >
-        <div className="col-span-1 flex justify-center">
-          {medalColour ? (
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-              style={{ background: medalColour, color: '#000' }}>
-              {rank}
-            </div>
-          ) : (
-            <span className="font-mono text-sm text-zinc-500">{rank}</span>
-          )}
-        </div>
-
-        <div className="col-span-4">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-white text-sm">{pred.abbreviation}</span>
-            <span className="font-mono text-[10px] text-zinc-600 bg-surface2 px-1.5 py-0.5 rounded">
-              P{pred.grid_position}→P{pred.predicted_position}
-            </span>
-          </div>
-          <span className="text-zinc-500 text-xs">{pred.team_name}</span>
-        </div>
-
-        <div className="col-span-4">
-          <ProbBar value={pred.win_probability} max={maxWinProb} />
-          <span className="text-[9px] text-zinc-600 mt-0.5 block">Win probability</span>
-        </div>
-
-        <div className="col-span-2 text-right">
-          <div className="font-mono text-sm text-white">
-            {(pred.podium_probability * 100).toFixed(0)}%
-          </div>
-          <div className="text-[9px] text-zinc-600">Podium</div>
-        </div>
-
-        <div className="col-span-1 flex justify-end text-zinc-600 text-xs transition-transform duration-200"
-          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-          ▾
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-          <div>
-            <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1.5">
-              Finish position distribution
-            </div>
-            <PositionDist probs={pred.position_probabilities} />
-            <div className="flex justify-between mt-1">
-              <span className="font-mono text-[9px] text-zinc-700">P1</span>
-              <span className="font-mono text-[9px] text-zinc-700">P20</span>
-            </div>
-          </div>
-
-          {pred.shap_factors.length > 0 && (
-            <div>
-              <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
-                Key factors
-              </div>
-              <div className="space-y-1.5">
-                {pred.shap_factors.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ background: f.positive ? '#2CF4C5' : '#E8002D' }} />
-                    <span className="text-xs text-zinc-400">{f.label}</span>
-                    <span className="font-mono text-[10px] text-zinc-600 ml-auto">
-                      {f.shap_value > 0 ? '+' : ''}{f.shap_value.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Main Page ────────────────────────────────────────────────────────────────
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export default function PredictionsPage() {
-  const [selectedCircuit, setSelectedCircuit] = useState(CIRCUITS_UNIQUE[0])
-  const [selectedYear,    setSelectedYear]    = useState(YEARS_UNIQUE[0])
-  const [data,            setData]            = useState<PredictionResponse | null>(null)
-  const [loading,         setLoading]         = useState(false)
-  const [error,           setError]           = useState<string | null>(null)
-
-  const session    = SESSIONS.find(s => s.gp_name === selectedCircuit && s.year === selectedYear)
-  const circuit    = CIRCUITS[selectedCircuit]
-  const maxWinProb = data ? Math.max(...data.predictions.map(p => p.win_probability)) : 1
+  const [raceCount, setRaceCount] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!session) return
-    setLoading(true)
-    setError(null)
-    setData(null)
-    predictionsApi.predict(session.session_key)
-      .then(setData)
-      .catch(e => setError(e?.message ?? 'Failed to load predictions'))
-      .finally(() => setLoading(false))
-  }, [session?.session_key])
+    fetch(`${BASE}/api/v1/sessions`)
+      .then(r => r.json())
+      .then((sessions: any[]) => {
+        const races = sessions.filter(s => s.session_type === 'R').length
+        setRaceCount(races)
+      })
+      .catch(() => setRaceCount(null))
+  }, [])
+
+  const NEEDED = 30
+
+  const steps = [
+    {
+      Icon: Database,
+      label: 'Historical data',
+      desc: `Qualifying + race pairs across 2022–2026. Currently have ${raceCount ?? '…'} races ingested. Need ~${NEEDED}+ for a meaningful model.`,
+      status: raceCount !== null && raceCount >= NEEDED ? 'done' : 'progress',
+      metric: raceCount !== null ? `${raceCount} races` : '…',
+    },
+    {
+      Icon: GitBranch,
+      label: 'Feature engineering',
+      desc: 'Grid position, gap to pole, sector time ranks, circuit type, team form over last 3 races, tyre strategy from FP2.',
+      status: 'planned',
+      metric: '~20 features',
+    },
+    {
+      Icon: Brain,
+      label: 'FLAML AutoML',
+      desc: 'Tries XGBoost, LightGBM, ExtraTree, RandomForest. Leave-one-year-out cross-validation — never trains on future data.',
+      status: 'planned',
+      metric: 'Target: top-3 >55%',
+    },
+    {
+      Icon: Zap,
+      label: 'Predictions + SHAP',
+      desc: 'Monte Carlo simulation (1000 runs) → probability distributions. SHAP explains the top 3 factors per driver.',
+      status: 'planned',
+      metric: 'Per-driver win %',
+    },
+  ]
+
+  const S: Record<string, { bg: string; border: string; text: string; label: string }> = {
+    done:     { bg: '#2CF4C522', border: '#2CF4C544', text: '#2CF4C5', label: 'DONE' },
+    progress: { bg: '#FFD70022', border: '#FFD70044', text: '#FFD700', label: 'IN PROGRESS' },
+    planned:  { bg: '#52525B22', border: '#52525B44', text: '#71717A', label: 'PLANNED' },
+  }
 
   return (
-    <div className="px-4 py-4 max-w-2xl mx-auto space-y-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '680px' }}>
 
+      {/* Header */}
       <div>
-        <h1 className="font-display font-bold text-2xl text-white">Race Predictions</h1>
-        <p className="text-zinc-500 text-sm mt-0.5">
-          FLAML AutoML · ExtraTree · 385 rows · 5 circuits · 4 years
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#E8002D18', border: '1px solid #E8002D33', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Brain size={18} style={{ color: '#E8002D' }} />
+          </div>
+          <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '28px', color: '#fff', margin: 0 }}>
+            Race Predictions
+          </h1>
+          <span style={{ fontSize: '9px', fontFamily: 'monospace', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: '#FFD70022', color: '#FFD700', border: '1px solid #FFD70044' }}>
+            COMING SOON
+          </span>
+        </div>
+        <p style={{ color: '#71717A', fontSize: '14px', lineHeight: 1.6, margin: 0 }}>
+          ML-powered podium predictions from qualifying results. Built on FastF1 data across 4 seasons — no black box, full SHAP explanations for every prediction.
         </p>
       </div>
 
-      {/* Selectors */}
-      <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
-        <div>
-          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Circuit</div>
-          <div className="flex flex-wrap gap-2">
-            {CIRCUITS_UNIQUE.map(gp => {
-              const c      = CIRCUITS[gp]
-              const active = selectedCircuit === gp
-              return (
-                <button key={gp}
-                  onClick={() => setSelectedCircuit(gp)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
-                    ${active
-                      ? 'bg-red text-white'
-                      : 'bg-surface2 border border-border text-zinc-400 hover:border-zinc-500'
-                    }`}>
-                  {c?.name ?? gp}
-                  {c && (
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded border ${BADGE_STYLES[c.type]}`}>
-                      {c.badge}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div>
-          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Year</div>
-          <div className="flex gap-2">
-            {YEARS_UNIQUE.map(year => (
-              <button key={year}
-                onClick={() => setSelectedYear(year)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors
-                  ${selectedYear === year
-                    ? 'bg-surface2 border border-zinc-500 text-white'
-                    : 'bg-surface2 border border-border text-zinc-500 hover:border-zinc-600'
-                  }`}>
-                {year}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {circuit && (
-          <div className="flex items-start gap-2 pt-1 border-t border-border">
-            <span className={`text-[9px] px-1.5 py-0.5 rounded border flex-shrink-0 mt-0.5 ${BADGE_STYLES[circuit.type]}`}>
-              {circuit.badge}
-            </span>
-            <span className="text-[11px] text-zinc-500">{circuit.tip}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Model info */}
-      {data && (
-        <div className="flex items-center gap-3 px-3 py-2 bg-surface border border-border rounded-lg">
-          <div className="w-1.5 h-1.5 rounded-full bg-teal animate-pulse flex-shrink-0" />
-          <span className="text-xs text-zinc-500">
-            {data.model_info.name} · MAE 2.5 pos · 58% top-3 accuracy
-            · {selectedYear} {circuit?.name} from qualifying
+      {/* Progress */}
+      <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.1em' }}>BUILD PROGRESS</span>
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: raceCount !== null && raceCount >= NEEDED ? '#2CF4C5' : '#FFD700' }}>
+            {raceCount ?? '…'}/{NEEDED} races
           </span>
         </div>
-      )}
+        <div style={{ height: '4px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ height: '100%', borderRadius: '2px', background: 'linear-gradient(to right, #E8002D, #FFD700)', width: raceCount != null ? `${Math.min(100, (raceCount / NEEDED) * 100)}%` : '0%', transition: 'width 0.6s ease' }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {steps.map((step, i) => {
+            const s = S[step.status]
+            return (
+              <div key={i} style={{ display: 'flex', gap: '12px', padding: '12px', background: '#0D0D0D', borderRadius: '10px', border: '1px solid #1A1A1A', opacity: step.status === 'planned' ? 0.7 : 1 }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: s.bg, border: `1px solid ${s.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <step.Icon size={15} style={{ color: s.text }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{step.label}</span>
+                    <span style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>{s.label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>{step.metric}</span>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#71717A', margin: 0, lineHeight: 1.5 }}>{step.desc}</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-      {/* Content */}
-      {!session ? (
-        <div className="text-center py-8 text-zinc-600 text-sm bg-surface border border-border rounded-xl">
-          No data for {selectedYear} {circuit?.name ?? selectedCircuit}
+      {/* Preview */}
+      <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '20px' }}>
+        <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.1em', marginBottom: '16px' }}>
+          PREVIEW — EXAMPLE OUTPUT
         </div>
-      ) : loading ? (
-        <LoadingSpinner text="Running inference..." />
-      ) : error ? (
-        <div className="bg-surface border border-red/30 rounded-xl p-4 text-sm text-red">
-          {error}
-        </div>
-      ) : data ? (
-        <div className="space-y-2">
-          {data.predictions.map((pred, i) => (
-            <DriverCard key={pred.driver_number} pred={pred} rank={i + 1} maxWinProb={maxWinProb} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+          {[
+            { pos: 1, abbr: 'ANT', team: 'Mercedes', prob: 34, colour: '27F4D2', factors: ['Grid P1', 'Low tyre deg', 'Strong S3'] },
+            { pos: 2, abbr: 'RUS', team: 'Mercedes', prob: 28, colour: '27F4D2', factors: ['Grid P2', 'Strong exit pace'] },
+            { pos: 3, abbr: 'LEC', team: 'Ferrari',  prob: 18, colour: 'E8002D', factors: ['Grid P3', 'HARD pace in FP2'] },
+          ].map(d => (
+            <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#0A0A0A', borderRadius: '8px', border: '1px solid #1A1A1A', opacity: 0.65 }}>
+              <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: `#${d.colour}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontFamily: 'monospace', color: `#${d.colour}`, fontWeight: 700, flexShrink: 0 }}>
+                P{d.pos}
+              </div>
+              <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: `#${d.colour}`, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: '13px', fontFamily: 'monospace', color: `#${d.colour}`, fontWeight: 700 }}>{d.abbr}</span>
+                  <span style={{ fontSize: '11px', color: '#52525B' }}>{d.team}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
+                  {d.factors.map(f => (
+                    <span key={f} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', background: '#1A1A1A', padding: '1px 5px', borderRadius: '3px' }}>{f}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: '18px', fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>{d.prob}%</div>
+                <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>win prob</div>
+              </div>
+            </div>
           ))}
         </div>
-      ) : null}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 10px', background: '#1A1A1A', borderRadius: '6px' }}>
+          <Lock size={11} style={{ color: '#52525B' }} />
+          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B' }}>
+            Example only — not real predictions. Ingest 30+ race weekends to unlock the model.
+          </span>
+        </div>
+      </div>
+
+      {/* CLI hint */}
+      <div style={{ background: '#0D0D0D', border: '1px solid #E8002D33', borderRadius: '12px', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '13px', color: '#fff', fontWeight: 600, marginBottom: '4px' }}>Accelerate training data</div>
+          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B', lineHeight: 1.5 }}>
+            Ingest 2022–2025 race data overnight. Each GP takes ~60 seconds.
+          </div>
+        </div>
+        <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '10px 14px', fontFamily: 'monospace', fontSize: '11px', color: '#A1A1AA', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          uv run python -m ingestion.ingest_session
+        </div>
+      </div>
 
     </div>
   )
