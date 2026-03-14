@@ -701,7 +701,7 @@ export default function RaceAnalysis({
                       {entry.compound && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
-                          {entry.tyre_changed && <span style={{ fontSize: '8px', fontFamily: 'monospace', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', background: compCol + '33', color: compCol }}>NEW</span>}
+                          {entry.tyre_changed && <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, padding: '1px 4px', borderRadius: '4px', background: compCol + '33', color: '#E8002D' }}>PIT</span>}
                         </div>
                       )}
                     </div>
