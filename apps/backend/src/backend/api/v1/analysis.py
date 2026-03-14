@@ -1113,3 +1113,241 @@ def fp_sectors(session_key: int):
         }
 
     return jsonify(list(drivers.values()))
+
+
+# ── Practice: compound delta table ───────────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-compound-delta")
+def fp_compound_delta(session_key: int):
+    """
+    Each driver's best lap time per compound + gap to session best on that compound.
+
+    Shows who has a strong HARD vs who only goes fast on SOFT — the key
+    input for one-stop vs two-stop strategy decisions.
+
+    Returns drivers sorted by their overall best time (fastest first).
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH clean_laps AS (
+                SELECT
+                    l.driver_number,
+                    l.compound,
+                    l.lap_time_ms
+                FROM lap_times l
+                WHERE l.session_key  = :sk
+                  AND l.lap_time_ms  IS NOT NULL
+                  AND l.deleted      = FALSE
+                  AND l.compound     IS NOT NULL
+                  -- exclude outlaps: tyre_life_laps = 1 or pit_in lap
+                  AND l.tyre_life_laps > 1
+                  AND l.pit_in_time_ms IS NULL
+            ),
+            best_per_driver_compound AS (
+                SELECT
+                    driver_number,
+                    compound,
+                    MIN(lap_time_ms) AS best_ms
+                FROM clean_laps
+                GROUP BY driver_number, compound
+            ),
+            session_best_per_compound AS (
+                SELECT
+                    compound,
+                    MIN(lap_time_ms) AS session_best_ms
+                FROM clean_laps
+                GROUP BY compound
+            ),
+            overall_best AS (
+                SELECT driver_number, MIN(best_ms) AS overall_best_ms
+                FROM best_per_driver_compound
+                GROUP BY driver_number
+            )
+            SELECT
+                b.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                b.compound,
+                b.best_ms,
+                ROUND((b.best_ms - sb.session_best_ms)::numeric, 1) AS gap_to_best_ms,
+                ob.overall_best_ms
+            FROM best_per_driver_compound b
+            JOIN session_best_per_compound sb ON sb.compound = b.compound
+            JOIN overall_best ob ON ob.driver_number = b.driver_number
+            JOIN drivers d
+                ON d.driver_number = b.driver_number
+                AND d.session_key  = :sk
+            ORDER BY ob.overall_best_ms ASC, b.driver_number, b.compound
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify([])
+
+    from backend.api.v1.strategy import _resolve
+
+    # Group by driver
+    drivers: dict = {}
+    for r in rows:
+        dn = r["driver_number"]
+        if dn not in drivers:
+            drivers[dn] = {
+                "driver_number":   dn,
+                "abbreviation":    r["abbreviation"],
+                "team_name":       r["team_name"],
+                "team_colour":     _resolve(r["team_colour"], r["team_name"]),
+                "overall_best_ms": float(r["overall_best_ms"]),
+                "compounds":       {},
+            }
+        drivers[dn]["compounds"][r["compound"]] = {
+            "best_ms":        float(r["best_ms"]),
+            "gap_to_best_ms": float(r["gap_to_best_ms"]),
+        }
+
+    return jsonify(list(drivers.values()))
+
+
+# ── Practice: tyre degradation comparison ────────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/fp-tyre-deg")
+def fp_tyre_deg(session_key: int):
+    """
+    Per-driver stint traces for deg comparison — all drivers on same compound
+    overlaid so you can see who manages tyres best.
+
+    Returns stints of >= 4 laps grouped by compound, with individual lap times
+    so the frontend can draw actual traces (not just summary stats).
+
+    Each lap is expressed as delta from the stint's first clean lap so all
+    stints start at 0 — this normalises for absolute pace differences and
+    shows pure degradation shape.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH driver_median AS (
+                SELECT driver_number,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY lap_time_ms) AS median_ms
+                FROM lap_times
+                WHERE session_key = :sk
+                  AND lap_time_ms IS NOT NULL
+                  AND deleted     = FALSE
+                GROUP BY driver_number
+            ),
+            filtered AS (
+                SELECT
+                    l.driver_number,
+                    l.lap_number,
+                    l.lap_time_ms,
+                    l.compound,
+                    l.tyre_life_laps
+                FROM lap_times l
+                JOIN driver_median dm ON dm.driver_number = l.driver_number
+                WHERE l.session_key     = :sk
+                  AND l.lap_time_ms     IS NOT NULL
+                  AND l.deleted         = FALSE
+                  AND l.compound        IS NOT NULL
+                  AND l.tyre_life_laps  > 1
+                  AND l.pit_in_time_ms  IS NULL
+                  AND l.lap_time_ms     <= dm.median_ms * 1.12
+            ),
+            lagged AS (
+                SELECT *,
+                    LAG(compound) OVER (
+                        PARTITION BY driver_number ORDER BY lap_number
+                    ) AS prev_compound
+                FROM filtered
+            ),
+            stinted AS (
+                SELECT *,
+                    SUM(CASE WHEN compound != prev_compound
+                                  OR prev_compound IS NULL
+                             THEN 1 ELSE 0 END
+                    ) OVER (PARTITION BY driver_number ORDER BY lap_number) AS stint_num
+                FROM lagged
+            ),
+            stint_summary AS (
+                SELECT driver_number, stint_num, compound, COUNT(*) AS laps
+                FROM stinted
+                GROUP BY driver_number, stint_num, compound
+                HAVING COUNT(*) >= 4
+            ),
+            first_lap_time AS (
+                -- Baseline = first clean lap of each valid stint
+                SELECT DISTINCT ON (s.driver_number, s.stint_num)
+                    s.driver_number,
+                    s.stint_num,
+                    s.lap_time_ms AS base_ms
+                FROM stinted s
+                JOIN stint_summary ss
+                    ON ss.driver_number = s.driver_number
+                    AND ss.stint_num    = s.stint_num
+                ORDER BY s.driver_number, s.stint_num, s.lap_number ASC
+            )
+            SELECT
+                s.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                s.compound,
+                s.stint_num,
+                s.lap_number,
+                s.lap_time_ms,
+                s.tyre_life_laps,
+                -- Delta from first lap: positive = getting slower
+                ROUND((s.lap_time_ms - fl.base_ms)::numeric, 1) AS delta_ms,
+                ROW_NUMBER() OVER (
+                    PARTITION BY s.driver_number, s.stint_num
+                    ORDER BY s.lap_number
+                ) - 1 AS lap_in_stint
+            FROM stinted s
+            JOIN stint_summary ss
+                ON ss.driver_number = s.driver_number
+                AND ss.stint_num    = s.stint_num
+            JOIN first_lap_time fl
+                ON fl.driver_number = s.driver_number
+                AND fl.stint_num    = s.stint_num
+            JOIN drivers d
+                ON d.driver_number = s.driver_number
+                AND d.session_key  = :sk
+            ORDER BY s.driver_number, s.stint_num, s.lap_number
+        """), {"sk": session_key}).mappings().all()
+
+    if not rows:
+        return jsonify({})
+
+    from backend.api.v1.strategy import _resolve
+
+    # Group by compound → driver → stint → laps
+    by_compound: dict = {}
+    for r in rows:
+        compound = r["compound"]
+        dn       = r["driver_number"]
+        sn       = r["stint_num"]
+
+        if compound not in by_compound:
+            by_compound[compound] = {}
+
+        key = f"{dn}_{sn}"
+        if key not in by_compound[compound]:
+            by_compound[compound][key] = {
+                "driver_number": dn,
+                "abbreviation":  r["abbreviation"],
+                "team_name":     r["team_name"],
+                "team_colour":   _resolve(r["team_colour"], r["team_name"]),
+                "stint_num":     sn,
+                "laps":          [],
+            }
+
+        by_compound[compound][key]["laps"].append({
+            "lap_in_stint": r["lap_in_stint"],
+            "lap_time_ms":  float(r["lap_time_ms"]),
+            "delta_ms":     float(r["delta_ms"]),
+            "tyre_life_laps": r["tyre_life_laps"],
+        })
+
+    # Convert to list-of-stints per compound
+    result = {}
+    for compound, stints in by_compound.items():
+        result[compound] = list(stints.values())
+
+    return jsonify(result)
