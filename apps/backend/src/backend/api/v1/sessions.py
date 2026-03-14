@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from backend.extensions import engine
 
@@ -199,3 +199,96 @@ def race_results(session_key: int):
                 r["laps_down"] = 0
 
     return jsonify(results)
+
+
+# ── Championship standings via Jolpica-F1 (official data) ────────────────────
+
+@sessions_bp.get("/standings/drivers")
+def driver_standings():
+    """
+    Official driver championship standings via FastF1 → Jolpica-F1 API.
+    Uses FastF1's caching so repeat calls are instant.
+
+    Query param: ?year=2026 (default: current year)
+    """
+    import fastf1
+    from fastf1.ergast import Ergast
+    import os
+
+    year = request.args.get("year", 2026, type=int)
+
+    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    try:
+        fastf1.Cache.enable_cache(cache_dir)
+    except Exception:
+        pass
+
+    try:
+        ergast  = Ergast()
+        result  = ergast.get_driver_standings(season=year, result_type="raw")
+        # result is an ErgastRawResponse which behaves like a list of rounds
+        if not result:
+            return jsonify([])
+
+        latest_round_data = result[-1]   # most recent round's data
+        latest_round = latest_round_data.get("DriverStandings", [])
+        standings = []
+        for entry in latest_round:
+            driver = entry.get("Driver", {})
+            constructors = entry.get("Constructors", [{}])
+            team_name = constructors[0].get("name", "") if constructors else ""
+            standings.append({
+                "position":    entry.get("position"),
+                "points":      entry.get("points"),
+                "wins":        entry.get("wins"),
+                "code":        driver.get("code"),
+                "full_name":   f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip(),
+                "nationality": driver.get("nationality"),
+                "team_name":   team_name,
+            })
+        return jsonify({"year": year, "round": latest_round_data.get("round", 0), "standings": standings})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@sessions_bp.get("/standings/constructors")
+def constructor_standings():
+    """
+    Official constructor championship standings via FastF1 → Jolpica-F1 API.
+    Query param: ?year=2026
+    """
+    import fastf1
+    from fastf1.ergast import Ergast
+    import os
+
+    year = request.args.get("year", 2026, type=int)
+
+    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    try:
+        fastf1.Cache.enable_cache(cache_dir)
+    except Exception:
+        pass
+
+    try:
+        ergast  = Ergast()
+        result  = ergast.get_constructor_standings(season=year, result_type="raw")
+        if not result:
+            return jsonify([])
+
+        latest_round_data = result[-1]
+        latest_round = latest_round_data.get("ConstructorStandings", [])
+        standings = []
+        for entry in latest_round:
+            constructor = entry.get("Constructor", {})
+            standings.append({
+                "position":    entry.get("position"),
+                "points":      entry.get("points"),
+                "wins":        entry.get("wins"),
+                "team_name":   constructor.get("name"),
+                "nationality": constructor.get("nationality"),
+            })
+        return jsonify({"year": year, "round": latest_round_data.get("round", 0), "standings": standings})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
