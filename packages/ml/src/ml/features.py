@@ -100,18 +100,46 @@ def _build_weekend_features(
                 AND d.session_key  = l.session_key
             WHERE l.session_key   = :qk
               AND l.lap_time_ms   IS NOT NULL
-              AND l.is_accurate   = TRUE
+              
             ORDER BY l.driver_number, l.lap_time_ms ASC
         """), {"qk": quali_key}).mappings().all()
 
         race_results = conn.execute(text("""
-            SELECT DISTINCT ON (l.driver_number)
-                l.driver_number,
-                l.position AS finish_position
-            FROM lap_times l
-            WHERE l.session_key = :rk
-              AND l.position    IS NOT NULL
-            ORDER BY l.driver_number, l.lap_number DESC
+            WITH final_lap AS (
+                SELECT DISTINCT ON (l.driver_number)
+                    l.driver_number,
+                    l.lap_number   AS total_laps,
+                    l.position     AS live_pos
+                FROM lap_times l
+                WHERE l.session_key = :rk
+                ORDER BY l.driver_number, l.lap_number DESC
+            ),
+            race_time AS (
+                SELECT driver_number,
+                       SUM(lap_time_ms) AS total_ms
+                FROM lap_times
+                WHERE session_key    = :rk
+                  AND lap_time_ms    IS NOT NULL
+                  AND deleted        = FALSE
+                GROUP BY driver_number
+            ),
+            tie_breaker AS (
+                SELECT
+                    fl.driver_number,
+                    fl.live_pos,
+                    ROW_NUMBER() OVER (
+                        ORDER BY fl.total_laps DESC,
+                                 rt.total_ms   ASC NULLS LAST
+                    ) as calculated_pos
+                FROM final_lap fl
+                LEFT JOIN race_time rt ON rt.driver_number = fl.driver_number
+            )
+            SELECT
+                driver_number,
+                ROW_NUMBER() OVER (
+                    ORDER BY COALESCE(live_pos, calculated_pos) ASC
+                ) AS finish_position
+            FROM tie_breaker
         """), {"rk": race_key}).mappings().all()
 
     if not quali_laps or not race_results:

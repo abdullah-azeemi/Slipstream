@@ -24,7 +24,7 @@ def list_laps(session_key: int):
                 lt.lap_number, lt.lap_time_ms,
                 lt.s1_ms, lt.s2_ms, lt.s3_ms,
                 lt.compound, lt.tyre_life_laps,
-                lt.is_personal_best, lt.track_status, lt.deleted
+                lt.is_personal_best, lt.track_status, lt.position, lt.deleted
             FROM lap_times lt
             JOIN drivers d
                 ON d.driver_number = lt.driver_number

@@ -213,6 +213,7 @@ def load_laps(laps: list[dict], session_key: int) -> int:
                 'tyre_life_laps':   _clean_int(lap.get('tyre_life_laps')),
                 'is_personal_best': _clean_bool(lap.get('is_personal_best')),
                 'track_status':     _clean_str(lap.get('track_status')),
+                'position':         _clean_int(lap.get('position')),
                 'deleted':          _clean_bool(lap.get('deleted')),
                 'recorded_at':      now,
             }
@@ -221,13 +222,13 @@ def load_laps(laps: list[dict], session_key: int) -> int:
                     session_key, driver_number, lap_number,
                     lap_time_ms, s1_ms, s2_ms, s3_ms,
                     compound, tyre_life_laps,
-                    is_personal_best, track_status, deleted,
+                    is_personal_best, track_status, position, deleted,
                     recorded_at
                 ) VALUES (
                     :session_key, :driver_number, :lap_number,
                     :lap_time_ms, :s1_ms, :s2_ms, :s3_ms,
                     :compound, :tyre_life_laps,
-                    :is_personal_best, :track_status, :deleted,
+                    :is_personal_best, :track_status, :position, :deleted,
                     :recorded_at
                 )
             """), row)
