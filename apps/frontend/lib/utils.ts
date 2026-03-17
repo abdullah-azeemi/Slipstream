@@ -16,7 +16,7 @@ export function formatGap(ms: number | null | undefined): string {
 }
 
 /** Ensure hex colour has # prefix */
-export function teamColour(colour: string | null | undefined): string {
+export function teamColour(colour: string | null | undefined, teamName?: string | null): string {
   if (!colour) return '#666666'
   return colour.startsWith('#') ? colour : `#${colour}`
 }

@@ -53,14 +53,14 @@ export default function SpeedTrace({ sessionKey, drivers }: Props) {
   const H = 120
   const PAD = 8
 
-  const maxSpeed = Math.max(...traces.flatMap(t => t.samples.map(s => s.speed ?? 0)))
-  const minSpeed = Math.min(...traces.flatMap(t => t.samples.map(s => s.speed ?? maxSpeed)))
+  const maxSpeed = Math.max(...traces.flatMap(t => t.samples.map(s => s.speed_kmh ?? 0)))
+  const minSpeed = Math.min(...traces.flatMap(t => t.samples.map(s => s.speed_kmh ?? maxSpeed)))
 
   function buildPath(samples: TelemetrySample[]): string {
     if (samples.length === 0) return ''
     return samples.map((s, i) => {
       const x = PAD + (i / (samples.length - 1)) * (W - PAD * 2)
-      const y = H - PAD - ((( s.speed ?? minSpeed) - minSpeed) / (maxSpeed - minSpeed || 1)) * (H - PAD * 2)
+      const y = H - PAD - ((( s.speed_kmh ?? minSpeed) - minSpeed) / (maxSpeed - minSpeed || 1)) * (H - PAD * 2)
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
     }).join(' ')
   }
@@ -152,7 +152,7 @@ export default function SpeedTrace({ sessionKey, drivers }: Props) {
           {traces.map(t => {
             const path = t.samples.map((s, i) => {
               const x = PAD + (i / (t.samples.length - 1)) * (W - PAD * 2)
-              const y = 40 - PAD - ((s.throttle ?? 0) / 100) * (40 - PAD * 2)
+              const y = 40 - PAD - ((s.throttle_pct ?? 0) / 100) * (40 - PAD * 2)
               return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
             }).join(' ')
             return (

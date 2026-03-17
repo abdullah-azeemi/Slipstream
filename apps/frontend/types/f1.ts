@@ -5,10 +5,14 @@ export interface Session {
   year: number
   gp_name: string
   country: string | null
-  session_type: 'R' | 'Q' | 'FP1' | 'FP2' | 'FP3' | 'SS' | 'SQ'
+  session_type: 'R' | 'Q' | 'FP1' | 'FP2' | 'FP3' | 'SS' | 'SQ' | 'S'
   session_name: string
   date_start: string | null
   drivers?: Driver[]
+  track_temp_c?: number | null
+  air_temp_c?: number | null
+  humidity_pct?: number | null
+  rainfall?: boolean | null
 }
 
 export interface Driver {
@@ -92,6 +96,7 @@ export interface RacePosition {
 export interface TelemetrySample {
   speed_kmh:    number | null   // km/h
   throttle_pct: number | null   // 0–100
+  rpm:          number | null   // added
   brake:        boolean | null
   gear:         number | null   // 1–8
   drs:          number | null   // 0/8/10/12/14 — >8 means DRS open
@@ -99,6 +104,9 @@ export interface TelemetrySample {
   x_pos:        number | null   // track map X coordinate
   y_pos:        number | null   // track map Y coordinate
   distance_pct?: number         // computed by API: 0–100
+  // Compatibility aliases
+  speed?:       number | null
+  throttle?:    number | null
 }
 
 export interface ShapFactor {

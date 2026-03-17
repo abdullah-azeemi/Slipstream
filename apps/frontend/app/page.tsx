@@ -104,7 +104,7 @@ export default async function HomePage() {
     fetchStandings(currentYear),
   ])
 
-  const pole         = fastestLaps[0] ?? null
+  const pole         = (fastestLaps as any)?.laps?.[0] ?? null
   const circuitImage = getCircuitImage(latest?.gp_name ?? '')
   const maxDriverPts = standings.drivers[0]?.points ?? 1
   const maxConPts    = standings.constructors[0]?.points ?? 1

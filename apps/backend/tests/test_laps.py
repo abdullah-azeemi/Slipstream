@@ -38,17 +38,19 @@ def test_theoretical_best_is_sum_of_sectors(client, seed_session):
 
 
 def test_fastest_laps_ordered_by_time(client, seed_session):
-    data = client.get(
+    resp = client.get(
         f"/api/v1/sessions/{seed_session}/fastest"
     ).get_json()
+    data = resp["laps"]
     times = [row["lap_time_ms"] for row in data]
     assert times == sorted(times)
 
 
 def test_fastest_laps_one_per_driver(client, seed_session):
-    data = client.get(
+    resp = client.get(
         f"/api/v1/sessions/{seed_session}/fastest"
     ).get_json()
+    data = resp["laps"]
     driver_nums = [row["driver_number"] for row in data]
     # No duplicate drivers
     assert len(driver_nums) == len(set(driver_nums))

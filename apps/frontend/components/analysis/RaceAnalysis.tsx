@@ -86,8 +86,8 @@ type FastestLapRow = {
 type DriverInfo = {
   driver_number: number
   abbreviation: string
-  team_name: string
-  team_colour: string
+  team_name: string | null
+  team_colour: string | null
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

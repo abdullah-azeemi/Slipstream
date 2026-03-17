@@ -4,18 +4,115 @@ pytest configuration and shared fixtures.
 conftest.py is a special pytest file — fixtures defined here are
 automatically available to all test files without importing them.
 
-We use a separate test database so tests never touch your real data.
-Actually — for simplicity we use the same DB but wrap each test in a
-transaction that gets rolled back. This means tests are:
-  - Fast (no setup/teardown of tables)
-  - Isolated (each test sees a clean state)
-  - Safe (nothing persists after the test)
+The test suite creates its own tables in the connected database,
+seeds minimal data, and tears everything down afterwards.
 """
 import pytest
 from sqlalchemy import create_engine, text
 
 from backend import create_app
 from backend.config import settings
+
+
+# ── SQL to create all tables needed by tests ──────────────────────────────────
+# Mirrors the schema from migrations 0001 through 0009, but skips
+# TimescaleDB extensions / hypertable calls which aren't available in CI.
+
+_CREATE_TABLES = """
+CREATE TABLE IF NOT EXISTS sessions (
+    session_key     INTEGER PRIMARY KEY,
+    year            INTEGER NOT NULL,
+    gp_name         TEXT NOT NULL,
+    country         TEXT,
+    circuit_key     INTEGER,
+    session_type    TEXT NOT NULL,
+    session_name    TEXT NOT NULL,
+    date_start      TIMESTAMPTZ,
+    date_end        TIMESTAMPTZ,
+    track_temp_c    DOUBLE PRECISION,
+    air_temp_c      DOUBLE PRECISION,
+    humidity_pct    DOUBLE PRECISION,
+    rainfall        BOOLEAN,
+    wind_speed_ms   DOUBLE PRECISION,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS drivers (
+    driver_number   INTEGER NOT NULL,
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    full_name       TEXT NOT NULL,
+    abbreviation    TEXT NOT NULL,
+    team_name       TEXT,
+    team_colour     TEXT,
+    headshot_url    TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (driver_number, session_key)
+);
+
+CREATE TABLE IF NOT EXISTS lap_times (
+    id                  BIGSERIAL,
+    session_key         INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number       INTEGER NOT NULL,
+    lap_number          INTEGER NOT NULL,
+    lap_time_ms         DOUBLE PRECISION,
+    s1_ms               DOUBLE PRECISION,
+    s2_ms               DOUBLE PRECISION,
+    s3_ms               DOUBLE PRECISION,
+    compound            TEXT,
+    tyre_life_laps      INTEGER,
+    is_personal_best    BOOLEAN DEFAULT FALSE,
+    pit_in_time_ms      DOUBLE PRECISION,
+    pit_out_time_ms     DOUBLE PRECISION,
+    track_status        TEXT,
+    deleted             BOOLEAN DEFAULT FALSE,
+    recorded_at         TIMESTAMPTZ NOT NULL,
+    stint               INTEGER,
+    position            INTEGER,
+    fresh_tyre          BOOLEAN,
+    deleted_reason      TEXT,
+    is_accurate         BOOLEAN,
+    speed_i1            DOUBLE PRECISION,
+    speed_i2            DOUBLE PRECISION,
+    speed_fl            DOUBLE PRECISION,
+    speed_st            DOUBLE PRECISION,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS telemetry (
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number   INTEGER NOT NULL,
+    lap_number      INTEGER,
+    distance_m      DOUBLE PRECISION,
+    speed_kmh       DOUBLE PRECISION,
+    throttle_pct    DOUBLE PRECISION,
+    brake           BOOLEAN,
+    gear            INTEGER,
+    rpm             DOUBLE PRECISION,
+    drs             INTEGER,
+    x_pos           DOUBLE PRECISION,
+    y_pos           DOUBLE PRECISION,
+    recorded_at     TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS race_results (
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number   INTEGER NOT NULL,
+    position        INTEGER,
+    grid_position   INTEGER,
+    points          DOUBLE PRECISION,
+    status          TEXT,
+    fastest_lap     BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (session_key, driver_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lap_times_session_driver
+    ON lap_times (session_key, driver_number);
+CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
+    ON lap_times (driver_number, lap_number);
+CREATE INDEX IF NOT EXISTS idx_telemetry_session_driver
+    ON telemetry (session_key, driver_number);
+"""
 
 
 @pytest.fixture(scope="session")
@@ -44,8 +141,24 @@ def db_engine():
     return create_engine(settings.database_url)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _create_tables(db_engine):
+    """Create all tables before anything else runs, drop after all tests."""
+    with db_engine.begin() as conn:
+        conn.execute(text(_CREATE_TABLES))
+    yield
+    # Tear down tables after the full test suite finishes.
+    # Drop in reverse dependency order.
+    with db_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS race_results CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS telemetry CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS lap_times CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS drivers CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS sessions CASCADE;"))
+
+
 @pytest.fixture(scope="session")
-def seed_session(db_engine):
+def seed_session(db_engine, _create_tables):
     """
     Insert one minimal session into the DB for tests to use.
     scope="session" = runs once, shared across all tests.

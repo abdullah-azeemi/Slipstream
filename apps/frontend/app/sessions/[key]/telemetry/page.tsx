@@ -12,12 +12,12 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ── Session type helpers ──────────────────────────────────────────────────────
 
-function isRaceSession(type: string | null)     { return type === 'R' }
+function isRaceSession(type: string | null) { return type === 'R' }
 function isPracticeSession(type: string | null) { return type === 'FP1' || type === 'FP2' || type === 'FP3' }
 
 function sessionModeLabel(type: string | null): string {
   if (!type) return ''
-  if (isRaceSession(type))     return 'Race Analysis'
+  if (isRaceSession(type)) return 'Race Analysis'
   if (isPracticeSession(type)) return 'Practice Analysis'
   return 'Speed Traces'
 }
@@ -52,14 +52,14 @@ async function fetchTelemetryCompare(
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const CHART_BG    = '#0A0A0A'
-const AXIS_COLOR  = '#1E1E1E'
-const TEXT_DIM    = '#3F3F46'
-const TEXT_MID    = '#71717A'
-const RED_ACCENT  = '#E8002D'
-const GREEN_DRS   = '#22FF88'
+const CHART_BG = '#0A0A0A'
+const AXIS_COLOR = '#1E1E1E'
+const TEXT_DIM = '#3F3F46'
+const TEXT_MID = '#71717A'
+const RED_ACCENT = '#E8002D'
+const GREEN_DRS = '#22FF88'
 const BRAKE_COLOR = '#FF2D55'
-const CROSSHAIR   = 'rgba(255,255,255,0.12)'
+const CROSSHAIR = 'rgba(255,255,255,0.12)'
 
 // ── Interpolation ─────────────────────────────────────────────────────────────
 type Interp = {
@@ -69,31 +69,32 @@ type Interp = {
 }
 
 function interpolateSamples(samples: TelemetrySample[], points = 400): Interp {
-  if (!samples.length) return { dist:[], speed:[], throttle:[], gear:[], rpm:[], brake:[], drs:[], x:[], y:[] }
-  const sorted  = [...samples].sort((a, b) => a.distance_m - b.distance_m)
-  const minDist = sorted[0].distance_m
-  const maxDist = sorted[sorted.length - 1].distance_m
-  const step    = (maxDist - minDist) / (points - 1)
-  const dist    = Array.from({ length: points }, (_, i) => minDist + i * step)
+  if (!samples.length) return { dist: [], speed: [], throttle: [], gear: [], rpm: [], brake: [], drs: [], x: [], y: [] }
+  const sorted = [...samples].filter(s => s.distance_m != null).sort((a, b) => a.distance_m! - b.distance_m!)
+  if (!sorted.length) return { dist: [], speed: [], throttle: [], gear: [], rpm: [], brake: [], drs: [], x: [], y: [] }
+  const minDist = sorted[0].distance_m!
+  const maxDist = sorted[sorted.length - 1].distance_m!
+  const step = (maxDist - minDist) / (points - 1)
+  const dist = Array.from({ length: points }, (_, i) => minDist + i * step)
 
   function lerp(field: keyof TelemetrySample, d: number): number {
-    const idx = sorted.findIndex(s => s.distance_m >= d)
-    if (idx <= 0) return (sorted[0]?.[field] as number) ?? 0
+    const idx = sorted.findIndex(s => s.distance_m! >= d)
+    if (idx <= 0) return (sorted[0]?.[field] as any) ?? 0
     const a = sorted[idx - 1], b = sorted[idx]
-    const t = (d - a.distance_m) / ((b.distance_m - a.distance_m) || 1)
-    return ((a[field] as number) ?? 0) * (1 - t) + ((b[field] as number) ?? 0) * t
+    const t = (d - a.distance_m!) / ((b.distance_m! - a.distance_m!) || 1)
+    return (((a[field] as any) ?? 0) * (1 - t) + ((b[field] as any) ?? 0) * t) as number
   }
 
   return {
     dist,
-    speed:    dist.map(d => lerp('speed_kmh', d)),
+    speed: dist.map(d => lerp('speed_kmh', d)),
     throttle: dist.map(d => lerp('throttle_pct', d)),
-    gear:     dist.map(d => Math.round(lerp('gear', d))),
-    rpm:      dist.map(d => lerp('rpm', d)),
-    brake:    dist.map(d => lerp('brake' as any, d) > 0.5),
-    drs:      dist.map(d => lerp('drs', d)),
-    x:        dist.map(d => lerp('x_pos' as any, d)),
-    y:        dist.map(d => lerp('y_pos' as any, d)),
+    gear: dist.map(d => Math.round(lerp('gear', d))),
+    rpm: dist.map(d => lerp('rpm', d)),
+    brake: dist.map(d => lerp('brake' as any, d) > 0.5),
+    drs: dist.map(d => lerp('drs', d)),
+    x: dist.map(d => lerp('x_pos' as any, d)),
+    y: dist.map(d => lerp('y_pos' as any, d)),
   }
 }
 
@@ -102,8 +103,8 @@ const PAD = { top: 10, right: 10, bottom: 26, left: 48 }
 
 function chartCoords(W: number, H: number) {
   return {
-    cW:  W - PAD.left - PAD.right,
-    cH:  H - PAD.top  - PAD.bottom,
+    cW: W - PAD.left - PAD.right,
+    cH: H - PAD.top - PAD.bottom,
     toX: (nx: number) => PAD.left + nx * (W - PAD.left - PAD.right),
     toY: (ny: number, cH: number) => PAD.top + cH - ny * cH,
   }
@@ -125,7 +126,7 @@ function drawGridAndAxes(
     ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
     const val = yMin + (i / gridCount) * (yMax - yMin)
     ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-    ctx.fillText(isRpm ? `${(val/1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 6, y + 3)
+    ctx.fillText(isRpm ? `${(val / 1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 6, y + 3)
   }
   sectorLines.forEach((nx, si) => {
     const sx = PAD.left + nx * cW
@@ -138,7 +139,7 @@ function drawGridAndAxes(
   ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'center'
   for (let i = 0; i <= 4; i++) {
     const nx = i / 4
-    const x  = PAD.left + nx * cW
+    const x = PAD.left + nx * cW
     ctx.fillText(`${(nx * 100).toFixed(0)}%`, x, PAD.top + cH + 16)
   }
 }
@@ -150,7 +151,7 @@ function drawLine(ctx: CanvasRenderingContext2D, vals: number[], colour: string,
     const nx = i / (vals.length - 1)
     const ny = (v - yMin) / (yMax - yMin)
     const cx = PAD.left + nx * cW
-    const cy = PAD.top  + cH - ny * cH
+    const cy = PAD.top + cH - ny * cH
     i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
   })
   ctx.stroke()
@@ -168,10 +169,10 @@ function drawDots(ctx: CanvasRenderingContext2D, nx: number, W: number, H: numbe
   const cx = PAD.left + nx * cW
   driverData.forEach(({ interp, colour }) => {
     const vals = (interp as any)[field] as number[]
-    const idx  = Math.round(nx * (vals.length - 1))
-    const v    = vals[idx] ?? 0
-    const ny   = (v - yMin) / (yMax - yMin)
-    const cy   = PAD.top + cH - ny * cH
+    const idx = Math.round(nx * (vals.length - 1))
+    const v = vals[idx] ?? 0
+    const ny = (v - yMin) / (yMax - yMin)
+    const cy = PAD.top + cH - ny * cH
     ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2)
     ctx.fillStyle = colour; ctx.fill()
     ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
@@ -182,10 +183,10 @@ type DriverRenderData = { interp: Interp; colour: string; abbr: string }
 
 // ── Chart configs (qualifying mode) ──────────────────────────────────────────
 const CHARTS = [
-  { label: 'SPEED',    unit: 'km/h', field: 'speed',    yMin: 60,   yMax: 360,   height: 200, gridCount: 6, isRpm: false },
-  { label: 'THROTTLE', unit: '%',    field: 'throttle', yMin: 0,    yMax: 100,   height: 120, gridCount: 4, isRpm: false },
-  { label: 'GEAR',     unit: '1–8',  field: 'gear',     yMin: 1,    yMax: 8,     height: 100, gridCount: 7, isRpm: false },
-  { label: 'RPM',      unit: 'rpm',  field: 'rpm',      yMin: 4000, yMax: 13000, height: 130, gridCount: 5, isRpm: true  },
+  { label: 'SPEED', unit: 'km/h', field: 'speed', yMin: 60, yMax: 360, height: 200, gridCount: 6, isRpm: false },
+  { label: 'THROTTLE', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 120, gridCount: 4, isRpm: false },
+  { label: 'GEAR', unit: '1–8', field: 'gear', yMin: 1, yMax: 8, height: 100, gridCount: 7, isRpm: false },
+  { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 4000, yMax: 13000, height: 130, gridCount: 5, isRpm: true },
 ]
 
 type DriverSectorTimes = {
@@ -198,26 +199,26 @@ type DriverSectorTimes = {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TelemetryPage({ params }: { params: Promise<{ key: string }> }) {
-  const { key }    = use(params)
+  const { key } = use(params)
   const sessionKey = parseInt(key)
 
-  const [drivers,      setDrivers]      = useState<Driver[]>([])
-  const [selected,     setSelected]     = useState<number[]>([])
-  const [telData,      setTelData]      = useState<Map<number, Interp>>(new Map())
-  const [tooltipNx,    setTooltipNx]    = useState<number | null>(null)
-  const [tooltipData,  setTooltipData]  = useState<{ dist: number; values: any[] } | null>(null)
-  const [loading,      setLoading]      = useState(false)
-  const [sessionYear,  setSessionYear]  = useState<number | null>(null)
-  const [sessionType,  setSessionType]  = useState<string | null>(null)
-  const [sectorTimes,  setSectorTimes]  = useState<Map<number, DriverSectorTimes>>(new Map())
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [selected, setSelected] = useState<number[]>([])
+  const [telData, setTelData] = useState<Map<number, Interp>>(new Map())
+  const [tooltipNx, setTooltipNx] = useState<number | null>(null)
+  const [tooltipData, setTooltipData] = useState<{ dist: number; values: any[] } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [sessionYear, setSessionYear] = useState<number | null>(null)
+  const [sessionType, setSessionType] = useState<string | null>(null)
+  const [sectorTimes, setSectorTimes] = useState<Map<number, DriverSectorTimes>>(new Map())
   const [telLapNumbers, setTelLapNumbers] = useState<Map<number, number>>(new Map())
 
   const is2026 = sessionYear === 2026
 
-  const chartRefs    = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
-  const deltaRef     = useRef<HTMLCanvasElement | null>(null)
-  const drsRef       = useRef<HTMLCanvasElement | null>(null)
-  const trackRef     = useRef<HTMLCanvasElement | null>(null)
+  const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
+  const deltaRef = useRef<HTMLCanvasElement | null>(null)
+  const drsRef = useRef<HTMLCanvasElement | null>(null)
+  const trackRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   // Load session metadata + drivers
@@ -225,7 +226,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     api.sessions.get(sessionKey).then(s => {
       setSessionYear(s.year)
       setSessionType(s.session_type ?? null)
-    }).catch(() => {})
+    }).catch(() => { })
 
     api.drivers.list(sessionKey).then(d => {
       setDrivers(d)
@@ -259,19 +260,19 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     if (!selected.length || !telLapNumbers.size) return
     const fetchAll = selected.map(async (driverNum) => {
       try {
-        const laps   = await api.laps.list(sessionKey, driverNum)
+        const laps = await api.laps.list(sessionKey, driverNum)
         const telLap = telLapNumbers.get(driverNum)
         const matched = laps.find(l => l.lap_number === telLap)
           ?? laps.reduce((best, l) =>
             (l.lap_time_ms ?? Infinity) < (best.lap_time_ms ?? Infinity) ? l : best
-          , laps[0])
+            , laps[0])
         if (!matched) return null
         return {
           driverNum,
           times: {
-            s1_ms:      matched.s1_ms      ?? null,
-            s2_ms:      matched.s2_ms      ?? null,
-            s3_ms:      matched.s3_ms      ?? null,
+            s1_ms: matched.s1_ms ?? null,
+            s2_ms: matched.s2_ms ?? null,
+            s3_ms: matched.s3_ms ?? null,
             lap_number: matched.lap_number,
           } as DriverSectorTimes,
         }
@@ -288,13 +289,13 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const driverData: DriverRenderData[] = selected
     .map(dn => {
       const interp = telData.get(dn)
-      const d      = drivers.find(x => x.driver_number === dn)
+      const d = drivers.find(x => x.driver_number === dn)
       if (!interp || !d) return null
       return { interp, colour: teamColour(d.team_colour, d.team_name), abbr: d.abbreviation }
     })
     .filter(Boolean) as DriverRenderData[]
 
-  const sectorLines = [1/3, 2/3]
+  const sectorLines = [1 / 3, 2 / 3]
 
   // Render qualifying canvases
   useEffect(() => {
@@ -334,19 +335,19 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     if (deltaRef.current && driverData.length >= 2) {
       const canvas = deltaRef.current
       canvas.width = W; canvas.height = 120
-      const ctx  = canvas.getContext('2d')!
-      const a    = driverData[0].interp.speed
-      const b    = driverData[1].interp.speed
-      const n    = Math.min(a.length, b.length)
-      const deltas  = Array.from({ length: n }, (_, i) => a[i] - b[i])
-      const maxD    = Math.max(...deltas.map(Math.abs), 15)
+      const ctx = canvas.getContext('2d')!
+      const a = driverData[0].interp.speed
+      const b = driverData[1].interp.speed
+      const n = Math.min(a.length, b.length)
+      const deltas = Array.from({ length: n }, (_, i) => a[i] - b[i])
+      const maxD = Math.max(...deltas.map(Math.abs), 15)
       const { cW, cH } = chartCoords(W, 120)
-      const midY   = PAD.top + cH / 2
+      const midY = PAD.top + cH / 2
       ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, 120)
       ctx.beginPath(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, midY); ctx.lineTo(PAD.left + cW, midY); ctx.stroke()
       for (const m of [-1, -0.5, 0.5, 1]) {
-        const y  = PAD.top + cH / 2 - m * cH / 2
+        const y = PAD.top + cH / 2 - m * cH / 2
         const lv = (m * maxD).toFixed(0)
         ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
         ctx.fillText(lv, PAD.left - 6, y + 3)
@@ -356,18 +357,18 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       ctx.beginPath()
       ctx.moveTo(PAD.left, midY)
       deltas.forEach((d, i) => {
-        ctx.lineTo(PAD.left + (i/(n-1)) * cW, midY - (d/maxD) * (cH/2))
+        ctx.lineTo(PAD.left + (i / (n - 1)) * cW, midY - (d / maxD) * (cH / 2))
       })
       ctx.lineTo(PAD.left + cW, midY); ctx.closePath()
       const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
-      grad.addColorStop(0,   driverData[0].colour + '44')
+      grad.addColorStop(0, driverData[0].colour + '44')
       grad.addColorStop(0.5, '#0A0A0A')
-      grad.addColorStop(1,   driverData[1].colour + '44')
+      grad.addColorStop(1, driverData[1].colour + '44')
       ctx.fillStyle = grad; ctx.fill()
       ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
       deltas.forEach((d, i) => {
-        const cx = PAD.left + (i/(n-1)) * cW
-        const cy = midY - (d/maxD) * (cH/2)
+        const cx = PAD.left + (i / (n - 1)) * cW
+        const cy = midY - (d / maxD) * (cH / 2)
         i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
       })
       ctx.stroke()
@@ -376,26 +377,26 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       ctx.fillStyle = driverData[1].colour + 'CC'
       ctx.fillText(`▼ ${driverData[1].abbr} faster`, PAD.left + 6, PAD.top + cH - 6)
       if (tooltipNx !== null) {
-        const cx  = PAD.left + tooltipNx * cW
-        const idx = Math.round(tooltipNx * (n-1))
-        const d   = deltas[idx] ?? 0
-        const cy  = midY - (d/maxD) * (cH/2)
+        const cx = PAD.left + tooltipNx * cW
+        const idx = Math.round(tooltipNx * (n - 1))
+        const d = deltas[idx] ?? 0
+        const cy = midY - (d / maxD) * (cH / 2)
         ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
         ctx.moveTo(cx, PAD.top); ctx.lineTo(cx, PAD.top + cH); ctx.stroke()
-        ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2)
+        ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2)
         ctx.fillStyle = d >= 0 ? driverData[0].colour : driverData[1].colour
         ctx.fill(); ctx.strokeStyle = '#0A0A0A'; ctx.lineWidth = 1.5; ctx.stroke()
         const label = `${d >= 0 ? '+' : ''}${d.toFixed(1)} km/h`
         ctx.fillStyle = '#fff'; ctx.font = 'bold 11px JetBrains Mono, monospace'
-        ctx.textAlign = cx > PAD.left + cW/2 ? 'right' : 'left'
-        ctx.fillText(label, cx + (cx > PAD.left + cW/2 ? -10 : 10), PAD.top + 22)
+        ctx.textAlign = cx > PAD.left + cW / 2 ? 'right' : 'left'
+        ctx.fillText(label, cx + (cx > PAD.left + cW / 2 ? -10 : 10), PAD.top + 22)
       }
     }
 
     // DRS chart
     if (drsRef.current) {
       const canvas = drsRef.current
-      const rowH   = 20
+      const rowH = 20
       const totalH = driverData.length * (rowH + 6) + PAD.top + PAD.bottom
       canvas.width = W; canvas.height = totalH
       const ctx = canvas.getContext('2d')!
@@ -404,7 +405,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       driverData.forEach(({ interp, colour, abbr }, di) => {
         const y = PAD.top + di * (rowH + 6)
         ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-        ctx.fillText(abbr, PAD.left - 6, y + rowH/2 + 4)
+        ctx.fillText(abbr, PAD.left - 6, y + rowH / 2 + 4)
         ctx.fillStyle = '#1A1A1A'
         ctx.beginPath(); ctx.roundRect?.(PAD.left, y, cW, rowH, 3); ctx.fill()
         const n = interp.drs.length
@@ -414,14 +415,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           if (open && !inDrs) { inDrs = true; ds = i }
           if (!open && inDrs) {
             inDrs = false
-            const x1 = PAD.left + (ds/(n-1)) * cW
-            const x2 = PAD.left + (i/(n-1)) * cW
+            const x1 = PAD.left + (ds / (n - 1)) * cW
+            const x2 = PAD.left + (i / (n - 1)) * cW
             ctx.fillStyle = GREEN_DRS
-            ctx.beginPath(); ctx.roundRect?.(x1, y, x2-x1, rowH, 2); ctx.fill()
+            ctx.beginPath(); ctx.roundRect?.(x1, y, x2 - x1, rowH, 2); ctx.fill()
           }
         })
         if (inDrs) {
-          const x1 = PAD.left + (ds/(n-1)) * cW
+          const x1 = PAD.left + (ds / (n - 1)) * cW
           ctx.fillStyle = GREEN_DRS
           ctx.beginPath(); ctx.roundRect?.(x1, y, cW - (x1 - PAD.left), rowH, 2); ctx.fill()
         }
@@ -444,11 +445,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const xMin = Math.min(...xs), xMax = Math.max(...xs)
       const yMin = Math.min(...ys), yMax = Math.max(...ys)
       const mapPad = 48
-      const scale = Math.min((W - mapPad*2) / (xMax - xMin || 1), (340 - mapPad*2) / (yMax - yMin || 1)) * 0.9
-      const offX  = (W   - (xMax - xMin) * scale) / 2 - xMin * scale
-      const offY  = (340 - (yMax - yMin) * scale) / 2 - yMin * scale
-      const tx    = (x: number) => x * scale + offX
-      const ty    = (y: number) => y * scale + offY
+      const scale = Math.min((W - mapPad * 2) / (xMax - xMin || 1), (340 - mapPad * 2) / (yMax - yMin || 1)) * 0.9
+      const offX = (W - (xMax - xMin) * scale) / 2 - xMin * scale
+      const offY = (340 - (yMax - yMin) * scale) / 2 - yMin * scale
+      const tx = (x: number) => x * scale + offX
+      const ty = (y: number) => y * scale + offY
       ctx.beginPath()
       xs.forEach((x, i) => i === 0 ? ctx.moveTo(tx(x), ty(ys[i])) : ctx.lineTo(tx(x), ty(ys[i])))
       ctx.closePath()
@@ -490,29 +491,29 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           ctx.fill(); ctx.shadowBlur = 0
         })
       }
-      ctx.beginPath(); ctx.arc(tx(xs[0]), ty(ys[0]), 5, 0, Math.PI*2)
+      ctx.beginPath(); ctx.arc(tx(xs[0]), ty(ys[0]), 5, 0, Math.PI * 2)
       ctx.fillStyle = '#fff'; ctx.fill()
     }
   }, [driverData.map(d => d.abbr).join(','), tooltipNx, telData, sessionType])
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const cW   = rect.width - PAD.left - PAD.right
-    const nx   = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD.left) / cW))
+    const cW = rect.width - PAD.left - PAD.right
+    const nx = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD.left) / cW))
     setTooltipNx(nx)
     if (!driverData.length) return
-    const n   = driverData[0].interp.dist.length
+    const n = driverData[0].interp.dist.length
     const idx = Math.round(nx * (n - 1))
     setTooltipData({
-      dist:   driverData[0].interp.dist[idx],
+      dist: driverData[0].interp.dist[idx],
       values: driverData.map(d => ({
-        abbr:     d.abbr,
-        colour:   d.colour,
-        speed:    d.interp.speed[idx]    ?? 0,
+        abbr: d.abbr,
+        colour: d.colour,
+        speed: d.interp.speed[idx] ?? 0,
         throttle: d.interp.throttle[idx] ?? 0,
-        gear:     d.interp.gear[idx]     ?? 0,
-        rpm:      d.interp.rpm[idx]      ?? 0,
-        brake:    d.interp.brake[idx]    ?? false,
+        gear: d.interp.gear[idx] ?? 0,
+        rpm: d.interp.rpm[idx] ?? 0,
+        brake: d.interp.brake[idx] ?? false,
       })),
     })
   }, [driverData])
@@ -530,9 +531,9 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   const driverList = drivers.map(d => ({
     driver_number: d.driver_number,
-    abbreviation:  d.abbreviation,
-    team_name:     d.team_name,
-    team_colour:   d.team_colour,
+    abbreviation: d.abbreviation,
+    team_name: d.team_name ?? '',
+    team_colour: d.team_colour ?? '666666',
   }))
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -552,8 +553,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           {isRaceSession(sessionType)
             ? 'Lap time evolution · position changes · stint pace'
             : isPracticeSession(sessionType)
-            ? 'Long run pace · tyre degradation rate'
-            : 'Fastest lap telemetry — distance-aligned overlay'}
+              ? 'Long run pace · tyre degradation rate'
+              : 'Fastest lap telemetry — distance-aligned overlay'}
         </p>
       </div>
 
@@ -580,17 +581,17 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {drivers.map(d => {
-                const isSel  = selected.includes(d.driver_number)
+                const isSel = selected.includes(d.driver_number)
                 const colour = teamColour(d.team_colour, d.team_name)
                 return (
                   <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
                     display: 'flex', alignItems: 'center', gap: '5px',
                     padding: '4px 10px', borderRadius: '20px', cursor: 'pointer',
-                    border:      isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
-                    background:  isSel ? `${colour}18` : 'transparent',
-                    color:       isSel ? '#fff' : '#52525B',
-                    fontSize:    '12px', fontWeight: isSel ? 700 : 400,
-                    fontFamily:  'monospace', transition: 'all 0.12s',
+                    border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
+                    background: isSel ? `${colour}18` : 'transparent',
+                    color: isSel ? '#fff' : '#52525B',
+                    fontSize: '12px', fontWeight: isSel ? 700 : 400,
+                    fontFamily: 'monospace', transition: 'all 0.12s',
                   }}>
                     <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
                     {d.abbreviation}
@@ -636,7 +637,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         <div style={{ fontSize: '10px', color: v.colour, fontFamily: 'monospace', fontWeight: 700 }}>{v.abbr}</div>
                         <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>{v.speed.toFixed(0)} km/h</div>
                         <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A' }}>
-                          G{v.gear} · {v.throttle.toFixed(0)}% thr · {(v.rpm/1000).toFixed(1)}k
+                          G{v.gear} · {v.throttle.toFixed(0)}% thr · {(v.rpm / 1000).toFixed(1)}k
                           {v.brake && <span style={{ color: BRAKE_COLOR, marginLeft: '6px', fontWeight: 700 }}>BRAKE</span>}
                         </div>
                       </div>
@@ -705,23 +706,23 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>fastest telemetry lap · from timing data</span>
                   </div>
                   {(() => {
-                    const SECTOR_KEYS    = ['s1_ms', 's2_ms', 's3_ms'] as const
-                    const SECTOR_LABELS  = ['S1', 'S2', 'S3']
+                    const SECTOR_KEYS = ['s1_ms', 's2_ms', 's3_ms'] as const
+                    const SECTOR_LABELS = ['S1', 'S2', 'S3']
                     const SECTOR_COLOURS = ['#E8002D', '#FFD700', '#B347FF']
-                    const hasSectorData  = sectorTimes.size > 0
+                    const hasSectorData = sectorTimes.size > 0
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {SECTOR_KEYS.map((key, si) => {
                           const label = SECTOR_LABELS[si]; const sCol = SECTOR_COLOURS[si]
                           const driverSectors = driverData.map(d => {
-                            const dn    = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
+                            const dn = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
                             const times = dn !== undefined ? sectorTimes.get(dn) : undefined
                             return { abbr: d.abbr, colour: d.colour, ms: times?.[key] ?? null }
                           })
-                          const validMs   = driverSectors.map(d => d.ms).filter((v): v is number => v !== null)
+                          const validMs = driverSectors.map(d => d.ms).filter((v): v is number => v !== null)
                           const fastestMs = validMs.length ? Math.min(...validMs) : null
                           const slowestMs = validMs.length ? Math.max(...validMs) : null
-                          const deltaMs   = fastestMs !== null && slowestMs !== null ? slowestMs - fastestMs : null
+                          const deltaMs = fastestMs !== null && slowestMs !== null ? slowestMs - fastestMs : null
                           return (
                             <div key={si}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
@@ -736,7 +737,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '14px' }}>
                                 {driverSectors.map(({ abbr, colour, ms }) => {
                                   const isFastest = ms !== null && ms === fastestMs
-                                  const barPct    = ms !== null && fastestMs !== null && slowestMs !== null
+                                  const barPct = ms !== null && fastestMs !== null && slowestMs !== null
                                     ? 60 + ((slowestMs - ms) / ((slowestMs - fastestMs) || 1)) * 40 : 60
                                   return (
                                     <div key={abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -178,9 +178,13 @@ def driver_laps(session_key: int, driver_number: int):
             .first()
         )
 
+    tb = dict(best) if best else None
+    if tb and tb.get("best_s1") and tb.get("best_s2") and tb.get("best_s3"):
+        tb["theoretical_best_ms"] = tb["best_s1"] + tb["best_s2"] + tb["best_s3"]
+
     return jsonify(
         {
             "laps": [dict(r) for r in rows],
-            "theoretical_best": dict(best) if best else None,
+            "theoretical_best": tb,
         }
     )
