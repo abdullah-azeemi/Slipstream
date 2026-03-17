@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 import pandas as pd
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 
 def _td_to_ms(val) -> Optional[float]:

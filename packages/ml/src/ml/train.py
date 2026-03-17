@@ -129,7 +129,7 @@ def main():
 
         # Cross validation
         cv_metrics = cross_validate(df)
-        print(f"\n=== Cross Validation Results ===")
+        print("\n=== Cross Validation Results ===")
         for year in sorted(df['year'].unique()):
             print(f"  {int(year)}: held out as test set")
         print(f"\n  MAE:            {cv_metrics['mae_mean']} ± {cv_metrics['mae_std']} positions")

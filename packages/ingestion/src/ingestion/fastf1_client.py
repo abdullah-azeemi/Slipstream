@@ -5,7 +5,6 @@ FastF1 client — fetches and normalises session data.
 from __future__ import annotations
 import warnings
 import fastf1
-import pandas as pd
 import structlog
 
 warnings.filterwarnings("ignore")

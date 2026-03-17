@@ -133,13 +133,11 @@ def telemetry_stats(session_key: int):
     Used by the corner analysis and stats panels.
     """
     drivers_param = request.args.get("drivers", "")
-    driver_filter = ""
     params: dict = {"sk": session_key}
 
     if drivers_param:
         try:
             dns = [int(d.strip()) for d in drivers_param.split(",")]
-            driver_filter = "AND t.driver_number = ANY(:dns)"
             params["dns"] = dns
         except ValueError:
             return {"error": "Driver numbers must be integers"}, 400

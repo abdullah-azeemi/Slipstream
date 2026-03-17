@@ -10,7 +10,6 @@ noise added to simulate race uncertainty (crashes, strategy, weather).
 from __future__ import annotations
 import pickle
 import numpy as np
-import pandas as pd
 from pathlib import Path
 import structlog
 

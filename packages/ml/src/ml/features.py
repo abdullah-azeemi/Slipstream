@@ -6,7 +6,6 @@ not Spanish 2024 R. Each row = one driver at one race weekend.
 """
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 from sqlalchemy import create_engine, text
 from ml.config import settings
 import structlog

@@ -8,7 +8,6 @@ Importing the app creates circular import problems.
 Usage in blueprints:
     from backend.extensions import engine
 """
-from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 # Placeholder — replaced with real engine in create_app()

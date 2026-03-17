@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from datetime import datetime, timezone
 
 import fastf1
