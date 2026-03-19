@@ -20,7 +20,7 @@ def create_app() -> Flask:
     CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
 
     extensions.engine = create_engine(
-        settings.database_url,
+        settings.db_url,
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,
