@@ -7,7 +7,7 @@ import TyreChip from '@/components/ui/TyreChip'
 import Link from 'next/link'
 import { ArrowLeft, Database, Activity, GitBranch } from 'lucide-react'
 
-const BASE = 'http://localhost:8000'
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

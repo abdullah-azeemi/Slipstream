@@ -32,7 +32,7 @@ export default function SessionsPage() {
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/sessions')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/api/v1/sessions`)
       .then(r => r.json())
       .then((data: Session[]) => {
         setSessions(data)
