@@ -11,5 +11,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @property
+    def db_url(self) -> str:
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgresql://") and "+psycopg" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
 
 settings = Settings()

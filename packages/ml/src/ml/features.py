@@ -33,7 +33,7 @@ HIGH_DF_CIRCUITS = {'Monaco Grand Prix', 'Hungarian Grand Prix'}
 
 
 def get_engine():
-    return create_engine(settings.database_url)
+    return create_engine(settings.db_url)
 
 
 def build_feature_matrix() -> pd.DataFrame:
