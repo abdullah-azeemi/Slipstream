@@ -17,8 +17,8 @@ def create_app() -> Flask:
     app.config["TESTING"]    = settings.testing
 
     # Allow Next.js dev server to call the API
-    CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
-
+    CORS(app, origins="*")
+    
     extensions.engine = create_engine(
         settings.db_url,
         pool_size=10,
