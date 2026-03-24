@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import tempfile
 from pathlib import Path
 
 import mlflow
@@ -176,7 +177,6 @@ def main():
                     mlflow.log_metric(f"importance_{feat}", imp)
 
                 # Log full importance as artifact
-                import tempfile, os
                 tmp = tempfile.mktemp(suffix=".json")
                 with open(tmp, "w") as f:
                     json.dump(importances_sorted, f, indent=2)
