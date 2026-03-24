@@ -2,8 +2,8 @@ import { api } from '@/lib/api'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, teamColour, sessionTypeLabel } from '@/lib/utils'
 import Link from 'next/link'
-import { ArrowRight, MapPin, Thermometer, Wind, Droplets, Clock, Trophy, Zap, Flag } from 'lucide-react'
-import NextRaceCard from '@/components/schedule/NextRaceCard'
+import { MapPin, Thermometer, Wind, Droplets, Clock, Trophy, Zap, Flag } from 'lucide-react'
+import CountdownTimer from '@/components/schedule/CountdownTimer'
 
 export const revalidate = 60
 
@@ -107,10 +107,23 @@ export default async function HomePage() {
     fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 60 } }).then(r => r.json()).catch(() => null),
   ])
 
-  const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
-  const circuitImage = getCircuitImage(latest?.gp_name ?? '')
-  const maxDriverPts = standings.drivers[0]?.points ?? 1
   const maxConPts = standings.constructors[0]?.points ?? 1
+  const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
+  const maxDriverPts = standings.drivers[0]?.points ?? 1
+
+  // Use nextRace as the Hero if available, otherwise latest session
+  const heroRace = nextRace?.race
+  const heroSession = nextRace?.next_session
+  const heroImage = getCircuitImage(heroRace?.event_name ?? latest?.gp_name ?? '')
+
+  function formatDateToDayMonthYear(dateString: string) {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    return `${String(date.getUTCDate()).padStart(2, '0')} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+  }
+
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -122,100 +135,114 @@ export default async function HomePage() {
         <span style={{ color: '#A1A1AA' }}>Home</span>
       </div>
 
-      {nextRace && <NextRaceCard data={nextRace} />}
-
       {/* ── Hero + Track Conditions ────────────────────────────────── */}
-      {latest && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px', alignItems: 'stretch' }}>
 
-          {/* Hero */}
-          <div style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', height: '320px' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={circuitImage} alt={latest.gp_name}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.1) 100%)' }} />
-            <div style={{ position: 'absolute', inset: 0, padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {/* Hero */}
+        <div style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', height: '360px' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={heroImage} alt={heroRace?.event_name || latest?.gp_name}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.2) 100%)' }} />
+
+          {/* Top-left Indicator */}
+          <div style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {heroRace ? (
+              <span style={{ fontSize: '11px', fontWeight: 600, color: '#A1A1AA', letterSpacing: '0.08em', fontFamily: 'monospace', textTransform: 'uppercase' }}>
+                NEXT UP — ROUND {heroRace.round}
+              </span>
+            ) : (
+              latest && (
                 <span style={{ background: '#E8002D', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', padding: '4px 10px', borderRadius: '4px', fontFamily: 'monospace' }}>
                   {sessionTypeLabel(latest.session_type).toUpperCase()}
                 </span>
-                <span style={{ background: 'rgba(0,0,0,0.5)', color: '#A1A1AA', fontSize: '10px', fontFamily: 'monospace', padding: '4px 8px', borderRadius: '4px' }}>
-                  {latest.year}
-                </span>
-              </div>
-              <div>
-                <p style={{ color: '#A1A1AA', fontSize: '11px', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '4px', textTransform: 'uppercase' }}>
-                  {latest.year} Season — Round {standings.round}
-                </p>
-                <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '48px', color: '#fff', lineHeight: 1, marginBottom: '8px' }}>
-                  {latest.gp_name.replace(' Grand Prix', '')} GP
-                </h1>
-                {latest.country && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#A1A1AA', fontSize: '13px', marginBottom: '20px' }}>
-                    <MapPin size={13} />
-                    {latest.country}
-                  </div>
-                )}
-                <Link href={`/sessions/${latest.session_key}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#E8002D', color: '#fff', fontSize: '14px', fontWeight: 700, padding: '12px 20px', borderRadius: '10px', textDecoration: 'none' }}>
-                  View Session <ArrowRight size={15} />
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Track conditions — real data from DB */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Track Conditions</span>
-              {/* Live dot only if data exists */}
-              {latest.track_temp_c && (
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80' }} />
-              )}
-            </div>
-
-            {[
-              {
-                Icon: Thermometer,
-                label: 'Track Temp',
-                value: latest.track_temp_c != null ? `${latest.track_temp_c}°C` : '—',
-                accent: '#f97316',
-              },
-              {
-                Icon: Wind,
-                label: 'Air Temp',
-                value: latest.air_temp_c != null ? `${latest.air_temp_c}°C` : '—',
-                accent: '#60a5fa',
-              },
-              {
-                Icon: Droplets,
-                label: 'Humidity',
-                value: latest.humidity_pct != null ? `${latest.humidity_pct}%` : '—',
-                accent: '#34d399',
-              },
-            ].map(({ Icon, label, value, accent }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#1A1A1A', borderRadius: '12px', padding: '14px 16px', border: '1px solid #2A2A2A' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: `${accent}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon size={18} style={{ color: accent }} />
-                  </div>
-                  <span style={{ color: '#A1A1AA', fontSize: '14px' }}>{label}</span>
-                </div>
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: value === '—' ? '#3F3F46' : '#fff', fontSize: '18px' }}>{value}</span>
-              </div>
-            ))}
-
-            {/* Rainfall indicator */}
-            {latest.rainfall != null && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: latest.rainfall ? '#3671C622' : '#1A1A1A', borderRadius: '10px', border: `1px solid ${latest.rainfall ? '#3671C644' : '#2A2A2A'}` }}>
-                <span style={{ fontSize: '16px' }}>{latest.rainfall ? '🌧' : '☀️'}</span>
-                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: latest.rainfall ? '#60a5fa' : '#71717A' }}>
-                  {latest.rainfall ? 'Wet conditions' : 'Dry conditions'}
-                </span>
-              </div>
+              )
             )}
           </div>
+
+          {/* Bottom Content Layer */}
+          <div style={{ position: 'absolute', inset: 0, padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  {heroRace?.flag && <span style={{ fontSize: '24px', lineHeight: 1 }}>{heroRace.flag}</span>}
+                  <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1, margin: 0, textTransform: 'uppercase' }}>
+                    {heroRace ? heroRace.event_name : (latest?.gp_name?.replace(' Grand Prix', '') + ' GP')}
+                  </h1>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#D4D4D8', fontSize: '11px', marginBottom: '20px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><MapPin size={14} /> {heroRace ? heroRace.circuit : latest?.country}</span>
+                  <span>·</span>
+                  <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : latest?.year}</span>
+                </div>
+
+
+              </div>
+
+              {/* Timer in bottom right */}
+              {heroSession?.date_utc && (
+                <div style={{ marginBottom: '8px' }}>
+                  <CountdownTimer targetDate={heroSession.date_utc} sessionName={heroSession.name} />
+                </div>
+              )}
+
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Track conditions — real data from DB */}
+        <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Track Conditions</span>
+            {latest?.track_temp_c && (
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80' }} />
+            )}
+          </div>
+
+          {[
+            {
+              Icon: Thermometer,
+              label: 'Track Temp',
+              value: latest?.track_temp_c != null ? `${latest.track_temp_c}°C` : '—',
+              accent: '#f97316',
+            },
+            {
+              Icon: Wind,
+              label: 'Air Temp',
+              value: latest?.air_temp_c != null ? `${latest.air_temp_c}°C` : '—',
+              accent: '#60a5fa',
+            },
+            {
+              Icon: Droplets,
+              label: 'Humidity',
+              value: latest?.humidity_pct != null ? `${latest.humidity_pct}%` : '—',
+              accent: '#34d399',
+            },
+          ].map(({ Icon, label, value, accent }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#1A1A1A', borderRadius: '12px', padding: '14px 16px', border: '1px solid #2A2A2A' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: `${accent}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={18} style={{ color: accent }} />
+                </div>
+                <span style={{ color: '#A1A1AA', fontSize: '14px' }}>{label}</span>
+              </div>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: value === '—' ? '#3F3F46' : '#fff', fontSize: '18px' }}>{value}</span>
+            </div>
+          ))}
+
+          {/* Rainfall indicator */}
+          {latest?.rainfall != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: latest.rainfall ? '#3671C622' : '#1A1A1A', borderRadius: '10px', border: `1px solid ${latest.rainfall ? '#3671C644' : '#2A2A2A'}` }}>
+              <span style={{ fontSize: '16px' }}>{latest.rainfall ? '🌧' : '☀️'}</span>
+              <span style={{ fontSize: '12px', fontFamily: 'monospace', color: latest.rainfall ? '#60a5fa' : '#71717A' }}>
+                {latest.rainfall ? 'Wet conditions' : 'Dry conditions'}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── Stat cards ─────────────────────────────────────────────── */}
       {pole && (

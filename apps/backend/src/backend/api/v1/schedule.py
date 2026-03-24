@@ -146,19 +146,23 @@ def _now_utc() -> datetime:
 
 
 def _find_next_session(races: list[dict]) -> tuple[dict | None, dict | None]:
-    """Return (race, session) for the very next upcoming session across all races."""
+    """Return (race, session) for the upcoming or currently active session."""
     now = _now_utc()
+    from datetime import datetime as dt, timedelta
+    from datetime import timezone as tz
+
     for race in races:
         for session in race["sessions"]:
             if not session["date_utc"]:
                 continue
             try:
-                from datetime import datetime as dt
                 session_time = dt.fromisoformat(session["date_utc"])
                 if session_time.tzinfo is None:
-                    from datetime import timezone as tz
                     session_time = session_time.replace(tzinfo=tz.utc)
-                if session_time > now:
+
+                # If session started within the last 2 hours, it's "LIVE"
+                # If it's in the future, it's "UPCOMING"
+                if session_time > (now - timedelta(hours=2)):
                     return race, session
             except Exception:
                 continue
