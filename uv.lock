@@ -1672,10 +1672,14 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "scikit-learn" },
-    { name = "shap" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "xgboost" },
+]
+
+[package.optional-dependencies]
+explain = [
+    { name = "shap" },
 ]
 
 [package.metadata]
@@ -1688,11 +1692,12 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "scikit-learn", specifier = ">=1.4.0" },
-    { name = "shap", specifier = ">=0.44.0" },
+    { name = "shap", marker = "extra == 'explain'", specifier = ">=0.44.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "xgboost", specifier = ">=2.0.0" },
 ]
+provides-extras = ["explain"]
 
 [[package]]
 name = "mlflow"

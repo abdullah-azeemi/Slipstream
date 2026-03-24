@@ -17,8 +17,6 @@ dependencies = [
 
     "lightgbm>=4.0.0",
 
-    "shap>=0.44.0",
-
     "pandas>=2.0.0",
 
     "numpy>=1.26.0",
@@ -35,6 +33,11 @@ dependencies = [
 
 ]
 
+[project.optional-dependencies]
+explain = [
+    "shap>=0.44.0",
+]
+
 [build-system]
 
 requires = ["hatchling"]
@@ -44,4 +47,3 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 
 packages = ["src/ml"]
-

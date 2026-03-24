@@ -35,9 +35,9 @@ help:
 
 	@echo "  make migrate    Run database migrations"
 
-	@echo "  make seed       Download sample F1 data (2024 British GP)"
+	@echo "  make seed       Ingest sample F1 sessions (2024 British GP)"
 
-	@echo "  make dev        Start all development servers"
+	@echo "  make dev        Show the commands for local backend + frontend dev"
 
 	@echo "  make lint       Run ruff + mypy on all Python code"
 
@@ -106,18 +106,16 @@ migrate:
 	uv run alembic -c apps/backend/alembic.ini upgrade head
 
 seed:
-
-	uv run python scripts/seed_sample_data.py
+	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session Q
+	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session R --skip-telemetry
+	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session FP2 --skip-telemetry
 
 # ── Development ───────────────────────────────────────────────────────────────
 
 dev:
-
-	@echo "Starting development servers..."
-
-	@echo "Backend  → http://localhost:5000"
-
-	@echo "Frontend → http://localhost:3000"
+	@echo "Run these in separate terminals:"
+	@echo "  make backend   # API at http://localhost:8000"
+	@echo "  make frontend  # App at http://localhost:3000"
 
 # ── Code Quality ──────────────────────────────────────────────────────────────
 
@@ -162,8 +160,8 @@ topics :
 backend:
 	uv run flask --app apps/backend/src/backend run --port 8000 --debug
 
-backend:
-	uv run flask --app apps/backend/src/backend run --port 8000 --debug
+frontend:
+	cd apps/frontend && pnpm dev
 
 test-backend:
 	uv run pytest apps/backend/tests/ -v --cov=apps/backend/src --cov-report=term-missing

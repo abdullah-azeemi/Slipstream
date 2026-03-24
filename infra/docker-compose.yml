@@ -89,12 +89,6 @@ services:
     volumes:
       - mlflow_data:/mlflow
 
-volumes:
-  kafka_data:
-  postgres_data:
-  redis_data:
-  mlflow_data:
-
   celery-worker:
     build:
       context: ..
@@ -107,7 +101,7 @@ volumes:
       - timescaledb
       - redis
     volumes:
-      - ./fastf1_cache:/root/.cache/fastf1
+      - ../fastf1_cache:/root/.cache/fastf1
 
   celery-beat:
     build:
@@ -118,4 +112,11 @@ volumes:
       - DATABASE_URL=postgresql+psycopg://pitwall:pitwall@timescaledb:5432/pitwall
       - REDIS_URL=redis://redis:6379/0
     depends_on:
+      - timescaledb
       - redis
+
+volumes:
+  kafka_data:
+  postgres_data:
+  redis_data:
+  mlflow_data:

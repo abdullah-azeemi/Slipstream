@@ -4,7 +4,7 @@
 
 Qualifying telemetry, tyre strategy, race analysis, and practice intelligence — all from public data, zero paid APIs.
 
-![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
 ![Flask](https://img.shields.io/badge/Flask-3-lightgrey?style=flat-square)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-PostgreSQL-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)
@@ -38,10 +38,23 @@ Live driver and constructor standings from the official Jolpica F1 API. Updates 
 
 ---
 
+## Why this project exists
+
+Pitwall is built to make high-quality F1 analysis accessible without paid telemetry feeds or closed tooling.
+
+The goal is to give fans, builders, and contributors a practical analytics stack that can:
+
+- ingest public motorsport data
+- store it in a query-friendly schema
+- expose it through clean APIs
+- turn it into race-weekend intelligence in the UI
+
+---
+
 ## Stack
 
 ```
-Frontend    Next.js 14 (App Router) — inline styles, no Tailwind required
+Frontend    Next.js 16 (App Router) + Tailwind CSS v4 + inline styles
 Backend     Flask 3 + SQLAlchemy
 Database    TimescaleDB (PostgreSQL 15) + Redis
 Data        FastF1 + Jolpica (official F1 standings)
@@ -68,7 +81,7 @@ pitwall/
 │   │   │       ├── strategy.py
 │   │   │       ├── analysis.py      ← all race + FP analysis endpoints
 │   │   │       └── predictions.py   ← ML stub (roadmap)
-│   │   └── tests/                   ← 23 pytest tests, all passing
+│   │   └── tests/                   ← backend pytest suite
 │   └── frontend/
 │       ├── app/
 │       │   ├── page.tsx             ← Home + championship standings
@@ -98,6 +111,23 @@ pitwall/
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A["FastF1 + Jolpica"] --> B["Ingestion Package"]
+    B --> C["TimescaleDB / PostgreSQL"]
+    C --> D["Flask API"]
+    D --> E["Next.js Frontend"]
+    C --> F["Celery Workers"]
+    C --> G["ML Training / Inference"]
+    F --> C
+    G --> C
+    G --> H["ML Artifacts / Predictions"]
+```
+
+---
+
 ## Quickstart
 
 ### Prerequisites
@@ -109,8 +139,8 @@ pitwall/
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-username/pitwall.git
-cd pitwall
+git clone https://github.com/abdullah-azeemi/Pitwall.git
+cd Pitwall
 cp .env.example .env
 ```
 
@@ -137,6 +167,12 @@ cd apps/frontend
 pnpm install
 pnpm dev
 # App at http://localhost:3000
+```
+
+Or from the repo root:
+
+```bash
+make frontend
 ```
 
 ### 5. Ingest your first session
@@ -219,6 +255,17 @@ GET /api/v1/sessions/:key/analysis/fp-sectors
 
 ---
 
+## Current launch note
+
+Before publishing publicly, verify the quickstart on a clean machine:
+
+- `make up`
+- `make backend`
+- `make frontend`
+- `make seed`
+
+That confirms infrastructure, ingestion, API routes, and the UI all work from the documented path.
+
 ## Dev commands
 
 ```bash
@@ -248,6 +295,8 @@ lsof -ti:8000 | xargs kill -9   # kill stuck backend port
 
 ## Roadmap
 
+- [ ] Race engineer style insight summaries grounded in existing analytics endpoints
+- [ ] Better data quality checks and ingestion health reporting
 - [ ] Bulk ingestion script — ingest full 2022–2025 archive in one command
 - [ ] Auto-ingest 2026 — Celery beat task that detects new sessions and ingests automatically
 - [ ] ML predictions — FLAML podium predictions from qualifying results + historical data
@@ -269,6 +318,13 @@ All data is sourced from public APIs. Pitwall stores processed data locally — 
 ## Contributing
 
 Issues and PRs welcome. If you hit ingestion errors on a circuit not listed here, open an issue with the circuit name and error — compound constraint violations are common and easy to fix.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and workflow expectations.
+
+Community and repo standards:
+
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- [SECURITY.md](./SECURITY.md)
 
 ---
 
