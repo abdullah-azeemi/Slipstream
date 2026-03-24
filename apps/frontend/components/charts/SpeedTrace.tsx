@@ -24,6 +24,7 @@ export default function SpeedTrace({ sessionKey, drivers }: Props) {
 
   useEffect(() => {
     if (drivers.length === 0) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
 
     const nums = drivers.map(d => d.driver_number)
@@ -119,6 +120,7 @@ export default function SpeedTrace({ sessionKey, drivers }: Props) {
 
           {/* Brake zones — red fill under trace where brake=true */}
           {traces.slice(0, 1).map(t => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const brakingSegs = t.samples.reduce<string[]>((acc, s, i) => {
               if (!s.brake) return acc
               const x = PAD + (i / (t.samples.length - 1)) * (W - PAD * 2)

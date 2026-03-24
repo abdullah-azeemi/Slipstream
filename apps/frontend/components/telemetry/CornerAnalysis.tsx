@@ -383,17 +383,20 @@ function CornerTable({ stats }: { stats: DriverTelemetryStats[] }) {
 }
 
 // ── Main Export ───────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function CornerAnalysis({ sessionKey, drivers, driverMap }: Props) {
   const [stats,   setStats]   = useState<DriverTelemetryStats[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!drivers.length) return
+     
     setLoading(true)
     telemetryApi.stats(sessionKey, drivers)
       .then(setStats)
       .catch(() => setStats([]))
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, drivers.join(',')])
 
   if (loading) return (

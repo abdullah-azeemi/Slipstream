@@ -169,7 +169,9 @@ export default function SessionsPage() {
                 {gpSessions.map((session, si) => {
                   const colour  = SESSION_COLOUR[session.session_type] ?? '#71717A'
                   const isLast  = si === gpSessions.length - 1
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const isRace  = session.session_type === 'R' || session.session_type === 'S'
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const isQuali = session.session_type === 'Q' || session.session_type === 'SQ'
                   return (
                     <Link

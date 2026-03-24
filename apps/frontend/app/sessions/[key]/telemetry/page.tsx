@@ -27,6 +27,7 @@ function sessionModeLabel(type: string | null): string {
 async function fetchTelemetryCompare(
   sessionKey: number,
   drivers: number[]
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<{ samples: any[]; lapNumbers: Map<number, number> }> {
   const res = await fetch(
     `${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}`
@@ -35,15 +36,18 @@ async function fetchTelemetryCompare(
   const data = await res.json()
 
   const lapNumbers = new Map<number, number>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let samples: any[] = []
 
   if (Array.isArray(data)) {
     samples = data
   } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     samples = Object.entries(data).flatMap(([dn, val]: [string, any]) => {
       const driverNum = parseInt(dn)
       const rows = Array.isArray(val) ? val : (val?.samples ?? [])
       if (val?.lap_number) lapNumbers.set(driverNum, val.lap_number)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return rows.map((r: any) => ({ ...r, driver_number: driverNum }))
     })
   }
@@ -56,6 +60,7 @@ const CHART_BG = '#0A0A0A'
 const AXIS_COLOR = '#1E1E1E'
 const TEXT_DIM = '#3F3F46'
 const TEXT_MID = '#71717A'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const RED_ACCENT = '#E8002D'
 const GREEN_DRS = '#22FF88'
 const BRAKE_COLOR = '#FF2D55'
@@ -79,9 +84,11 @@ function interpolateSamples(samples: TelemetrySample[], points = 400): Interp {
 
   function lerp(field: keyof TelemetrySample, d: number): number {
     const idx = sorted.findIndex(s => s.distance_m! >= d)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (idx <= 0) return (sorted[0]?.[field] as any) ?? 0
     const a = sorted[idx - 1], b = sorted[idx]
     const t = (d - a.distance_m!) / ((b.distance_m! - a.distance_m!) || 1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (((a[field] as any) ?? 0) * (1 - t) + ((b[field] as any) ?? 0) * t) as number
   }
 
@@ -91,9 +98,12 @@ function interpolateSamples(samples: TelemetrySample[], points = 400): Interp {
     throttle: dist.map(d => lerp('throttle_pct', d)),
     gear: dist.map(d => Math.round(lerp('gear', d))),
     rpm: dist.map(d => lerp('rpm', d)),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     brake: dist.map(d => lerp('brake' as any, d) > 0.5),
     drs: dist.map(d => lerp('drs', d)),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     x: dist.map(d => lerp('x_pos' as any, d)),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     y: dist.map(d => lerp('y_pos' as any, d)),
   }
 }
@@ -152,6 +162,7 @@ function drawLine(ctx: CanvasRenderingContext2D, vals: number[], colour: string,
     const ny = (v - yMin) / (yMax - yMin)
     const cx = PAD.left + nx * cW
     const cy = PAD.top + cH - ny * cH
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
   })
   ctx.stroke()
@@ -168,6 +179,7 @@ function drawDots(ctx: CanvasRenderingContext2D, nx: number, W: number, H: numbe
   const { cW, cH } = chartCoords(W, H)
   const cx = PAD.left + nx * cW
   driverData.forEach(({ interp, colour }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vals = (interp as any)[field] as number[]
     const idx = Math.round(nx * (vals.length - 1))
     const v = vals[idx] ?? 0
@@ -206,6 +218,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [selected, setSelected] = useState<number[]>([])
   const [telData, setTelData] = useState<Map<number, Interp>>(new Map())
   const [tooltipNx, setTooltipNx] = useState<number | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [tooltipData, setTooltipData] = useState<{ dist: number; values: any[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [sessionYear, setSessionYear] = useState<number | null>(null)
@@ -239,6 +252,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     if (!selected.length || !sessionType) return
     if (isRaceSession(sessionType) || isPracticeSession(sessionType)) return
 
+     
     setLoading(true)
     fetchTelemetryCompare(sessionKey, selected)
       .then(({ samples, lapNumbers }) => {
@@ -253,6 +267,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         setTelData(interped)
       })
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, selected.join(','), sessionType])
 
   // Fetch sector times for qualifying mode
@@ -283,6 +298,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       results.forEach(r => { if (r) map.set(r.driverNum, r.times) })
       setSectorTimes(map)
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, selected.join(','), telLapNumbers])
 
   // Build driver render data (qualifying canvas)
@@ -324,6 +340,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           }
         })
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       driverData.forEach(d => drawLine(ctx, (d.interp as any)[cfg.field], d.colour, W, cfg.height, cfg.yMin, cfg.yMax))
       if (tooltipNx !== null) {
         drawCrosshair(ctx, tooltipNx, W, cfg.height)
@@ -369,6 +386,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       deltas.forEach((d, i) => {
         const cx = PAD.left + (i / (n - 1)) * cW
         const cy = midY - (d / maxD) * (cH / 2)
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
       })
       ctx.stroke()
@@ -402,6 +420,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const ctx = canvas.getContext('2d')!
       ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, totalH)
       const { cW } = chartCoords(W, totalH)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       driverData.forEach(({ interp, colour, abbr }, di) => {
         const y = PAD.top + di * (rowH + 6)
         ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
@@ -458,6 +477,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       sectColours.forEach((col, si) => {
         const s = Math.floor(si * n / 3), e = Math.floor((si + 1) * n / 3)
         ctx.beginPath()
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         for (let i = s; i <= e; i++) i === s ? ctx.moveTo(tx(xs[i]), ty(ys[i])) : ctx.lineTo(tx(xs[i]), ty(ys[i]))
         ctx.strokeStyle = col; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke()
       })
@@ -467,6 +487,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         if (!b && inB) {
           inB = false
           ctx.beginPath()
+          // eslint-disable-next-line @typescript-eslint/no-unused-expressions
           for (let j = bs; j <= i; j++) j === bs ? ctx.moveTo(tx(xs[j]), ty(ys[j])) : ctx.lineTo(tx(xs[j]), ty(ys[j]))
           ctx.strokeStyle = BRAKE_COLOR; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke()
         }
@@ -477,6 +498,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         if (v <= 8 && inD) {
           inD = false
           ctx.beginPath()
+          // eslint-disable-next-line @typescript-eslint/no-unused-expressions
           for (let j = ds2; j <= i; j++) j === ds2 ? ctx.moveTo(tx(xs[j]), ty(ys[j])) : ctx.lineTo(tx(xs[j]), ty(ys[j]))
           ctx.strokeStyle = GREEN_DRS; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke()
         }
@@ -494,6 +516,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       ctx.beginPath(); ctx.arc(tx(xs[0]), ty(ys[0]), 5, 0, Math.PI * 2)
       ctx.fillStyle = '#fff'; ctx.fill()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driverData.map(d => d.abbr).join(','), tooltipNx, telData, sessionType])
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -630,6 +653,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginBottom: '8px' }}>
                     {(tooltipData.dist / 1000).toFixed(2)} km
                   </div>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {tooltipData.values.map((v: any) => (
                     <div key={v.abbr} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '6px' }}>
                       <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: v.colour, flexShrink: 0, marginTop: '2px' }} />

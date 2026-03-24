@@ -1,10 +1,11 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Flag, Activity, Zap } from 'lucide-react'
+import { Home, Flag, Activity, Zap, Calendar } from 'lucide-react'
 
 const NAV = [
   { href: '/',            label: 'Home',        icon: Home     },
+  { href: '/schedule',    label: 'Schedule',    icon: Calendar },
   { href: '/sessions',    label: 'Sessions',    icon: Flag     },
   { href: '/predictions', label: 'Predictions', icon: Zap      },
 ]

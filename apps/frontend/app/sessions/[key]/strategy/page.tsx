@@ -94,6 +94,7 @@ export default function StrategyPage() {
                 {orderedDrivers.map((driverNum, idx) => {
                   const driverStints = stintsByDriver[driverNum] || []
                   const pos = order.find(o => o.driver_number === driverNum)
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const colour = teamColour(driverStints[0]?.team_colour)
 
                   return (

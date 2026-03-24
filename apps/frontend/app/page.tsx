@@ -1,7 +1,9 @@
 import { api } from '@/lib/api'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, teamColour, sessionTypeLabel } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowRight, MapPin, Thermometer, Wind, Droplets, Clock, Trophy, Zap, Flag } from 'lucide-react'
+import NextRaceCard from '@/components/schedule/NextRaceCard'
 
 export const revalidate = 60
 
@@ -24,18 +26,18 @@ async function fetchStandings(year: number) {
 // ── Team colour map for constructors (Ergast names → hex) ────────────────────
 
 const CONSTRUCTOR_COLOURS: Record<string, string> = {
-  'Mercedes':          '27F4D2',
-  'Red Bull':          '3671C6',
-  'Ferrari':           'E8002D',
-  'McLaren':           'FF8000',
-  'Aston Martin':      '229971',
-  'Alpine':            'FF87BC',
-  'Williams':          '64C4FF',
-  'Haas F1 Team':      'B6BABD',
-  'Kick Sauber':       '52E252',
-  'RB':                '6692FF',
-  'Racing Bulls':      '6692FF',
-  'Cadillac':          'C8A217',
+  'Mercedes': '27F4D2',
+  'Red Bull': '3671C6',
+  'Ferrari': 'E8002D',
+  'McLaren': 'FF8000',
+  'Aston Martin': '229971',
+  'Alpine': 'FF87BC',
+  'Williams': '64C4FF',
+  'Haas F1 Team': 'B6BABD',
+  'Kick Sauber': '52E252',
+  'RB': '6692FF',
+  'Racing Bulls': '6692FF',
+  'Cadillac': 'C8A217',
 }
 
 function constructorColour(name: string): string {
@@ -63,11 +65,11 @@ function getCircuitImage(gpName: string): string {
 // ── Position badge ────────────────────────────────────────────────────────────
 
 function PosBadge({ pos }: { pos: number }) {
-  const gold   = pos === 1
+  const gold = pos === 1
   const silver = pos === 2
   const bronze = pos === 3
-  const bg     = gold ? '#FFD70022' : silver ? '#C0C0C022' : bronze ? '#CD7F3222' : 'transparent'
-  const col    = gold ? '#FFD700'   : silver ? '#C0C0C0'   : bronze ? '#CD7F32'   : '#52525B'
+  const bg = gold ? '#FFD70022' : silver ? '#C0C0C022' : bronze ? '#CD7F3222' : 'transparent'
+  const col = gold ? '#FFD700' : silver ? '#C0C0C0' : bronze ? '#CD7F32' : '#52525B'
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -95,19 +97,20 @@ function PtsBar({ pts, max, colour }: { pts: number; max: number; colour: string
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default async function HomePage() {
-  const sessions    = await api.sessions.list(true).catch(() => [])
-  const latest      = sessions[0] ?? null
+  const sessions = await api.sessions.list(true).catch(() => [])
+  const latest = sessions[0] ?? null
   const currentYear = latest?.year ?? new Date().getFullYear()
 
-  const [fastestLaps, standings] = await Promise.all([
+  const [fastestLaps, standings, nextRace] = await Promise.all([
     latest ? api.laps.fastest(latest.session_key, true).catch(() => []) : Promise.resolve([]),
     fetchStandings(currentYear),
+    fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 60 } }).then(r => r.json()).catch(() => null),
   ])
 
-  const pole         = (fastestLaps as any)?.laps?.[0] ?? null
+  const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
   const circuitImage = getCircuitImage(latest?.gp_name ?? '')
   const maxDriverPts = standings.drivers[0]?.points ?? 1
-  const maxConPts    = standings.constructors[0]?.points ?? 1
+  const maxConPts = standings.constructors[0]?.points ?? 1
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -118,6 +121,8 @@ export default async function HomePage() {
         <span>/</span>
         <span style={{ color: '#A1A1AA' }}>Home</span>
       </div>
+
+      {nextRace && <NextRaceCard data={nextRace} />}
 
       {/* ── Hero + Track Conditions ────────────────────────────────── */}
       {latest && (
@@ -217,9 +222,9 @@ export default async function HomePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
             { label: 'CHAMPIONSHIP LEADER', value: standings.drivers[0]?.code ?? '—', sub: `${standings.drivers[0]?.points ?? 0} pts · ${standings.drivers[0]?.team_name ?? ''}`, Icon: Trophy, valueColour: '#FFD700', mono: false },
-            { label: 'POLE / FASTEST LAP',  value: formatLapTime(pole.lap_time_ms),    sub: `${pole.abbreviation} — ${pole.team_name ?? ''}`, Icon: Clock, valueColour: '#E8002D', mono: true },
+            { label: 'POLE / FASTEST LAP', value: formatLapTime(pole.lap_time_ms), sub: `${pole.abbreviation} — ${pole.team_name ?? ''}`, Icon: Clock, valueColour: '#E8002D', mono: true },
             { label: 'LEADING CONSTRUCTOR', value: standings.constructors[0]?.team_name?.split(' ')[0] ?? '—', sub: `${standings.constructors[0]?.points ?? 0} pts`, Icon: Zap, valueColour: '#fff', mono: false },
-            { label: 'SESSION',             value: sessionTypeLabel(latest?.session_type ?? ''), sub: `${latest?.year} ${latest?.gp_name?.replace(' Grand Prix', ' GP')}`, Icon: Flag, valueColour: '#fff', mono: false },
+            { label: 'SESSION', value: sessionTypeLabel(latest?.session_type ?? ''), sub: `${latest?.year} ${latest?.gp_name?.replace(' Grand Prix', ' GP')}`, Icon: Flag, valueColour: '#fff', mono: false },
           ].map(({ label, value, sub, Icon, valueColour, mono }) => (
             <div key={label} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -256,7 +261,7 @@ export default async function HomePage() {
             <span>POS</span><span></span><span>DRIVER</span><span>TEAM</span><span>PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span style={{ textAlign: 'right' }}>W</span>
           </div>
 
-          {standings.drivers.slice(0, 10).map((driver: any) => {
+          {standings.drivers.slice(0, 10).map((driver: { position: number, code: string, full_name: string, team_name: string, points: number, wins: number }) => {
             const colour = constructorColour(driver.team_name)
             return (
               <div key={driver.code} style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '11px 20px', borderBottom: '1px solid #1A1A1A', alignItems: 'center' }}>
@@ -300,7 +305,7 @@ export default async function HomePage() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: '#1A1A1A' }}>
-            {standings.constructors.map((con: any) => {
+            {standings.constructors.map((con: { position: number, team_name: string, points: number, wins: number }) => {
               const colour = constructorColour(con.team_name)
               return (
                 <div key={con.team_name} style={{ background: '#111111', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>

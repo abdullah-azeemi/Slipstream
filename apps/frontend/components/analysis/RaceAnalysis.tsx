@@ -126,6 +126,7 @@ function makeToX(maxLap: number, W: number) {
   return (lap: number) => PAD.left + ((lap - 1) / Math.max(maxLap - 1, 1)) * cW
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function nxFromEvent(e: React.MouseEvent<HTMLCanvasElement>, W: number) {
   const rect = e.currentTarget.getBoundingClientRect()
   const cW   = rect.width - PAD.left - PAD.right
@@ -161,6 +162,7 @@ function TooltipCard({
     const rect = container.getBoundingClientRect()
     setVx(rect.left + canvasOffsetX)
     setVy(rect.top  + canvasOffsetY)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasOffsetX, canvasOffsetY])
 
   return (
@@ -204,8 +206,11 @@ export default function RaceAnalysis({
   const [hovLap, setHovLap] = useState<number | null>(null)
 
   // Per-chart tooltip data + canvas-relative pixel position
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [lapTip,  setLapTip]  = useState<{ lap: number; entries: any[] } | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [posTip,  setPosTip]  = useState<{ lap: number; entries: any[] } | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [gapTip,  setGapTip]  = useState<{ lap: number; entries: any[] } | null>(null)
   const [lapTipXY, setLapTipXY] = useState({ x: 0, y: 0 })
   const [posTipXY, setPosTipXY] = useState({ x: 0, y: 0 })
@@ -234,13 +239,16 @@ export default function RaceAnalysis({
 
   useEffect(() => {
     if (allDrivers.length >= 2)
+       
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.map(d => d.driver_number).join(',')])
 
   // ── Fetch all race data ───────────────────────────────────────────────────
 
   useEffect(() => {
     if (!selected.length) return
+     
     setLoading(true)
     const qs = selected.join(',')
     Promise.all([
@@ -261,6 +269,7 @@ export default function RaceAnalysis({
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, selected.join(',')])
 
   const toggleDriver = (dn: number) =>
@@ -344,6 +353,7 @@ export default function RaceAnalysis({
       const valid = driver.laps.filter(l => l.lap_time_ms && !l.deleted && l.lap_time_ms >= yMin && l.lap_time_ms <= yMax).sort((a, b) => a.lap_number - b.lap_number)
       if (!valid.length) return
       ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.lineJoin = 'round'
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       valid.forEach((l, i) => { i === 0 ? ctx.moveTo(toX(l.lap_number), toY(l.lap_time_ms!)) : ctx.lineTo(toX(l.lap_number), toY(l.lap_time_ms!)) })
       ctx.stroke()
       valid.forEach(l => {
@@ -412,6 +422,7 @@ export default function RaceAnalysis({
       const pts    = Object.entries(data.gaps).map(([lap, gap]) => ({ lap: parseInt(lap), gap })).filter(p => p.gap >= 0 && p.gap < 120).sort((a, b) => a.lap - b.lap)
       if (!pts.length) return
       ctx.beginPath(); ctx.strokeStyle = isSel ? colour : colour + '28'; ctx.lineWidth = isSel ? 2 : 0.8; ctx.lineJoin = 'round'
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       pts.forEach(({ lap, gap }, i) => { i === 0 ? ctx.moveTo(toX(lap), toY(gap)) : ctx.lineTo(toX(lap), toY(gap)) })
       ctx.stroke()
       if (isSel && pts.length) {
@@ -479,6 +490,7 @@ export default function RaceAnalysis({
       const pts    = Object.entries(data.positions).map(([lap, pos]) => ({ lap: parseInt(lap), pos })).sort((a, b) => a.lap - b.lap)
       if (!pts.length) return
       ctx.beginPath(); ctx.strokeStyle = isSel ? colour : colour + '28'; ctx.lineWidth = isSel ? 2.5 : 0.8; ctx.lineJoin = 'round'
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       pts.forEach(({ lap, pos }, i) => { i === 0 ? ctx.moveTo(toX(lap), toY(pos)) : ctx.lineTo(toX(lap), toY(pos)) })
       ctx.stroke()
       if (isSel && pts.length) {
@@ -536,6 +548,7 @@ export default function RaceAnalysis({
     if (e.currentTarget === lapRef.current) setLapTipXY({ x: clampX, y: rawY })
     if (e.currentTarget === posRef.current) setPosTipXY({ x: clampX, y: rawY })
     if (e.currentTarget === gapRef.current) setGapTipXY({ x: clampX, y: rawY })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lapData, posData, gapData, selected])
 
   const handleMouseLeave = useCallback(() => {
@@ -685,6 +698,7 @@ export default function RaceAnalysis({
           {lapTip && (
             <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
               <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {lapTip.entries.map((entry: any) => {
                 const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
                 return (
@@ -722,6 +736,7 @@ export default function RaceAnalysis({
           {gapTip && (
             <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
               <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {gapTip.entries.map((e: any) => (
                 <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
@@ -747,6 +762,7 @@ export default function RaceAnalysis({
           {posTip && (
             <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
               <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
               {posTip.entries.map((e: any) => (
                 <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, formatGap, teamColour, sessionTypeLabel } from '@/lib/utils'
 import TyreChip from '@/components/ui/TyreChip'
 import Link from 'next/link'
@@ -43,13 +44,16 @@ export default function SessionPage() {
 
   const [session,     setSession]     = useState<Session | null>(null)
   const [siblings,    setSiblings]    = useState<Session[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [raceData,    setRaceData]    = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [qualiLaps,   setQualiLaps]   = useState<any[]>([])
   const [loading,     setLoading]     = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
 
   // Step 1: load current session
   useEffect(() => {
+     
     setLoading(true)
     fetch(`${BASE}/api/v1/sessions/${sessionKey}`)
       .then(r => r.json())
@@ -72,6 +76,7 @@ export default function SessionPage() {
         setSiblings(sibs)
       })
       .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_key])
 
   // Step 3: load leaderboard data
@@ -82,6 +87,7 @@ export default function SessionPage() {
     const isFP  = type.startsWith('FP')
     if (isFP) return  // FP has no leaderboard
 
+     
     setDataLoading(true)
     const url = isR
       ? `${BASE}/api/v1/sessions/${sessionKey}/race-results`
@@ -95,6 +101,7 @@ export default function SessionPage() {
       })
       .catch(() => {})
       .finally(() => setDataLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_key, session?.session_type])
 
   // ── Loading / error states ────────────────────────────────────────────────
@@ -237,6 +244,7 @@ export default function SessionPage() {
               <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
             ))}
           </div>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {raceData.map((driver: any, i: number) => {
             const colour   = teamColour(driver.team_colour, driver.team_name)
             const isWinner = i === 0
@@ -285,6 +293,7 @@ export default function SessionPage() {
               <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
             ))}
           </div>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {qualiLaps.map((lap: any, i: number) => {
             const colour  = teamColour(lap.team_colour, lap.team_name)
             const isFirst = i === 0

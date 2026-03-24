@@ -80,6 +80,7 @@ export default function PredictionsPage() {
   useEffect(() => {
     fetch(`${BASE}/api/v1/sessions`)
       .then(r => r.json())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then((all: any[]) => {
         const quali = all
           .filter(s => s.session_type === 'Q' || s.session_type === 'SQ')
@@ -94,6 +95,7 @@ export default function PredictionsPage() {
   // Fetch predictions when session changes
   useEffect(() => {
     if (!selectedKey) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setError(null)
     setData(null)

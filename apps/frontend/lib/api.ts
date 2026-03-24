@@ -41,6 +41,7 @@ export const api = {
         `/api/v1/sessions/${key}/drivers/${num}/laps`
       ),
     fastest: (key: number, server = false) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       get<{ laps: FastestLap[], fastest_s1: any, fastest_s2: any, fastest_s3: any }>(`/api/v1/sessions/${key}/fastest`, server),
   },
   drivers: {

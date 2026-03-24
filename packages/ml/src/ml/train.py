@@ -145,6 +145,7 @@ def main():
             "best_estimator":  model.best_estimator,
             "time_budget":     60,
             "n_training_rows": len(df),
+            "n_features":      len(FEATURE_COLS),
             "features":        json.dumps(FEATURE_COLS),
         })
         mlflow.log_metrics({
@@ -152,6 +153,45 @@ def main():
             "cv_mae_std":            cv_metrics['mae_std'],
             "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
         })
+
+        # Log feature importance — the most valuable thing to track.
+        # WHY: knowing WHICH features the model relies on tells you:
+        #   1. Whether your new features are actually being used
+        #   2. Whether the model is learning sensible patterns
+        #   3. What to focus on in the next feature engineering iteration
+        try:
+            # XGBoost and ExtraTree both expose feature_importances_
+            estimator = model.model.estimator
+            if hasattr(estimator, 'feature_importances_'):
+                importances = dict(zip(
+                    FEATURE_COLS,
+                    [round(float(x), 4) for x in estimator.feature_importances_]
+                ))
+                # Sort by importance descending
+                importances_sorted = dict(
+                    sorted(importances.items(), key=lambda x: x[1], reverse=True)
+                )
+                # Log top features as metrics (MLflow shows these in charts)
+                for feat, imp in list(importances_sorted.items())[:10]:
+                    mlflow.log_metric(f"importance_{feat}", imp)
+
+                # Log full importance as artifact
+                import tempfile, os
+                tmp = tempfile.mktemp(suffix=".json")
+                with open(tmp, "w") as f:
+                    json.dump(importances_sorted, f, indent=2)
+                try:
+                    mlflow.log_artifact(tmp)
+                except Exception:
+                    pass  # artifact logging optional
+                os.unlink(tmp)
+
+                print("\n=== Feature Importance (top 10) ===")
+                for feat, imp in list(importances_sorted.items())[:10]:
+                    bar = "█" * int(imp * 50)
+                    print(f"  {feat:35s} {imp:.4f} {bar}")
+        except Exception as e:
+            log.warning("feature_importance.failed", error=str(e))
 
         # Save model pickle for fast inference
         with open(MODEL_PATH, 'wb') as f:

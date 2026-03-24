@@ -145,12 +145,15 @@ export default function PracticeAnalysis({
 
   useEffect(() => {
     if (allDrivers.length >= 2)
+       
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.map(d => d.driver_number).join(',')])
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+     
     setLoading(true)
     Promise.all([
       fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-scatter`).then(r => r.json()),
@@ -289,8 +292,10 @@ export default function PracticeAnalysis({
       if (dist < nearDist) { nearDist = dist; nearest = l }
     })
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (nearest) setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: nearest, gapMs: (nearest as any).gap_ms })
     else setScatterTip(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scatter, selected])
 
   // ── Draw: tyre deg comparison ─────────────────────────────────────────────
@@ -361,6 +366,7 @@ export default function PracticeAnalysis({
       ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.lineJoin = 'round'
       pts.forEach((l, i) => {
         const x = toX(l.lap_in_stint); const y = toY(l.delta_ms)
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
       })
       ctx.stroke()
@@ -408,6 +414,7 @@ export default function PracticeAnalysis({
 
     if (entries.length) setDegTip({ x: e.clientX + 16, y: e.clientY - 20, entries })
     else setDegTip(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tyreDeg, activeDegCmp, selected])
 
   // ── Sector delta helper ───────────────────────────────────────────────────

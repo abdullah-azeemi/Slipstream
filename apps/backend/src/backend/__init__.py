@@ -13,12 +13,12 @@ def create_app() -> Flask:
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = settings.secret_key
-    app.config["DEBUG"]      = settings.debug
-    app.config["TESTING"]    = settings.testing
+    app.config["DEBUG"] = settings.debug
+    app.config["TESTING"] = settings.testing
 
     # Allow Next.js dev server to call the API
     CORS(app, origins="*")
-    
+
     extensions.engine = create_engine(
         settings.db_url,
         pool_size=10,
@@ -26,23 +26,25 @@ def create_app() -> Flask:
         pool_pre_ping=True,
     )
 
-    from backend.api.v1.sessions    import sessions_bp
-    from backend.api.v1.laps        import laps_bp
-    from backend.api.v1.drivers     import drivers_bp
-    from backend.api.v1.telemetry   import telemetry_bp
-    from backend.api.v1.strategy    import strategy_bp
-    from backend.api.v1.analysis    import analysis_bp
+    from backend.api.v1.sessions import sessions_bp
+    from backend.api.v1.laps import laps_bp
+    from backend.api.v1.drivers import drivers_bp
+    from backend.api.v1.telemetry import telemetry_bp
+    from backend.api.v1.strategy import strategy_bp
+    from backend.api.v1.analysis import analysis_bp
     from backend.api.v1.predictions import predictions_bp
-    from backend.health             import health_bp
+    from backend.api.v1.schedule import schedule_bp
+    from backend.health import health_bp
 
     app.register_blueprint(health_bp)
-    app.register_blueprint(sessions_bp,    url_prefix="/api/v1")
-    app.register_blueprint(laps_bp,        url_prefix="/api/v1")
-    app.register_blueprint(drivers_bp,     url_prefix="/api/v1")
-    app.register_blueprint(telemetry_bp,   url_prefix="/api/v1")
-    app.register_blueprint(strategy_bp,    url_prefix="/api/v1")
-    app.register_blueprint(analysis_bp,    url_prefix="/api/v1")
+    app.register_blueprint(sessions_bp, url_prefix="/api/v1")
+    app.register_blueprint(laps_bp, url_prefix="/api/v1")
+    app.register_blueprint(drivers_bp, url_prefix="/api/v1")
+    app.register_blueprint(telemetry_bp, url_prefix="/api/v1")
+    app.register_blueprint(strategy_bp, url_prefix="/api/v1")
+    app.register_blueprint(analysis_bp, url_prefix="/api/v1")
     app.register_blueprint(predictions_bp, url_prefix="/api/v1")
+    app.register_blueprint(schedule_bp, url_prefix="/api/v1")
 
     @app.errorhandler(404)
     def not_found(e):
