@@ -111,17 +111,23 @@ def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict
 
 def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     laps = session.laps
+    lap_segment_map = _segment_quali_laps(laps) if session.name in ("Qualifying", "Sprint Qualifying") else {}
     results = []
     for _, row in laps.iterrows():
         try:
             driver_num = int(row["DriverNumber"])
         except (ValueError, TypeError):
             continue
+        lap_number = row.get("LapNumber")
+        try:
+            quali_segment = lap_segment_map.get((str(driver_num), int(lap_number))) if lap_number is not None else None
+        except (TypeError, ValueError):
+            quali_segment = None
         results.append(
             {
                 "session_key": session_key,
                 "driver_number": driver_num,
-                "lap_number": row.get("LapNumber"),
+                "lap_number": lap_number,
                 "lap_time_ms": row.get("LapTime"),
                 "pit_in_time_ms": row.get("PitInTime"),
                 "pit_out_time_ms": row.get("PitOutTime"),
@@ -142,6 +148,7 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
                 "speed_i2": row.get("SpeedI2"),
                 "speed_fl": row.get("SpeedFL"),
                 "speed_st": row.get("SpeedST"),
+                "quali_segment": quali_segment,
             }
         )
     log.info("laps.extracted", session_key=session_key, count=len(results))

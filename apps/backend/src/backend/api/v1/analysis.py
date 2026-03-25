@@ -1377,7 +1377,9 @@ def quali_segments(session_key: int):
           "boundaries": { "Q2_start_lap": int, "Q3_start_lap": int }
         }
 
-    Falls back to empty segments if FastF1 cache unavailable.
+    Uses stored lap segment metadata when present. Falls back to FastF1-based
+    boundary detection only for older sessions that were ingested before
+    quali_segment existed.
     """
     import os
     import fastf1
@@ -1406,6 +1408,7 @@ def quali_segments(session_key: int):
                 l.s1_ms,
                 l.s2_ms,
                 l.s3_ms,
+                l.quali_segment,
                 l.deleted
             FROM lap_times l
             JOIN drivers d
@@ -1432,69 +1435,59 @@ def quali_segments(session_key: int):
         for r in drivers_rows
     }
 
-    # ── 2. Load FastF1 cache to get LapStartTime for segment detection ────────
-    try:
-        cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
-        fastf1.Cache.enable_cache(cache_dir)
+    stored_segments_present = any(row.get("quali_segment") is not None for row in db_laps)
 
-        f1_session_name = "Sprint Qualifying" if session_row["session_type"] == "SQ" else "Qualifying"
-        sess = fastf1.get_session(
-            int(session_row["year"]),
-            session_row["gp_name"].replace(" Grand Prix", ""),
-            f1_session_name
-        )
-        sess.load(telemetry=False, weather=False, messages=False)
+    if stored_segments_present:
+        lap_segment_map = {
+            (str(row["driver_number"]), int(row["lap_number"])): int(row["quali_segment"])
+            for row in db_laps
+            if row.get("quali_segment") is not None
+        }
+        q2_laps = [int(row["lap_number"]) for row in db_laps if row.get("quali_segment") == 2]
+        q3_laps = [int(row["lap_number"]) for row in db_laps if row.get("quali_segment") == 3]
+        q2_start = min(q2_laps) if q2_laps else None
+        q3_start = min(q3_laps) if q3_laps else None
+    else:
+        # ── 2. Fallback: derive segments from FastF1 cache for older data ────
+        try:
+            cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+            fastf1.Cache.enable_cache(cache_dir)
 
-        all_laps = sess.laps[["DriverNumber", "LapNumber", "LapStartTime"]].copy()
-        all_laps = all_laps.dropna(subset=["LapStartTime"])
-        all_laps = all_laps.sort_values("LapStartTime")
-        all_laps["gap"] = all_laps["LapStartTime"].diff()
+            f1_session_name = "Sprint Qualifying" if session_row["session_type"] == "SQ" else "Qualifying"
+            sess = fastf1.get_session(
+                int(session_row["year"]),
+                session_row["gp_name"].replace(" Grand Prix", ""),
+                f1_session_name
+            )
+            sess.load(telemetry=False, weather=False, messages=False)
 
-        # Gaps > 5 minutes = segment breaks (Q1→Q2 and Q2→Q3)
-        big_gaps = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]
-        boundaries = big_gaps["LapStartTime"].tolist()
+            all_laps = sess.laps[["DriverNumber", "LapNumber", "LapStartTime"]].copy()
+            all_laps = all_laps.dropna(subset=["LapStartTime"])
+            all_laps = all_laps.sort_values("LapStartTime")
+            all_laps["gap"] = all_laps["LapStartTime"].diff()
+            boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]["LapStartTime"].tolist()
 
-        if len(boundaries) < 2:
-            # Sprint qualifying only has one break (Q1→Q2)
-            # or something went wrong — fall back to no segmentation
-            boundaries_ok = len(boundaries) >= 1
-        else:
-            boundaries_ok = True
-
-        # Assign segment to each lap row in FastF1
-        def assign_segment(t):
-            if len(boundaries) == 0:
-                return 1
-            if t < boundaries[0]:
-                return 1
-            elif len(boundaries) < 2 or t < boundaries[1]:
-                return 2
-            else:
+            def assign_segment(t):
+                if len(boundaries) == 0:
+                    return 1
+                if t < boundaries[0]:
+                    return 1
+                if len(boundaries) < 2 or t < boundaries[1]:
+                    return 2
                 return 3
 
-        all_laps["segment"] = all_laps["LapStartTime"].apply(assign_segment)
-
-        # Build lap_number → segment map per driver
-        # Key: (driver_number_str, lap_number) → segment
-        lap_segment_map: dict = {}
-        for _, row in all_laps.iterrows():
-            key = (str(row["DriverNumber"]), int(row["LapNumber"]))
-            lap_segment_map[key] = int(row["segment"])
-
-        # Find the boundary lap numbers for frontend info
-        if boundaries_ok:
+            all_laps["segment"] = all_laps["LapStartTime"].apply(assign_segment)
+            lap_segment_map = {
+                (str(row["DriverNumber"]), int(row["LapNumber"])): int(row["segment"])
+                for _, row in all_laps.iterrows()
+            }
             q2_boundary_laps = all_laps[all_laps["segment"] == 2]["LapNumber"]
             q3_boundary_laps = all_laps[all_laps["segment"] == 3]["LapNumber"]
             q2_start = int(q2_boundary_laps.min()) if not q2_boundary_laps.empty else None
             q3_start = int(q3_boundary_laps.min()) if not q3_boundary_laps.empty else None
-        else:
+        except Exception:
+            lap_segment_map = {}
             q2_start = q3_start = None
-
-    except Exception:
-        # FastF1 unavailable (cold Railway start without cache)
-        # Fall back: no segmentation, everything in Q1
-        lap_segment_map = {}
-        q2_start = q3_start = None
 
     # ── 3. Assign each DB lap to its segment ─────────────────────────────────
     # Group DB laps by driver, find best lap per segment
