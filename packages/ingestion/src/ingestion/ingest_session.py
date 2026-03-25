@@ -79,9 +79,14 @@ def main():
     lap_count = load_laps(laps, session_key)
 
     tel_count = 0
-    if not args.skip_telemetry:
+    TELEMETRY_SESSIONS = {'Q', 'SQ'}  # qualifying only — keeps DB lean
+    if not args.skip_telemetry and args.session.upper() in TELEMETRY_SESSIONS:
         tel       = extract_telemetry(session, session_key, all_drivers=True)
         tel_count = load_telemetry(tel, session_key)
+    elif not args.skip_telemetry and args.session.upper() not in TELEMETRY_SESSIONS:
+        log.info("telemetry.skipped",
+                 reason="non-qualifying session — telemetry not stored by design",
+                 session=args.session)
 
     print(f"\n✅  session={session_key}  drivers={len(drivers)}"
           f"  laps={lap_count}  telemetry={tel_count}"
