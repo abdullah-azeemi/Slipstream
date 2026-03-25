@@ -16,6 +16,12 @@ Qualifying telemetry, tyre strategy, race analysis, and practice intelligence �
 ### Qualifying — Speed Traces
 Distance-aligned telemetry overlay for up to 4 drivers. Speed, throttle, brake, gear, RPM, DRS zones, sector times from timing data, and an interactive track map with braking markers. Hover any point to see all drivers' values simultaneously.
 
+Qualifying sessions also support segment-aware comparison:
+- switch between `Q1`, `Q2`, and `Q3`
+- compare each driver's best telemetry lap from that segment
+- drivers who did not reach the selected segment are disabled in the selector
+- the UI shows the actual lap number currently being rendered per driver
+
 ![Qualifying telemetry showing ANT vs RUS speed traces](.github/assets/qualifying-telemetry.png)
 
 ### Race — Lap-by-Lap Intelligence
@@ -190,6 +196,19 @@ uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --sessio
 
 FastF1 caches session data locally at `./fastf1_cache` — subsequent runs are instant.
 
+### Qualifying segment note
+
+For `Q1/Q2/Q3` telemetry comparisons, `lap_times.quali_segment` must exist and be populated.
+
+If you are upgrading an existing database, run the migration first:
+
+```bash
+cd apps/backend
+UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head
+```
+
+Then re-ingest the qualifying sessions you want to compare so both `lap_times` and `telemetry` are aligned to the stored segment metadata.
+
 ---
 
 ## Loading historical data
@@ -209,7 +228,7 @@ done
 
 Storage estimate: ~200MB for 5 circuits × 4 seasons (lap times only, no telemetry for historical races).
 
-**Telemetry note:** Telemetry is large (~2-3M rows per qualifying session). Ingest it only for sessions where you want the speed traces page. All other analysis panels (race, FP) use only `lap_times` which is compact.
+**Telemetry note:** Telemetry is large, but Pitwall stores only the segment-best qualifying telemetry laps per driver (`best Q1`, `best Q2`, `best Q3`) rather than every qualifying lap. All other analysis panels (race, FP) use only `lap_times` which is compact.
 
 ---
 
@@ -235,7 +254,9 @@ GET /api/v1/standings/constructors?year=2026
 
 # Qualifying telemetry
 GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63
+GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63&laps=12:8,63:5
 GET /api/v1/sessions/:key/telemetry/stats?drivers=12,63
+GET /api/v1/sessions/:key/analysis/quali-segments
 
 # Race analysis
 GET /api/v1/sessions/:key/analysis/lap-evolution?drivers=12,63
@@ -265,6 +286,21 @@ Before publishing publicly, verify the quickstart on a clean machine:
 - `make seed`
 
 That confirms infrastructure, ingestion, API routes, and the UI all work from the documented path.
+
+## Deploy checklist
+
+When shipping qualifying telemetry changes to Railway/Vercel:
+
+1. Deploy backend code that matches the frontend segment logic.
+2. Run DB migrations before re-ingesting:
+   `cd apps/backend && UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head`
+3. Re-ingest qualifying sessions that need `Q1/Q2/Q3` comparison so `lap_times.quali_segment` is populated.
+4. Verify segment data directly:
+   `GET /api/v1/sessions/:key/analysis/quali-segments`
+5. Verify telemetry compare with pinned laps:
+   `GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63&laps=12:8,63:5`
+6. Deploy the frontend after the backend is already serving the new segment data.
+7. Hard refresh the client and confirm the segment tabs, disabled drivers, and lap badges update together.
 
 ## Dev commands
 

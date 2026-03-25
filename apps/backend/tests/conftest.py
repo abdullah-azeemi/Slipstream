@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS lap_times (
     speed_i2            DOUBLE PRECISION,
     speed_fl            DOUBLE PRECISION,
     speed_st            DOUBLE PRECISION,
+    quali_segment       INTEGER,
     PRIMARY KEY (id)
 );
 

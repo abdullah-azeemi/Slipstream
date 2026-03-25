@@ -2,6 +2,15 @@
 
 import { use, useEffect, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
+import {
+  getSegmentDriverNumbers,
+  getSegmentEntries,
+  getSegmentLapByDriver,
+  getSegmentSummary,
+  reconcileSelectedDrivers,
+  type QualiSegmentEntry,
+  type QualiSegmentsData,
+} from '@/lib/telemetry-quali'
 import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
 import CornerAnalysis from '@/components/telemetry/CornerAnalysis'
@@ -214,26 +223,6 @@ type DriverSectorTimes = {
 
 
 // ── Q1/Q2/Q3 segment types ───────────────────────────────────────────────────
-type QualiSegmentEntry = {
-  driver_number: number
-  abbreviation: string
-  team_name: string
-  team_colour: string
-  lap_number: number
-  lap_time_ms: number
-  s1_ms: number | null
-  s2_ms: number | null
-  s3_ms: number | null
-  gap_ms: number
-  position: number
-  eliminated: boolean
-}
-
-type QualiSegmentsData = {
-  segments: { Q1: QualiSegmentEntry[]; Q2: QualiSegmentEntry[]; Q3: QualiSegmentEntry[] }
-  boundaries: { Q2_start_lap: number | null; Q3_start_lap: number | null }
-}
-
 export default function TelemetryPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = use(params)
   const sessionKey = parseInt(key)
@@ -262,10 +251,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const trackRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const segmentEntries = qualiSegments?.segments[selectedSegment] ?? []
-  const segmentDriverNumbers = new Set(segmentEntries.map(entry => entry.driver_number))
-  const segmentLapByDriver = new Map(segmentEntries.map(entry => [entry.driver_number, entry.lap_number]))
+  const segmentEntries = getSegmentEntries(qualiSegments, selectedSegment)
+  const segmentDriverNumbers = getSegmentDriverNumbers(segmentEntries)
+  const segmentLapByDriver = getSegmentLapByDriver(segmentEntries)
   const segmentDriverKey = segmentEntries.map(entry => entry.driver_number).join(',')
+  const segmentSummary = getSegmentSummary(selectedSegment, segmentEntries)
 
   // Load session metadata + drivers
   useEffect(() => {
@@ -286,19 +276,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     if (isRaceSession(sessionType) || isPracticeSession(sessionType)) return
     if (!qualiSegments?.segments) return
 
-    const availableDrivers = drivers
-      .filter(driver => segmentDriverNumbers.has(driver.driver_number))
-      .map(driver => driver.driver_number)
-
     setSelected(prev => {
-      const kept = prev.filter(dn => segmentDriverNumbers.has(dn))
-      const next = [...kept]
-
-      for (const dn of availableDrivers) {
-        if (next.length >= Math.min(2, availableDrivers.length)) break
-        if (!next.includes(dn)) next.push(dn)
-      }
-
+      const next = reconcileSelectedDrivers(prev, drivers, segmentDriverNumbers)
       return next.length === prev.length && next.every((dn, i) => dn === prev[i]) ? prev : next
     })
   }, [drivers, qualiSegments, selectedSegment, sessionType, segmentDriverKey])
@@ -776,6 +755,52 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               </div>
             )}
           </div>
+
+          {segmentEntries.length > 0 && (
+            <div style={{
+              background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
+              padding: '12px 16px', marginBottom: '10px',
+              display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px',
+            }}>
+              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+                <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
+                  SEGMENT
+                </div>
+                <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+                  {selectedSegment}
+                </div>
+                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A', marginTop: '4px' }}>
+                  {segmentSummary.label} · {segmentSummary.count} drivers
+                </div>
+              </div>
+              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+                <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
+                  FASTEST
+                </div>
+                <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+                  {segmentSummary.leader?.abbreviation ?? '—'}
+                </div>
+                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A', marginTop: '4px' }}>
+                  {segmentSummary.leader ? `${formatLapTime(segmentSummary.leader.lap_time_ms)} · L${segmentSummary.leader.lap_number}` : 'No lap'}
+                </div>
+              </div>
+              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+                <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
+                  CUTOFF
+                </div>
+                <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+                  {segmentSummary.cutoff?.abbreviation ?? (selectedSegment === 'Q3' ? 'Pole' : '—')}
+                </div>
+                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#71717A', marginTop: '4px' }}>
+                  {segmentSummary.cutoff
+                    ? `${formatLapTime(segmentSummary.cutoff.lap_time_ms)} · P${segmentSummary.cutoff.position}`
+                    : selectedSegment === 'Q3'
+                      ? 'Top 10 shootout'
+                      : 'Not available'}
+                </div>
+              </div>
+            </div>
+          )}
 
           {loading && (
             <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
