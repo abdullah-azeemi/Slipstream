@@ -1351,3 +1351,210 @@ def fp_tyre_deg(session_key: int):
         result[compound] = list(stints.values())
 
     return jsonify(result)
+
+
+# ── Qualifying: Q1/Q2/Q3 segment leaderboards ────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/quali-segments")
+def quali_segments(session_key: int):
+    """
+    Best lap per driver per qualifying segment (Q1, Q2, Q3).
+
+    Strategy: FastF1 does not populate SessionPart or Stint for qualifying.
+    We detect Q1/Q2/Q3 boundaries by finding gaps > 5 minutes in LapStartTime
+    across all drivers — these correspond to the mandatory red-flag breaks
+    between segments.
+
+    Returns:
+        {
+          "segments": {
+            "Q1": [ { driver_number, abbreviation, team_name, team_colour,
+                      lap_number, lap_time_ms, s1_ms, s2_ms, s3_ms,
+                      gap_ms, eliminated } ],
+            "Q2": [ ... ],
+            "Q3": [ ... ]
+          },
+          "boundaries": { "Q2_start_lap": int, "Q3_start_lap": int }
+        }
+
+    Falls back to empty segments if FastF1 cache unavailable.
+    """
+    import os
+    import fastf1
+    import pandas as pd
+    from backend.api.v1.strategy import _resolve
+
+    # ── 1. Get session metadata from DB ──────────────────────────────────────
+    with engine.connect() as conn:
+        session_row = conn.execute(text("""
+            SELECT year, gp_name, session_type
+            FROM sessions WHERE session_key = :sk
+        """), {"sk": session_key}).mappings().first()
+
+        if not session_row or session_row["session_type"] not in ("Q", "SQ"):
+            return jsonify({"error": "Not a qualifying session"}), 400
+
+        # Get all lap times from DB for this session
+        db_laps = conn.execute(text("""
+            SELECT
+                l.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                l.lap_number,
+                l.lap_time_ms,
+                l.s1_ms,
+                l.s2_ms,
+                l.s3_ms,
+                l.deleted
+            FROM lap_times l
+            JOIN drivers d
+                ON d.driver_number = l.driver_number
+                AND d.session_key  = l.session_key
+            WHERE l.session_key = :sk
+              AND l.lap_time_ms IS NOT NULL
+              AND l.deleted = FALSE
+            ORDER BY l.driver_number, l.lap_time_ms ASC
+        """), {"sk": session_key}).mappings().all()
+
+        drivers_rows = conn.execute(text("""
+            SELECT driver_number, abbreviation, team_name, team_colour
+            FROM drivers WHERE session_key = :sk
+        """), {"sk": session_key}).mappings().all()
+
+    # Build driver info lookup
+    driver_info = {
+        r["driver_number"]: {
+            "abbreviation": r["abbreviation"],
+            "team_name": r["team_name"],
+            "team_colour": _resolve(r["team_colour"], r["team_name"]),
+        }
+        for r in drivers_rows
+    }
+
+    # ── 2. Load FastF1 cache to get LapStartTime for segment detection ────────
+    try:
+        cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+        fastf1.Cache.enable_cache(cache_dir)
+
+        f1_session_name = "Sprint Qualifying" if session_row["session_type"] == "SQ" else "Qualifying"
+        sess = fastf1.get_session(
+            int(session_row["year"]),
+            session_row["gp_name"].replace(" Grand Prix", ""),
+            f1_session_name
+        )
+        sess.load(telemetry=False, weather=False, messages=False)
+
+        all_laps = sess.laps[["DriverNumber", "LapNumber", "LapStartTime"]].copy()
+        all_laps = all_laps.dropna(subset=["LapStartTime"])
+        all_laps = all_laps.sort_values("LapStartTime")
+        all_laps["gap"] = all_laps["LapStartTime"].diff()
+
+        # Gaps > 5 minutes = segment breaks (Q1→Q2 and Q2→Q3)
+        big_gaps = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]
+        boundaries = big_gaps["LapStartTime"].tolist()
+
+        if len(boundaries) < 2:
+            # Sprint qualifying only has one break (Q1→Q2)
+            # or something went wrong — fall back to no segmentation
+            boundaries_ok = len(boundaries) >= 1
+        else:
+            boundaries_ok = True
+
+        # Assign segment to each lap row in FastF1
+        def assign_segment(t):
+            if len(boundaries) == 0:
+                return 1
+            if t < boundaries[0]:
+                return 1
+            elif len(boundaries) < 2 or t < boundaries[1]:
+                return 2
+            else:
+                return 3
+
+        all_laps["segment"] = all_laps["LapStartTime"].apply(assign_segment)
+
+        # Build lap_number → segment map per driver
+        # Key: (driver_number_str, lap_number) → segment
+        lap_segment_map: dict = {}
+        for _, row in all_laps.iterrows():
+            key = (str(row["DriverNumber"]), int(row["LapNumber"]))
+            lap_segment_map[key] = int(row["segment"])
+
+        # Find the boundary lap numbers for frontend info
+        if boundaries_ok:
+            q2_boundary_laps = all_laps[all_laps["segment"] == 2]["LapNumber"]
+            q3_boundary_laps = all_laps[all_laps["segment"] == 3]["LapNumber"]
+            q2_start = int(q2_boundary_laps.min()) if not q2_boundary_laps.empty else None
+            q3_start = int(q3_boundary_laps.min()) if not q3_boundary_laps.empty else None
+        else:
+            q2_start = q3_start = None
+
+    except Exception:
+        # FastF1 unavailable (cold Railway start without cache)
+        # Fall back: no segmentation, everything in Q1
+        lap_segment_map = {}
+        q2_start = q3_start = None
+
+    # ── 3. Assign each DB lap to its segment ─────────────────────────────────
+    # Group DB laps by driver, find best lap per segment
+    # Structure: segment → driver → best lap row
+    from collections import defaultdict
+
+    # First pass: collect all valid laps per driver per segment
+    driver_segment_laps: dict = defaultdict(lambda: defaultdict(list))
+
+    for row in db_laps:
+        dn = row["driver_number"]
+        ln = row["lap_number"]
+        seg_key = (str(dn), int(ln))
+        segment = lap_segment_map.get(seg_key, 1)  # default to Q1 if no cache
+        driver_segment_laps[segment][dn].append(dict(row))
+
+    # Second pass: pick best (fastest) lap per driver per segment
+    segments_out: dict = {"Q1": [], "Q2": [], "Q3": []}
+    seg_labels = {1: "Q1", 2: "Q2", 3: "Q3"}
+
+    for seg_num, seg_label in seg_labels.items():
+        seg_drivers = driver_segment_laps.get(seg_num, {})
+        seg_results = []
+
+        for dn, laps in seg_drivers.items():
+            # Best lap = minimum lap_time_ms
+            best = min(laps, key=lambda x: x["lap_time_ms"])
+            info = driver_info.get(dn, {})
+            seg_results.append({
+                "driver_number": dn,
+                "abbreviation":  info.get("abbreviation", "???"),
+                "team_name":     info.get("team_name", ""),
+                "team_colour":   info.get("team_colour", "666666"),
+                "lap_number":    best["lap_number"],
+                "lap_time_ms":   best["lap_time_ms"],
+                "s1_ms":         best["s1_ms"],
+                "s2_ms":         best["s2_ms"],
+                "s3_ms":         best["s3_ms"],
+            })
+
+        # Sort by lap time
+        seg_results.sort(key=lambda x: x["lap_time_ms"])
+
+        # Add gap to leader and eliminated flag
+        # Q1 eliminates P16-P20 (bottom 5 of 20), Q2 eliminates P11-P15
+        eliminate_from = {1: 16, 2: 11, 3: None}
+        elim_pos = eliminate_from[seg_num]
+        fastest_ms = seg_results[0]["lap_time_ms"] if seg_results else None
+
+        for i, r in enumerate(seg_results):
+            r["position"] = i + 1
+            r["gap_ms"] = round(r["lap_time_ms"] - fastest_ms, 1) if fastest_ms else None
+            r["eliminated"] = (elim_pos is not None and r["position"] >= elim_pos)
+
+        segments_out[seg_label] = seg_results
+
+    return jsonify({
+        "segments": segments_out,
+        "boundaries": {
+            "Q2_start_lap": q2_start,
+            "Q3_start_lap": q3_start,
+        }
+    })

@@ -54,6 +54,64 @@ def _get_telemetry_samples(conn, session_key: int, driver_number: int, lap_numbe
     return [dict(r) for r in rows]
 
 
+def _resolve_telemetry_lap(
+    conn,
+    session_key: int,
+    driver_number: int,
+    pinned_lap_number: int | None,
+) -> int | None:
+    """
+    Prefer a caller-pinned lap, but fall back to the driver's fastest lap with
+    telemetry if that specific lap has no telemetry samples.
+    """
+    if pinned_lap_number is not None:
+        pinned_samples = _get_telemetry_samples(conn, session_key, driver_number, pinned_lap_number)
+        if pinned_samples:
+            return pinned_lap_number
+
+        # If the exact pinned lap has no telemetry, stay as close as possible
+        # to that lap first so Q1/Q2/Q3 toggles don't all collapse to the same
+        # global fastest telemetry lap.
+        nearby_row = conn.execute(text("""
+            SELECT lt.lap_number
+            FROM lap_times lt
+            WHERE lt.session_key   = :sk
+              AND lt.driver_number = :dn
+              AND lt.lap_time_ms   IS NOT NULL
+              AND lt.deleted       = FALSE
+              AND EXISTS (
+                  SELECT 1
+                  FROM telemetry t
+                  WHERE t.session_key   = lt.session_key
+                    AND t.driver_number = lt.driver_number
+                    AND t.lap_number    = lt.lap_number
+              )
+            ORDER BY ABS(lt.lap_number - :pinned_ln) ASC, lt.lap_time_ms ASC, lt.lap_number ASC
+            LIMIT 1
+        """), {"sk": session_key, "dn": driver_number, "pinned_ln": pinned_lap_number}).first()
+        if nearby_row:
+            return nearby_row[0]
+
+    row = conn.execute(text("""
+        SELECT lt.lap_number
+        FROM lap_times lt
+        WHERE lt.session_key   = :sk
+          AND lt.driver_number = :dn
+          AND lt.lap_time_ms   IS NOT NULL
+          AND lt.deleted       = FALSE
+          AND EXISTS (
+              SELECT 1
+              FROM telemetry t
+              WHERE t.session_key   = lt.session_key
+                AND t.driver_number = lt.driver_number
+                AND t.lap_number    = lt.lap_number
+          )
+        ORDER BY lt.lap_time_ms ASC, lt.lap_number ASC
+        LIMIT 1
+    """), {"sk": session_key, "dn": driver_number}).first()
+    return row[0] if row else None
+
+
 @telemetry_bp.get("/sessions/<int:session_key>/telemetry/<int:driver_number>")
 def driver_telemetry(session_key: int, driver_number: int):
     """Fastest lap telemetry for one driver."""
@@ -91,11 +149,23 @@ def telemetry_compare(session_key: int):
     except ValueError:
         return {"error": "Driver numbers must be integers"}, 400
 
+    # Optional: caller can pin specific lap numbers per driver
+    # Format: ?laps=44:16,63:8  (driver_number:lap_number pairs)
+    laps_param = request.args.get("laps", "")
+    pinned_laps: dict[int, int] = {}
+    if laps_param:
+        for pair in laps_param.split(","):
+            try:
+                dn_str, ln_str = pair.strip().split(":")
+                pinned_laps[int(dn_str)] = int(ln_str)
+            except ValueError:
+                pass
+
     result = {}
 
     with engine.connect() as conn:
         for dn in driver_nums:
-            lap_number = _get_fastest_lap_number(conn, session_key, dn)
+            lap_number = _resolve_telemetry_lap(conn, session_key, dn, pinned_laps.get(dn))
             if lap_number is None:
                 continue
 

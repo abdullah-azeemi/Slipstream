@@ -5,10 +5,44 @@ FastF1 client — fetches and normalises session data.
 from __future__ import annotations
 import warnings
 import fastf1
+import pandas as pd
 import structlog
 
 warnings.filterwarnings("ignore")
 log = structlog.get_logger()
+
+
+def _segment_quali_laps(laps):
+    """
+    Annotate qualifying laps with segment numbers:
+    1 = Q1, 2 = Q2, 3 = Q3.
+    """
+    if laps is None or laps.empty or "LapStartTime" not in laps:
+        return {}
+
+    all_laps = laps[["DriverNumber", "LapNumber", "LapStartTime"]].copy()
+    all_laps = all_laps.dropna(subset=["LapStartTime", "LapNumber", "DriverNumber"])
+    if all_laps.empty:
+        return {}
+
+    all_laps = all_laps.sort_values("LapStartTime")
+    all_laps["gap"] = all_laps["LapStartTime"].diff()
+    boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]["LapStartTime"].tolist()
+
+    def assign_segment(t):
+        if len(boundaries) == 0:
+            return 1
+        if t < boundaries[0]:
+            return 1
+        if len(boundaries) < 2 or t < boundaries[1]:
+            return 2
+        return 3
+
+    all_laps["segment"] = all_laps["LapStartTime"].apply(assign_segment)
+    return {
+        (str(row["DriverNumber"]), int(row["LapNumber"])): int(row["segment"])
+        for _, row in all_laps.iterrows()
+    }
 
 
 def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
@@ -120,58 +154,83 @@ def extract_telemetry(
     all_drivers: bool = False,
 ) -> list[dict]:
     """
-    Extract telemetry for the fastest lap of each driver.
+    Extract telemetry for the best qualifying lap in each segment.
 
     Captures: speed, rpm, gear, throttle, brake, drs, distance.
     Distance is key — it's metres around the lap, so two drivers
     can be compared at the exact same track position regardless of
     how many samples they have.
 
-    all_drivers=True: all drivers (use for qualifying — 20 drivers × ~300 rows = 6k rows)
-    all_drivers=False: first 10 drivers only (use for races to keep it fast)
+    To keep storage lean while still supporting the Q1/Q2/Q3 switcher,
+    we only store up to one telemetry lap per driver per segment:
+    best Q1, best Q2, best Q3.
     """
     results = []
     drivers = session.drivers if all_drivers else session.drivers[:10]
+    lap_segment_map = _segment_quali_laps(session.laps)
 
     for drv in drivers:
         try:
             driver_laps = session.laps.pick_drivers(drv)
-            # pick_fastest() returns the lap with the lowest LapTime
-            fast_lap = driver_laps.pick_fastest()
-
-            if fast_lap is None or fast_lap.empty:
-                log.debug("telemetry.no_fastest_lap", driver=drv)
+            if driver_laps is None or driver_laps.empty:
+                log.debug("telemetry.no_laps", driver=drv)
                 continue
 
-            tel = fast_lap.get_telemetry()
+            valid_laps = driver_laps[
+                driver_laps["LapTime"].notna()
+                & driver_laps["LapNumber"].notna()
+                & (~driver_laps["Deleted"].fillna(False))
+            ]
 
-            if tel is None or tel.empty:
-                log.debug("telemetry.no_data", driver=drv)
+            if valid_laps.empty:
+                log.debug("telemetry.no_valid_laps", driver=drv)
                 continue
 
-            lap_number = int(fast_lap["LapNumber"])
+            best_laps_by_segment = {}
+            for _, lap in valid_laps.iterrows():
+                lap_number = int(lap["LapNumber"])
+                segment = lap_segment_map.get((str(drv), lap_number), 1)
+                current_best = best_laps_by_segment.get(segment)
+                if current_best is None or lap["LapTime"] < current_best["LapTime"]:
+                    best_laps_by_segment[segment] = lap
 
-            for _, row in tel.iterrows():
-                results.append(
-                    {
-                        "session_key": session_key,
-                        "driver_number": int(drv),
-                        "lap_number": lap_number,
-                        "speed_kmh": row.get("Speed"),
-                        "rpm": row.get("RPM"),
-                        "gear": row.get("nGear"),
-                        "throttle_pct": row.get("Throttle"),
-                        "brake": row.get("Brake"),
-                        "drs": row.get("DRS"),
-                        "distance_m": row.get(
-                            "Distance"
-                        ),  # metres — critical for overlay
-                        "x_pos": row.get("X"),  # track map X coordinate
-                        "y_pos": row.get("Y"),  # track map Y coordinate
-                    }
-                )
+            driver_sample_count = 0
+            stored_lap_count = 0
 
-            log.info("telemetry.driver_done", driver=drv, samples=len(tel))
+            for segment in sorted(best_laps_by_segment):
+                lap = best_laps_by_segment[segment]
+                try:
+                    tel = lap.get_telemetry()
+                except Exception as e:
+                    log.debug("telemetry.lap_failed", driver=drv, lap_number=lap.get("LapNumber"), error=str(e))
+                    continue
+
+                if tel is None or tel.empty:
+                    continue
+
+                lap_number = int(lap["LapNumber"])
+                stored_lap_count += 1
+
+                for _, row in tel.iterrows():
+                    results.append(
+                        {
+                            "session_key": session_key,
+                            "driver_number": int(drv),
+                            "lap_number": lap_number,
+                            "speed_kmh": row.get("Speed"),
+                            "rpm": row.get("RPM"),
+                            "gear": row.get("nGear"),
+                            "throttle_pct": row.get("Throttle"),
+                            "brake": row.get("Brake"),
+                            "drs": row.get("DRS"),
+                            "distance_m": row.get("Distance"),
+                            "x_pos": row.get("X"),
+                            "y_pos": row.get("Y"),
+                        }
+                    )
+                driver_sample_count += len(tel)
+
+            log.info("telemetry.driver_done", driver=drv, laps=stored_lap_count, samples=driver_sample_count)
 
         except Exception as e:
             log.warning("telemetry.skip", driver=drv, error=str(e))
