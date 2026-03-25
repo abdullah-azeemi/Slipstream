@@ -262,6 +262,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const trackRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
+  const segmentEntries = qualiSegments?.segments[selectedSegment] ?? []
+  const segmentDriverNumbers = new Set(segmentEntries.map(entry => entry.driver_number))
+  const segmentLapByDriver = new Map(segmentEntries.map(entry => [entry.driver_number, entry.lap_number]))
+  const segmentDriverKey = segmentEntries.map(entry => entry.driver_number).join(',')
+
   // Load session metadata + drivers
   useEffect(() => {
     api.sessions.get(sessionKey).then(s => {
@@ -274,6 +279,29 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       if (d.length >= 2) setSelected([d[0].driver_number, d[1].driver_number])
     })
   }, [sessionKey])
+
+  // Keep the qualifying selection aligned to the active segment.
+  useEffect(() => {
+    if (!sessionType) return
+    if (isRaceSession(sessionType) || isPracticeSession(sessionType)) return
+    if (!qualiSegments?.segments) return
+
+    const availableDrivers = drivers
+      .filter(driver => segmentDriverNumbers.has(driver.driver_number))
+      .map(driver => driver.driver_number)
+
+    setSelected(prev => {
+      const kept = prev.filter(dn => segmentDriverNumbers.has(dn))
+      const next = [...kept]
+
+      for (const dn of availableDrivers) {
+        if (next.length >= Math.min(2, availableDrivers.length)) break
+        if (!next.includes(dn)) next.push(dn)
+      }
+
+      return next.length === prev.length && next.every((dn, i) => dn === prev[i]) ? prev : next
+    })
+  }, [drivers, qualiSegments, selectedSegment, sessionType, segmentDriverKey])
 
   // Load telemetry (qualifying mode only)
   useEffect(() => {
@@ -601,10 +629,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     setTooltipNx(null); setTooltipData(null)
   }, [])
 
-  const toggleDriver = (dn: number) =>
+  const toggleDriver = (dn: number) => {
+    if (!isRaceSession(sessionType) && !isPracticeSession(sessionType) && qualiSegments?.segments && !segmentDriverNumbers.has(dn)) {
+      return
+    }
     setSelected(prev => prev.includes(dn)
       ? prev.filter(d => d !== dn)
       : prev.length < 4 ? [...prev, dn] : prev)
+  }
 
   // ── Driver list for analysis components ───────────────────────────────────
 
@@ -665,14 +697,16 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   const isActive = selectedSegment === seg
                   const segColour = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? '#FFD700' : '#E8002D'
                   const count = qualiSegments.segments[seg]?.length ?? 0
+                  const isDisabled = count === 0
                   return (
-                    <button key={seg} onClick={() => setSelectedSegment(seg)} style={{
-                      padding: '5px 16px', borderRadius: '8px', cursor: 'pointer',
+                    <button key={seg} disabled={isDisabled} onClick={() => setSelectedSegment(seg)} style={{
+                      padding: '5px 16px', borderRadius: '8px',
                       border: isActive ? `1.5px solid ${segColour}` : '1.5px solid #2A2A2A',
                       background: isActive ? `${segColour}22` : 'transparent',
-                      color: isActive ? '#fff' : '#52525B',
+                      color: isDisabled ? '#3F3F46' : isActive ? '#fff' : '#52525B',
                       fontSize: '13px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 400,
-                      transition: 'all 0.15s',
+                      transition: 'all 0.15s', opacity: isDisabled ? 0.45 : 1,
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                     }}>
                       {seg}
                       <span style={{ marginLeft: '6px', fontSize: '10px', color: isActive ? segColour : '#3F3F46' }}>
@@ -700,18 +734,25 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               {drivers.map(d => {
                 const isSel = selected.includes(d.driver_number)
                 const colour = teamColour(d.team_colour, d.team_name)
+                const isUnavailable = !isRaceSession(sessionType) && !isPracticeSession(sessionType) && qualiSegments?.segments
+                  ? !segmentDriverNumbers.has(d.driver_number)
+                  : false
+                const segmentLap = segmentLapByDriver.get(d.driver_number)
                 return (
-                  <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
+                  <button key={d.driver_number} disabled={isUnavailable} onClick={() => toggleDriver(d.driver_number)} style={{
                     display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '4px 10px', borderRadius: '20px', cursor: 'pointer',
+                    padding: '4px 10px', borderRadius: '20px',
                     border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
                     background: isSel ? `${colour}18` : 'transparent',
-                    color: isSel ? '#fff' : '#52525B',
+                    color: isUnavailable ? '#3F3F46' : isSel ? '#fff' : '#52525B',
                     fontSize: '12px', fontWeight: isSel ? 700 : 400,
                     fontFamily: 'monospace', transition: 'all 0.12s',
+                    opacity: isUnavailable ? 0.45 : 1,
+                    cursor: isUnavailable ? 'not-allowed' : 'pointer',
                   }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isUnavailable ? '#3F3F46' : colour, display: 'inline-block' }} />
                     {d.abbreviation}
+                    {segmentLap ? <span style={{ color: '#71717A', fontSize: '10px' }}>L{segmentLap}</span> : null}
                     {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
                   </button>
                 )
@@ -722,7 +763,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                 {driverData.map(d => (
                   <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ width: '24px', height: '2px', background: d.colour }} />
-                    <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#A1A1AA', fontWeight: 600 }}>{d.abbr}</span>
+                    <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#A1A1AA', fontWeight: 600 }}>
+                      {d.abbr}
+                      {(() => {
+                        const driver = drivers.find(x => x.abbreviation === d.abbr)
+                        const lapNumber = driver ? telLapNumbers.get(driver.driver_number) : null
+                        return lapNumber ? ` · L${lapNumber}` : ''
+                      })()}
+                    </span>
                   </div>
                 ))}
               </div>
