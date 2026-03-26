@@ -315,6 +315,18 @@ When shipping qualifying telemetry changes to Railway/Vercel:
 6. Deploy the frontend after the backend is already serving the new segment data.
 7. Hard refresh the client and confirm the segment tabs, disabled drivers, and lap badges update together.
 
+## Public launch note
+
+If you are preparing Pitwall for a public Railway deployment, do not treat the hosted database as a full historical archive.
+
+Railway storage is limited, so the best launch strategy is:
+
+- keep current-season `Q` and `R`
+- keep selective `FP2`
+- keep qualifying telemetry only for the comparison weekends the UI actually needs
+
+See [docs/release-checklist.md](./docs/release-checklist.md) for the full pre-public checklist and storage-aware launch plan.
+
 ## Dev commands
 
 ```bash
