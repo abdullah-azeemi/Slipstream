@@ -230,6 +230,19 @@ Storage estimate: ~200MB for 5 circuits × 4 seasons (lap times only, no telemet
 
 **Telemetry note:** Telemetry is large, but Pitwall stores only the segment-best qualifying telemetry laps per driver (`best Q1`, `best Q2`, `best Q3`) rather than every qualifying lap. All other analysis panels (race, FP) use only `lap_times` which is compact.
 
+### ML prediction data requirements
+
+Pitwall's current ML pipeline predicts race finishing positions from qualifying-era information plus historical race context.
+
+- Live prediction needs the current `Q` session.
+- Historical form features need past `R` sessions in the database.
+- `FP2` is optional but improves the strategy signal.
+- `FP1`, `FP3`, sprint sessions, and the current race are not used for inference today.
+
+Training is built from weekends that have both `Q` and `R` sessions. Missing `FP2` does not block training or prediction; it falls back to neutral strategy values.
+
+See [docs/ml-race-prediction.md](./docs/ml-race-prediction.md) for the full feature-to-session map, ingest checklist, and common local failure modes.
+
 ---
 
 ## API reference

@@ -1,0 +1,177 @@
+# Deployment
+
+This guide covers the practical deployment flow for Pitwall's current stack.
+
+Today that usually means:
+
+- backend on Railway
+- frontend on Vercel
+- Postgres on Railway
+
+The most important deployment rule in this project is:
+
+> deploy backend code, database changes, and re-ingestion in the right order
+
+That matters especially for qualifying telemetry and any feature that stores derived metadata.
+
+## Deployment responsibilities
+
+### Backend
+
+Responsible for:
+
+- API routes
+- SQL queries
+- analysis logic
+- prediction endpoints
+
+Backend changes must be deployed before the frontend depends on new response shapes or semantics.
+
+### Frontend
+
+Responsible for:
+
+- rendering UI based on backend responses
+- segment-aware selection logic
+- prediction UI
+
+Frontend deploys should generally happen after backend deploys for data-shape changes.
+
+### Database
+
+Responsible for:
+
+- schema changes
+- migration state
+- stored derived metadata such as `quali_segment`
+
+### Ingestion
+
+Responsible for:
+
+- populating new columns or newly required derived fields
+- aligning stored telemetry and lap metadata after schema changes
+
+## Recommended deploy order
+
+### For backend-only logic changes
+
+1. Deploy backend
+2. Verify target endpoints manually
+3. Deploy frontend if needed
+
+### For schema changes
+
+1. Deploy backend code that can work with the new schema
+2. Run DB migrations
+3. Re-ingest sessions that need the new stored fields
+4. Verify data in the database or via API
+5. Deploy frontend if the UI depends on that new behavior
+
+## Qualifying telemetry checklist
+
+This is the most important concrete deploy recipe in the repo today.
+
+When shipping `Q1/Q2/Q3` telemetry changes:
+
+1. Deploy backend code that reads stored `quali_segment`
+2. Run database migrations
+3. Re-ingest the qualifying sessions that need segment comparison
+4. Verify `/analysis/quali-segments`
+5. Verify pinned-lap telemetry compare
+6. Deploy frontend
+7. Hard refresh and confirm the telemetry UI updates correctly
+
+Verification endpoints:
+
+- `GET /api/v1/sessions/:key/analysis/quali-segments`
+- `GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63&laps=12:8,63:5`
+
+Expected behavior after a correct deploy:
+
+- `Q2` and `Q3` are populated where appropriate
+- `Q2_start_lap` and `Q3_start_lap` are not `null`
+- the frontend segment tabs show different lap badges and overlays
+
+## Environment variables to verify
+
+### Backend / Railway
+
+Check:
+
+- `DATABASE_URL`
+- `REDIS_URL` if workers are in use
+- `KAFKA_BOOTSTRAP_SERVERS` if stream/worker features depend on it
+- `MLFLOW_TRACKING_URI` if training/registry behavior depends on it
+
+### Frontend / Vercel
+
+Check:
+
+- API base URL points to the correct backend deployment
+
+### Local shell before production commands
+
+Before running migration or re-ingest commands against Railway, verify:
+
+```bash
+echo $DATABASE_URL
+```
+
+This avoids accidentally pointing operational commands at the wrong database.
+
+## Railway operational notes
+
+### Rotate exposed credentials immediately
+
+If a Railway database password is ever pasted in chat, logs, screenshots, or shell history:
+
+1. rotate it in Railway
+2. update Railway environment variables
+3. update any local or CI secrets that still reference it
+4. remove stale values from `.env`
+
+### Keep local and hosted environments separate
+
+Recommended pattern:
+
+- local `.env` uses local Postgres
+- Railway dashboard holds production `DATABASE_URL`
+- shell exports are used temporarily for production maintenance only
+
+## CI and test safety
+
+Do not point tests at Railway.
+
+Backend tests should use local Postgres or a dedicated test database. A remote production-like database introduces:
+
+- accidental data mutation risk
+- flaky auth and network dependencies
+- harder-to-debug failures
+
+## Manual verification checklist
+
+After deploy, check:
+
+1. `/health`
+2. session list loads
+3. target session page loads
+4. telemetry compare works for a known qualifying session
+5. any new endpoint returns the expected shape
+6. if ML changed, training or inference still runs against the intended environment
+
+## Rollback mindset
+
+If something is wrong after deploy:
+
+- first confirm backend version and environment variables
+- then confirm migration state
+- then confirm whether the target sessions were re-ingested
+
+For data-backed features, code-only rollback is often not enough if the issue is really stale or missing ingested data.
+
+## Related docs
+
+- [docs/local-development.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/local-development.md)
+- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/ingestion.md)
+- [README.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/README.md)
