@@ -137,26 +137,42 @@ export default function SessionPage() {
     : qualiLaps.length > 0
 
   return (
-    <div style={{ padding: '16px', maxWidth: '640px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
       {/* Back */}
-      <Link href="/sessions" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#52525B', fontSize: '13px', textDecoration: 'none' }}>
+      <Link href="/sessions" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#9fb2c6', fontSize: '13px', textDecoration: 'none', fontFamily: 'JetBrains Mono, monospace' }}>
         <ArrowLeft size={14} /> All Sessions
       </Link>
 
       {/* GP name */}
-      <div>
-        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.14em', marginBottom: '3px' }}>
-          {session.year} · FORMULA 1
+      <section className="panel" style={{ padding: '22px 22px 18px' }}>
+        <div className="eyebrow" style={{ marginBottom: '10px' }}>
+          {session.year} · Formula 1
         </div>
-        <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1, margin: 0 }}>
+        <h1 className="page-title" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
           {session.gp_name}
         </h1>
-      </div>
+        <p className="page-subtitle" style={{ marginTop: '8px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
+          {meta.label} · {meta.desc || session.session_name}
+        </p>
+
+        <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Session</div>
+            <div style={{ fontSize: '18px', color: meta.color, fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{type}</div>
+          </div>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Status</div>
+            <div style={{ fontSize: '18px', color: hasData ? '#2CF4C5' : '#9fb2c6', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+              {hasData ? 'Ready' : 'Missing'}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── Session switcher tabs ─────────────────────────────────────── */}
       {siblings.length > 1 && (
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div className="panel-soft" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '12px', borderRadius: '20px' }}>
           {siblings.map(sib => {
             const isActive = sib.session_key === sessionKey
             const sibMeta  = SESSION_META[sib.session_type] ?? { color: '#71717A', desc: '' }
@@ -170,12 +186,12 @@ export default function SessionPage() {
                   display:       'flex',
                   flexDirection: 'column',
                   alignItems:    'center',
-                  padding:       '8px 16px',
-                  borderRadius:  '12px',
+                  padding:       '10px 16px',
+                  borderRadius:  '16px',
                   cursor:        'pointer',
                   transition:    'all 0.15s',
-                  border:        isActive ? `1.5px solid ${sibMeta.color}` : '1.5px solid #2A2A2A',
-                  background:    isActive ? `${sibMeta.color}18` : '#111111',
+                  border:        isActive ? `1.5px solid ${sibMeta.color}` : '1.5px solid rgba(152, 181, 211, 0.12)',
+                  background:    isActive ? `${sibMeta.color}18` : 'rgba(255,255,255,0.02)',
                   minWidth:      '58px',
                   textAlign:     'center',
                 }}>
@@ -201,7 +217,7 @@ export default function SessionPage() {
       )}
 
       {/* Current session label + data status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <div style={{ padding: '4px 12px', borderRadius: '20px', background: `${meta.color}18`, border: `1px solid ${meta.color}44` }}>
           <span style={{ fontSize: '11px', fontFamily: 'monospace', color: meta.color, fontWeight: 700 }}>
             {meta.label.toUpperCase()}
@@ -217,7 +233,7 @@ export default function SessionPage() {
 
       {/* ── No data state ─────────────────────────────────────────────── */}
       {!hasData && !isFP && (
-        <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '32px', textAlign: 'center' }}>
+        <div className="panel-soft" style={{ borderRadius: '24px', padding: '32px', textAlign: 'center' }}>
           <Database size={32} style={{ color: '#3F3F46', margin: '0 auto 12px' }} />
           <div style={{ color: '#fff', fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>No data ingested yet</div>
           <div style={{ color: '#52525B', fontSize: '13px', marginBottom: '16px' }}>
@@ -238,8 +254,8 @@ export default function SessionPage() {
 
       {/* ── Race leaderboard ──────────────────────────────────────────── */}
       {isRace && hasData && !dataLoading && (
-        <div style={{ background: '#111111', border: '1px solid #1E1E1E', borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '10px 16px', borderBottom: '1px solid #161616' }}>
+        <div className="panel-soft" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '12px 16px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
             {['POS', 'DRIVER', 'LAPS / GAP'].map((h, i) => (
               <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
             ))}
@@ -252,8 +268,8 @@ export default function SessionPage() {
               <div key={driver.driver_number} style={{
                 display: 'grid', gridTemplateColumns: '44px 1fr auto',
                 padding: '12px 16px', alignItems: 'center',
-                borderBottom: i < raceData.length - 1 ? '1px solid #0D0D0D' : 'none',
-                background: isWinner ? '#141414' : 'transparent',
+                borderBottom: i < raceData.length - 1 ? '1px solid rgba(152, 181, 211, 0.06)' : 'none',
+                background: isWinner ? 'rgba(255,255,255,0.03)' : 'transparent',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
@@ -287,8 +303,8 @@ export default function SessionPage() {
 
       {/* ── Qualifying leaderboard ────────────────────────────────────── */}
       {isQuali && hasData && !dataLoading && (
-        <div style={{ background: '#111111', border: '1px solid #1E1E1E', borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '10px 16px', borderBottom: '1px solid #161616' }}>
+        <div className="panel-soft" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '12px 16px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
             {['POS', 'DRIVER', 'TIME / GAP'].map((h, i) => (
               <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
             ))}
@@ -302,8 +318,8 @@ export default function SessionPage() {
               <div key={lap.driver_number} style={{
                 display: 'grid', gridTemplateColumns: '44px 1fr auto',
                 padding: '12px 16px', alignItems: 'center',
-                borderBottom: i < qualiLaps.length - 1 ? '1px solid #0D0D0D' : 'none',
-                background: isFirst ? '#141414' : 'transparent',
+                borderBottom: i < qualiLaps.length - 1 ? '1px solid rgba(152, 181, 211, 0.06)' : 'none',
+                background: isFirst ? 'rgba(255,255,255,0.03)' : 'transparent',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
@@ -339,7 +355,7 @@ export default function SessionPage() {
 
       {/* ── FP info panel ─────────────────────────────────────────────── */}
       {isFP && (
-        <div style={{ background: '#111111', border: '1px solid #1E1E1E', borderRadius: '16px', padding: '20px' }}>
+        <div className="panel-soft" style={{ borderRadius: '24px', padding: '20px' }}>
           <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#3671C6', fontWeight: 700, letterSpacing: '0.1em', marginBottom: '6px' }}>
             {meta.label.toUpperCase()}
           </div>
@@ -355,7 +371,7 @@ export default function SessionPage() {
 
       {/* ── Loading ───────────────────────────────────────────────────── */}
       {dataLoading && (
-        <div style={{ textAlign: 'center', padding: '32px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '12px' }}>
+        <div className="panel-soft" style={{ textAlign: 'center', padding: '32px', color: '#5e7289', fontFamily: 'monospace', fontSize: '12px', borderRadius: '24px' }}>
           Loading session data...
         </div>
       )}
@@ -365,9 +381,10 @@ export default function SessionPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <Link href={`/sessions/${sessionKey}/telemetry`} style={{ textDecoration: 'none' }}>
             <div
-              style={{ background: '#111111', border: '1px solid #1E1E1E', borderRadius: '14px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#2A2A2A')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = '#1E1E1E')}
+              className="panel-soft"
+              style={{ borderRadius: '20px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(242, 200, 121, 0.4)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(152, 181, 211, 0.1)')}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: `${meta.color}18`, border: `1px solid ${meta.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -386,16 +403,17 @@ export default function SessionPage() {
                   </div>
                 </div>
               </div>
-              <span style={{ fontSize: '20px', color: '#3F3F46', marginLeft: '8px' }}>→</span>
-            </div>
-          </Link>
+                <span style={{ fontSize: '20px', color: '#5e7289', marginLeft: '8px' }}>→</span>
+              </div>
+            </Link>
 
           {isRace && (
             <Link href={`/sessions/${sessionKey}/strategy`} style={{ textDecoration: 'none' }}>
               <div
-                style={{ background: '#111111', border: '1px solid #1E1E1E', borderRadius: '14px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#2A2A2A')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = '#1E1E1E')}
+                className="panel-soft"
+                style={{ borderRadius: '20px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(44, 244, 197, 0.35)')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(152, 181, 211, 0.1)')}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#2CF4C518', border: '1px solid #2CF4C533', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -406,7 +424,7 @@ export default function SessionPage() {
                     <div style={{ fontSize: '11px', color: '#52525B' }}>Stint diagram · pit stop timing · compound choices</div>
                   </div>
                 </div>
-                <span style={{ fontSize: '20px', color: '#3F3F46', marginLeft: '8px' }}>→</span>
+                <span style={{ fontSize: '20px', color: '#5e7289', marginLeft: '8px' }}>→</span>
               </div>
             </Link>
           )}

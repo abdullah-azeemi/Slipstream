@@ -49,70 +49,93 @@ export default function SessionsPage() {
   const grouped = groupSessions(sorted)
 
   return (
-    <div style={{ padding: '16px', maxWidth: '640px', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '900px', margin: '0 auto' }}>
 
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '28px', color: '#fff', margin: 0 }}>
-          Sessions
-        </h1>
+      <section className="panel" style={{ padding: '22px 22px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: '10px' }}>Weekend Library</div>
+            <h1 className="page-title" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
+              Sessions
+            </h1>
+            <p className="page-subtitle" style={{ marginTop: '8px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
+              Browse weekends, jump between practice, qualifying, and race sessions, and open analysis from a single timeline.
+            </p>
+          </div>
 
-        {/* Year filter */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setOpen(o => !o)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              background: '#111111', border: '1px solid #2A2A2A',
-              color: '#fff', fontSize: '13px', padding: '6px 12px',
-              borderRadius: '10px', cursor: 'pointer', fontFamily: 'monospace',
-            }}
-          >
-            {year === 'all' ? 'All Years' : year}
-            <ChevronDown size={13} style={{ transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'none' }} />
-          </button>
-          {open && (
-            <div style={{
-              position: 'absolute', right: 0, top: 'calc(100% + 4px)',
-              background: '#161616', border: '1px solid #2A2A2A',
-              borderRadius: '10px', overflow: 'hidden', zIndex: 50, minWidth: '120px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-            }}>
-              {(['all', ...allYears] as (number | 'all')[]).map(y => (
-                <button
-                  key={y}
-                  onClick={() => { setYear(y); setOpen(false) }}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    padding: '9px 14px', fontSize: '13px', cursor: 'pointer',
-                    background: year === y ? '#1E1E1E' : 'transparent',
-                    color: year === y ? '#fff' : '#71717A',
-                    fontFamily: 'monospace', border: 'none',
-                    borderBottom: '1px solid #1A1A1A',
-                  }}
-                >
-                  {y === 'all' ? 'All Years' : y}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setOpen(o => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(152, 181, 211, 0.14)',
+                color: '#fff', fontSize: '13px', padding: '10px 14px',
+                borderRadius: '999px', cursor: 'pointer', fontFamily: 'monospace',
+              }}
+            >
+              {year === 'all' ? 'All Years' : year}
+              <ChevronDown size={13} style={{ transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'none' }} />
+            </button>
+            {open && (
+              <div style={{
+                position: 'absolute', right: 0, top: 'calc(100% + 8px)',
+                background: 'rgba(10,20,31,0.96)', border: '1px solid rgba(152, 181, 211, 0.14)',
+                borderRadius: '16px', overflow: 'hidden', zIndex: 50, minWidth: '140px',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+              }}>
+                {(['all', ...allYears] as (number | 'all')[]).map(y => (
+                  <button
+                    key={y}
+                    onClick={() => { setYear(y); setOpen(false) }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 14px', fontSize: '13px', cursor: 'pointer',
+                      background: year === y ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      color: year === y ? '#fff' : '#9fb2c6',
+                      fontFamily: 'monospace', border: 'none',
+                      borderBottom: '1px solid rgba(152, 181, 211, 0.08)',
+                    }}
+                  >
+                    {y === 'all' ? 'All Years' : y}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <p style={{ color: '#52525B', fontSize: '13px', marginBottom: '20px', fontFamily: 'monospace' }}>
-        {grouped.length} Grand Prix{grouped.length !== 1 ? '' : ''} loaded
-      </p>
+        <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Grand Prix</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+              {grouped.length}
+            </div>
+          </div>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Sessions</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+              {filtered.length}
+            </div>
+          </div>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Scope</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
+              {year === 'all' ? 'All Years' : year}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 0', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+        <div className="panel-soft" style={{ textAlign: 'center', padding: '64px 0', color: '#5e7289', fontFamily: 'monospace', fontSize: '13px' }}>
           Loading sessions...
         </div>
       )}
 
       {/* Empty */}
       {!loading && grouped.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '64px 0', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+        <div className="panel-soft" style={{ textAlign: 'center', padding: '64px 0', color: '#5e7289', fontFamily: 'monospace', fontSize: '13px' }}>
           No sessions available.
         </div>
       )}
@@ -122,10 +145,7 @@ export default function SessionsPage() {
         {grouped.map(([groupKey, gpSessions]) => {
           const first = gpSessions[0]
           return (
-            <div key={groupKey} style={{
-              background: '#111111', border: '1px solid #1E1E1E',
-              borderRadius: '16px', overflow: 'hidden',
-            }}>
+            <div key={groupKey} className="panel-soft" style={{ borderRadius: '24px', overflow: 'hidden' }}>
               {/* GP header — image left, info right, NO overlap */}
               <div style={{ display: 'flex', alignItems: 'stretch' }}>
 
@@ -146,15 +166,15 @@ export default function SessionsPage() {
                 </div>
 
                 {/* GP info — in its own box, never overlapping image */}
-                <div style={{ flex: 1, padding: '14px 16px 14px 12px' }}>
-                  <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', marginBottom: '3px' }}>
+                <div style={{ flex: 1, padding: '16px 16px 14px 12px' }}>
+                  <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#5e7289', marginBottom: '5px', letterSpacing: '0.14em' }}>
                     {first.year}
                   </div>
-                  <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '18px', color: '#fff', lineHeight: 1.1, marginBottom: '5px' }}>
+                  <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '22px', color: '#fff', lineHeight: 1.05, marginBottom: '6px', letterSpacing: '0.03em' }}>
                     {first.gp_name}
                   </div>
                   {first.date_start && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#52525B', fontSize: '11px', fontFamily: 'monospace' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#9fb2c6', fontSize: '11px', fontFamily: 'monospace' }}>
                       <Calendar size={10} />
                       {new Date(first.date_start).toLocaleDateString('en-GB', {
                         day: 'numeric', month: 'short', year: 'numeric'
@@ -165,7 +185,7 @@ export default function SessionsPage() {
               </div>
 
               {/* Session rows */}
-              <div style={{ borderTop: '1px solid #161616' }}>
+              <div style={{ borderTop: '1px solid rgba(152, 181, 211, 0.08)' }}>
                 {gpSessions.map((session, si) => {
                   const colour  = SESSION_COLOUR[session.session_type] ?? '#71717A'
                   const isLast  = si === gpSessions.length - 1
@@ -182,11 +202,11 @@ export default function SessionsPage() {
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '11px 16px',
-                        borderBottom: isLast ? 'none' : '1px solid #0F0F0F',
+                        borderBottom: isLast ? 'none' : '1px solid rgba(152, 181, 211, 0.06)',
                         transition: 'background 0.12s',
                         cursor: 'pointer',
                       }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#161616')}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
                         {/* Left: colour stripe + session name */}
@@ -197,7 +217,7 @@ export default function SessionsPage() {
                               {sessionTypeLabel(session.session_type)}
                             </div>
                             {session.date_start && (
-                              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', marginTop: '1px' }}>
+                              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#5e7289', marginTop: '1px' }}>
                                 {new Date(session.date_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                               </div>
                             )}
@@ -215,7 +235,7 @@ export default function SessionsPage() {
                           }}>
                             {session.session_type}
                           </span>
-                          <ChevronRight size={14} style={{ color: '#3F3F46' }} />
+                          <ChevronRight size={14} style={{ color: '#5e7289' }} />
                         </div>
                       </div>
                     </Link>

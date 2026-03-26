@@ -6,6 +6,10 @@ Describe the change and why it matters.
 
 - 
 
+## Why
+
+Explain the user-facing or contributor-facing value.
+
 ## Verification
 
 - [ ] `make up`
@@ -19,6 +23,12 @@ Describe the change and why it matters.
 ## Screenshots / Notes
 
 Add screenshots, logs, or extra context if helpful.
+
+## Risk Check
+
+- [ ] This does not rely on stale local env state
+- [ ] I verified any DB-backed behavior against the intended database
+- [ ] I called out any follow-up work or known limitations below
 
 ## Checklist
 

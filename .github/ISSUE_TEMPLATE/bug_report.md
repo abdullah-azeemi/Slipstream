@@ -35,6 +35,16 @@ What happened instead?
 
 Paste the relevant error output or screenshots here.
 
+## Data / Session Context
+
+If this is analytics-related, include as much of this as you can:
+
+- session key:
+- year / GP:
+- session type:
+- drivers involved:
+- whether the issue is local or deployed:
+
 ## Extra Context
 
 Anything else that might help reproduce or diagnose the issue.
