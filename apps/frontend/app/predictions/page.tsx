@@ -113,46 +113,64 @@ export default function PredictionsPage() {
   const maxWin   = data ? Math.max(...data.predictions.map(p => p.win_probability)) : 1
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '720px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '920px', margin: '0 auto' }}>
 
       {/* Header */}
-      <div className="predictions-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#E8002D18', border: '1px solid #E8002D33', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <section className="panel fade-up" style={{ padding: '22px 22px 18px' }}>
+        <div className="predictions-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: '10px' }}>Prediction Lab</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#E8002D18', border: '1px solid #E8002D33', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Brain size={16} style={{ color: '#E8002D' }} />
             </div>
-            <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '26px', color: '#fff', margin: 0 }}>
+            <h1 className="page-title" style={{ fontSize: 'clamp(2rem, 4vw, 2.8rem)', margin: 0 }}>
               Race Predictions
             </h1>
+            </div>
+            <p className="page-subtitle" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', margin: 0 }}>
+              FLAML AutoML · ExtraTree · trained on 26 race weekends · MAE 3.8 positions
+            </p>
           </div>
-          <p style={{ color: '#52525B', fontSize: '12px', fontFamily: 'monospace', margin: 0 }}>
-            FLAML AutoML · ExtraTree · trained on 26 race weekends · MAE 3.8 positions
-          </p>
+
+          {/* Session selector */}
+          {sessions.length > 0 && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(152, 181, 211, 0.14)', color: '#fff', fontSize: '12px', padding: '10px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                {selected ? `${selected.gp_name.replace(' Grand Prix', '')} ${selected.year} Q` : 'Select session'}
+                <ChevronDown size={12} style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
+              </button>
+              {dropOpen && (
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(10,20,31,0.96)', border: '1px solid rgba(152, 181, 211, 0.14)', borderRadius: '16px', overflow: 'hidden', zIndex: 100, minWidth: '220px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                  {sessions.map(s => (
+                    <button key={s.session_key} onClick={() => { setSelectedKey(s.session_key); setDropOpen(false) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', cursor: 'pointer', background: selectedKey === s.session_key ? 'rgba(255,255,255,0.06)' : 'transparent', color: selectedKey === s.session_key ? '#fff' : '#9fb2c6', fontFamily: 'monospace', border: 'none', borderBottom: '1px solid rgba(152,181,211,0.08)' }}>
+                      {s.gp_name.replace(' Grand Prix', '')} {s.year}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Session selector */}
-        {sessions.length > 0 && (
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#111111', border: '1px solid #2A2A2A', color: '#fff', fontSize: '12px', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-              {selected ? `${selected.gp_name.replace(' Grand Prix', '')} ${selected.year} Q` : 'Select session'}
-              <ChevronDown size={12} style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
-            </button>
-            {dropOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', background: '#161616', border: '1px solid #2A2A2A', borderRadius: '10px', overflow: 'hidden', zIndex: 100, minWidth: '220px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
-                {sessions.map(s => (
-                  <button key={s.session_key} onClick={() => { setSelectedKey(s.session_key); setDropOpen(false) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: '12px', cursor: 'pointer', background: selectedKey === s.session_key ? '#1E1E1E' : 'transparent', color: selectedKey === s.session_key ? '#fff' : '#71717A', fontFamily: 'monospace', border: 'none', borderBottom: '1px solid #1A1A1A' }}>
-                    {s.gp_name.replace(' Grand Prix', '')} {s.year}
-                  </button>
-                ))}
-              </div>
-            )}
+        <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Model</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>ExtraTree</div>
           </div>
-        )}
-      </div>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>Coverage</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>26 weekends</div>
+          </div>
+          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
+            <div className="eyebrow" style={{ marginBottom: '6px' }}>MAE</div>
+            <div style={{ fontSize: '18px', color: '#f2c879', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>3.8 pos</div>
+          </div>
+        </div>
+      </section>
 
       {/* Model disclaimer */}
-      <div style={{ display: 'flex', gap: '8px', padding: '10px 12px', background: '#FFD70011', border: '1px solid #FFD70022', borderRadius: '8px', alignItems: 'flex-start' }}>
+      <div className="panel-soft fade-up-delay-1" style={{ display: 'flex', gap: '8px', padding: '12px 14px', alignItems: 'flex-start', background: 'rgba(242, 200, 121, 0.08)', borderColor: 'rgba(242, 200, 121, 0.16)' }}>
         <AlertCircle size={13} style={{ color: '#FFD700', flexShrink: 0, marginTop: '1px' }} />
         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#71717A', lineHeight: 1.5 }}>
           Predictions are based on qualifying data only — no race strategy, weather, or reliability factors. Top-3 accuracy: 33% avg, 67% on 2026 data. Use as a starting point, not gospel.
@@ -161,14 +179,14 @@ export default function PredictionsPage() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+        <div className="panel-soft" style={{ textAlign: 'center', padding: '48px', color: '#5e7289', fontFamily: 'monospace', fontSize: '13px' }}>
           Running model...
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div style={{ padding: '16px', background: '#E8002D11', border: '1px solid #E8002D33', borderRadius: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#E8002D' }}>
+        <div className="panel-soft" style={{ padding: '16px', background: '#E8002D11', borderColor: '#E8002D33', fontSize: '12px', fontFamily: 'monospace', color: '#E8002D' }}>
           {error}
         </div>
       )}
@@ -177,28 +195,28 @@ export default function PredictionsPage() {
       {!loading && data && (
         <>
           {/* GP header */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+          <div className="fade-up-delay-1" style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '20px', fontWeight: 700, color: '#fff' }}>
               {data.gp_name}
             </span>
-            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B' }}>{data.year} — {data.predictions.length} drivers</span>
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>{data.year} — {data.predictions.length} drivers</span>
           </div>
 
           {/* Podium highlight */}
-          <div className="podium-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+          <div className="podium-grid fade-up-delay-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
             {data.predictions.slice(0, 3).map((p, i) => {
               const colour  = '#' + p.team_colour
               const medals  = ['#FFD700', '#C0C0C0', '#CD7F32']
               const labels  = ['WINNER', '2ND PLACE', '3RD PLACE']
               return (
-                <div key={p.driver_number} className="podium-card" style={{ background: '#111111', border: `1px solid ${medals[i]}33`, borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                <div key={p.driver_number} className="podium-card panel-soft interactive-card" style={{ border: `1px solid ${medals[i]}33`, borderRadius: '18px', padding: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '9px', fontFamily: 'monospace', color: medals[i], letterSpacing: '0.1em', marginBottom: '8px' }}>{labels[i]}</div>
                   <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: colour, margin: '0 auto 8px' }} />
                   <div style={{ fontSize: '20px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, color: colour }}>{p.abbreviation}</div>
-                  <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginTop: '2px' }}>{p.team_name.split(' ')[0]}</div>
+                    <div style={{ fontSize: '10px', color: '#5e7289', fontFamily: 'monospace', marginTop: '2px' }}>{p.team_name.split(' ')[0]}</div>
                   <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ fontSize: '14px', fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>{(p.win_probability * 100).toFixed(0)}%</div>
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>win prob</div>
+                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#5e7289' }}>win prob</div>
                   </div>
                 </div>
               )
@@ -206,9 +224,9 @@ export default function PredictionsPage() {
           </div>
 
           {/* Full grid */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
+          <div className="panel-soft fade-up-delay-2" style={{ borderRadius: '20px', overflow: 'hidden' }}>
             {/* Column headers */}
-            <div className="predictions-header" style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '8px 16px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
+            <div className="predictions-header" style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '8px 16px', fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid rgba(152,181,211,0.08)' }}>
               <span>PRED</span><span>GRID</span><span>DRIVER</span><span className="predictions-hide-mobile">WIN %</span><span className="predictions-hide-mobile">PODIUM %</span><span className="predictions-hide-mobile">PROBABILITY</span>
             </div>
 
@@ -222,8 +240,8 @@ export default function PredictionsPage() {
                   <div
                     onClick={() => setExpanded(isExpand ? null : p.driver_number)}
                     className="predictions-row"
-                    style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '10px 16px', borderBottom: '1px solid #0F0F0F', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s', background: isExpand ? '#161616' : 'transparent' }}
-                    onMouseEnter={e => { if (!isExpand) e.currentTarget.style.background = '#141414' }}
+                    style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '10px 16px', borderBottom: '1px solid rgba(152,181,211,0.06)', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s', background: isExpand ? 'rgba(255,255,255,0.04)' : 'transparent' }}
+                    onMouseEnter={e => { if (!isExpand) e.currentTarget.style.background = 'rgba(255,255,255,0.025)' }}
                     onMouseLeave={e => { if (!isExpand) e.currentTarget.style.background = 'transparent' }}
                   >
                     {/* Predicted position */}
@@ -231,7 +249,7 @@ export default function PredictionsPage() {
 
                     {/* Grid position + delta */}
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B' }}>P{p.grid_position}</div>
+                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>P{p.grid_position}</div>
                       {gridDiff !== 0 && (
                         <div style={{ fontSize: '8px', fontFamily: 'monospace', color: gridDiff > 0 ? '#2CF4C5' : '#E8002D' }}>
                           {gridDiff > 0 ? `+${gridDiff}` : gridDiff}
@@ -244,7 +262,7 @@ export default function PredictionsPage() {
                       <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '13px', fontFamily: 'monospace', fontWeight: 700, color: colour }}>{p.abbreviation}</div>
-                        <div style={{ fontSize: '9px', color: '#52525B', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.team_name}</div>
+                        <div style={{ fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.team_name}</div>
                       </div>
                     </div>
 
@@ -275,8 +293,8 @@ export default function PredictionsPage() {
 
                   {/* Expanded SHAP factors */}
                   {isExpand && p.factors.length > 0 && (
-                    <div style={{ padding: '10px 16px 14px', background: '#0D0D0D', borderBottom: '1px solid #0F0F0F' }}>
-                      <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.1em', marginBottom: '8px' }}>
+                    <div style={{ padding: '10px 16px 14px', background: 'rgba(5,12,20,0.65)', borderBottom: '1px solid rgba(152,181,211,0.06)' }}>
+                      <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#5e7289', letterSpacing: '0.1em', marginBottom: '8px' }}>
                         KEY FACTORS — SHAP explanation
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -302,7 +320,7 @@ export default function PredictionsPage() {
           </div>
 
           {/* Model info footer */}
-          <div style={{ display: 'flex', gap: '16px', padding: '12px 16px', background: '#111111', border: '1px solid #2A2A2A', borderRadius: '10px', flexWrap: 'wrap' }}>
+          <div className="panel-soft fade-up-delay-2" style={{ display: 'flex', gap: '16px', padding: '14px 16px', borderRadius: '18px', flexWrap: 'wrap' }}>
             {[
               { label: 'ALGORITHM',  value: 'ExtraTree (FLAML)' },
               { label: 'TRAINING',   value: '26 race weekends' },
@@ -311,8 +329,8 @@ export default function PredictionsPage() {
               { label: 'TOP-3 ACC',  value: '33% avg · 67% on 2026' },
             ].map(({ label, value }) => (
               <div key={label}>
-                <div style={{ fontSize: '8px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.1em', marginBottom: '2px' }}>{label}</div>
-                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#A1A1AA' }}>{value}</div>
+                <div style={{ fontSize: '8px', fontFamily: 'monospace', color: '#5e7289', letterSpacing: '0.1em', marginBottom: '2px' }}>{label}</div>
+                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#d8e4ee' }}>{value}</div>
               </div>
             ))}
           </div>

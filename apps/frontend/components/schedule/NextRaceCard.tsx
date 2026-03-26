@@ -115,30 +115,28 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
   const { race, next_session } = data
 
   return (
-    <div style={{
-      background: '#1D1D20', // Dark subtle shade like F1 website
-      borderRadius: '8px',
+    <div className="panel interactive-card" style={{
+      borderRadius: '28px',
       overflow: 'hidden',
       position: 'relative',
-      borderRight: '1px solid #2A2A2E',
-      borderTop: '1px solid #2A2A2E',
-      borderBottom: '1px solid #2A2A2E',
-      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+      borderRight: '1px solid rgba(152,181,211,0.12)',
+      borderTop: '1px solid rgba(152,181,211,0.12)',
+      borderBottom: '1px solid rgba(152,181,211,0.12)'
     }}>
       {/* Thick red left border like F1 */}
       <div style={{
         position: 'absolute', top: 0, bottom: 0, left: 0, width: '6px', background: '#E80020'
       }} />
 
-      <div style={{ padding: '24px 24px 24px 30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '24px 24px 24px 30px', display: 'flex', flexDirection: 'column', gap: '20px', background: 'radial-gradient(circle at top right, rgba(133,215,255,0.12), transparent 24%), linear-gradient(180deg, rgba(18,33,49,0.92) 0%, rgba(10,20,31,0.92) 100%)' }}>
         
         {/* Top Section: Title & Timer */}
         <div className="next-race-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#A1A1AA', letterSpacing: '0.05em', fontFamily: 'monospace' }}>
-              NEXT UP — ROUND {race.round}
-            </span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#9fb2c6', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
+                NEXT UP — ROUND {race.round}
+              </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {race.flag && <span style={{ fontSize: '28px', lineHeight: 1 }}>{race.flag}</span>}
               <h2 className="next-race-title" style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '0.02em', fontFamily: 'Rajdhani, sans-serif', textTransform: 'uppercase' }}>
@@ -158,7 +156,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
               { label: 'SEC', value: timeLeft.secs, isRed: true }
             ].map((unit, idx) => (
               <div key={idx} className="next-race-timer-unit" style={{
-                background: '#151518',
+                background: 'rgba(7,17,27,0.5)',
                 borderRadius: '8px',
                 padding: '12px',
                 minWidth: '64px',
@@ -180,7 +178,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
                 <span style={{ 
                   fontSize: '10px', 
                   fontWeight: 600, 
-                  color: '#A1A1AA', 
+                  color: '#9fb2c6', 
                   marginTop: '4px',
                   letterSpacing: '0.05em' 
                 }}>
@@ -193,7 +191,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
         </div>
 
         {/* Divider */}
-        <div style={{ height: '1px', background: '#2A2A2E', margin: '8px 0' }} />
+        <div style={{ height: '1px', background: 'rgba(152,181,211,0.12)', margin: '8px 0' }} />
 
         {/* Sessions Section */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -211,7 +209,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
                 borderRadius: '16px',
                 fontSize: '13px',
                 fontFamily: 'monospace',
-                background: '#151518',
+                background: 'rgba(7,17,27,0.42)',
                 ...style
               }}>
                 {parsedName} &middot; {formattedTime}
