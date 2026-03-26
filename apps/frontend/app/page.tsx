@@ -126,34 +126,28 @@ export default async function HomePage() {
 
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-      {/* ── Breadcrumb ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#52525B' }}>
-        <span>Dashboard</span>
-        <span>/</span>
-        <span style={{ color: '#A1A1AA' }}>Home</span>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
 
       {/* ── Hero + Track Conditions ────────────────────────────────── */}
       <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px', alignItems: 'stretch' }}>
 
         {/* Hero */}
-        <div className="hero-card" style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', height: '360px' }}>
+        <div className="hero-card panel" style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', height: '390px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={heroImage} alt={heroRace?.event_name || latest?.gp_name}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.2) 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(4,10,18,0.28) 0%, rgba(5,14,22,0.58) 38%, rgba(6,12,20,0.96) 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(133,215,255,0.22), transparent 28%), radial-gradient(circle at bottom left, rgba(232,0,45,0.16), transparent 26%)' }} />
 
           {/* Top-left Indicator */}
           <div style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {heroRace ? (
-              <span style={{ fontSize: '11px', fontWeight: 600, color: '#A1A1AA', letterSpacing: '0.08em', fontFamily: 'monospace', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: '#d4e3f1', letterSpacing: '0.14em', fontFamily: 'monospace', textTransform: 'uppercase', background: 'rgba(7,17,27,0.48)', border: '1px solid rgba(255,255,255,0.08)', width: 'fit-content', padding: '8px 12px', borderRadius: '999px', backdropFilter: 'blur(10px)' }}>
                 NEXT UP — ROUND {heroRace.round}
               </span>
             ) : (
               latest && (
-                <span style={{ background: '#E8002D', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', padding: '4px 10px', borderRadius: '4px', fontFamily: 'monospace' }}>
+                <span style={{ background: '#E8002D', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', padding: '7px 12px', borderRadius: '999px', fontFamily: 'monospace', boxShadow: '0 0 18px rgba(232,0,45,0.35)' }}>
                   {sessionTypeLabel(latest.session_type).toUpperCase()}
                 </span>
               )
@@ -167,15 +161,30 @@ export default async function HomePage() {
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                   {heroRace?.flag && <span style={{ fontSize: '24px', lineHeight: 1 }}>{heroRace.flag}</span>}
-                  <h1 className="hero-title" style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1, margin: 0, textTransform: 'uppercase' }}>
+                  <h1 className="hero-title" style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '36px', color: '#fff', lineHeight: 0.95, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     {heroRace ? heroRace.event_name : (latest?.gp_name?.replace(' Grand Prix', '') + ' GP')}
                   </h1>
                 </div>
 
-                <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#D4D4D8', fontSize: '11px', marginBottom: '20px' }}>
+                <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#d4e3f1', fontSize: '11px', marginBottom: '20px', fontFamily: 'JetBrains Mono, monospace' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><MapPin size={14} /> {heroRace ? heroRace.circuit : latest?.country}</span>
                   <span>·</span>
                   <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : latest?.year}</span>
+                </div>
+
+                <div className="telemetry-chip-row">
+                  <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
+                    <div className="eyebrow" style={{ marginBottom: '6px' }}>Weekend Status</div>
+                    <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
+                      {heroSession?.name ?? latest?.session_name ?? 'Live'}
+                    </div>
+                  </div>
+                  <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
+                    <div className="eyebrow" style={{ marginBottom: '6px' }}>Track Focus</div>
+                    <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
+                      {heroRace?.circuit ?? latest?.gp_name ?? 'Analysis'}
+                    </div>
+                  </div>
                 </div>
 
 
@@ -193,7 +202,7 @@ export default async function HomePage() {
         </div>
 
         {/* Track conditions — real data from DB */}
-        <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', borderRadius: '28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Track Conditions</span>
             {latest?.track_temp_c && (
@@ -221,7 +230,7 @@ export default async function HomePage() {
               accent: '#34d399',
             },
           ].map(({ Icon, label, value, accent }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#1A1A1A', borderRadius: '12px', padding: '14px 16px', border: '1px solid #2A2A2A' }}>
+            <div key={label} className="panel-soft" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '18px', padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: `${accent}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={18} style={{ color: accent }} />
@@ -253,7 +262,7 @@ export default async function HomePage() {
             { label: 'LEADING CONSTRUCTOR', value: standings.constructors[0]?.team_name?.split(' ')[0] ?? '—', sub: `${standings.constructors[0]?.points ?? 0} pts`, Icon: Zap, valueColour: '#fff', mono: false },
             { label: 'SESSION', value: sessionTypeLabel(latest?.session_type ?? ''), sub: `${latest?.year} ${latest?.gp_name?.replace(' Grand Prix', ' GP')}`, Icon: Flag, valueColour: '#fff', mono: false },
           ].map(({ label, value, sub, Icon, valueColour, mono }) => (
-            <div key={label} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', padding: '16px' }}>
+            <div key={label} className="panel-soft" style={{ borderRadius: '22px', padding: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <span style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{label}</span>
                 <Icon size={14} style={{ color: '#3F3F46' }} />
@@ -269,30 +278,30 @@ export default async function HomePage() {
 
       {/* ── Driver Championship Standings ──────────────────────────── */}
       {standings.drivers.length > 0 && (
-        <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', overflow: 'hidden' }}>
+        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #2A2A2A' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.12)' }}>
             <div>
-              <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Driver Championship</span>
-              <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#52525B' }}>
+              <span style={{ fontWeight: 600, color: '#fff', fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Driver Championship</span>
+              <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#5e7289' }}>
                 {currentYear} · {standings.round} race{standings.round !== 1 ? 's' : ''}
               </span>
             </div>
-            <Link href="/sessions" style={{ color: '#E8002D', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
+            <Link href="/sessions" style={{ color: '#f2c879', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
               All Sessions →
             </Link>
           </div>
 
           {/* Column headers */}
-          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
+          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
             <span>POS</span><span></span><span>DRIVER</span><span className="driver-hide-mobile">TEAM</span><span className="driver-hide-mobile">PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span className="driver-hide-mobile driver-wins-col" style={{ textAlign: 'right' }}>W</span>
           </div>
 
           {standings.drivers.slice(0, 10).map((driver: { position: number, code: string, full_name: string, team_name: string, points: number, wins: number }) => {
             const colour = constructorColour(driver.team_name)
             return (
-              <div key={driver.code} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '11px 20px', borderBottom: '1px solid #1A1A1A', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B' }}>
+              <div key={driver.code} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '12px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>
                   {String(driver.position).padStart(2, '0')}
                 </span>
                 <PosBadge pos={driver.position} />
@@ -302,19 +311,19 @@ export default async function HomePage() {
                     <div style={{ fontWeight: 600, color: '#fff', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {driver.full_name}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace' }}>{driver.code}</div>
+                    <div style={{ fontSize: '10px', color: '#5e7289', fontFamily: 'monospace' }}>{driver.code}</div>
                   </div>
                 </div>
-                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#71717A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
+                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#9fb2c6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
                 <span className="driver-hide-mobile"><PtsBar pts={driver.points} max={maxDriverPts} colour={colour} /></span>
                 <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 700, textAlign: 'right' }}>{driver.points}</span>
-                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#52525B', textAlign: 'right' }}>{driver.wins}</span>
+                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#5e7289', textAlign: 'right' }}>{driver.wins}</span>
               </div>
             )
           })}
 
           {standings.drivers.length > 10 && (
-            <div style={{ padding: '12px 20px', fontSize: '11px', color: '#3F3F46', fontFamily: 'monospace', textAlign: 'center' }}>
+            <div style={{ padding: '12px 20px', fontSize: '11px', color: '#5e7289', fontFamily: 'monospace', textAlign: 'center' }}>
               +{standings.drivers.length - 10} more drivers
             </div>
           )}
@@ -323,19 +332,19 @@ export default async function HomePage() {
 
       {/* ── Constructor Championship ────────────────────────────────── */}
       {standings.constructors.length > 0 && (
-        <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A' }}>
-            <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Constructor Championship</span>
-            <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#52525B' }}>
+        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
+          <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.12)' }}>
+            <span style={{ fontWeight: 600, color: '#fff', fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Constructor Championship</span>
+            <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#5e7289' }}>
               {currentYear}
             </span>
           </div>
 
-          <div className="constructor-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: '#1A1A1A' }}>
+          <div className="constructor-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: 'rgba(152, 181, 211, 0.08)' }}>
             {standings.constructors.map((con: { position: number, team_name: string, points: number, wins: number }) => {
               const colour = constructorColour(con.team_name)
               return (
-                <div key={con.team_name} style={{ background: '#111111', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div key={con.team_name} style={{ background: 'linear-gradient(180deg, rgba(18, 33, 49, 0.88) 0%, rgba(10, 20, 31, 0.9) 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <PosBadge pos={con.position} />
                   <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -346,7 +355,7 @@ export default async function HomePage() {
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: 'monospace', fontSize: '15px', fontWeight: 700, color: '#fff' }}>{con.points}</div>
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{con.wins}W</div>
+                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#5e7289' }}>{con.wins}W</div>
                   </div>
                 </div>
               )

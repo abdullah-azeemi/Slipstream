@@ -1,37 +1,44 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap');
 
 @import "tailwindcss";
 
 @theme {
   /* Colors — generates bg-*, text-*, border-* utilities */
-  --color-bg: #0A0A0A;
-  --color-surface: #111111;
-  --color-surface2: #1A1A1A;
-  --color-surface3: #222222;
-  --color-border: #2A2A2A;
+  --color-bg: #07111b;
+  --color-surface: #0d1824;
+  --color-surface2: #132231;
+  --color-surface3: #1b2d3f;
+  --color-border: rgba(152, 181, 211, 0.14);
   --color-red: #E8002D;
   --color-red-dim: #9B0020;
   --color-teal: #2CF4C5;
+  --color-gold: #f2c879;
+  --color-sky: #85d7ff;
 
   /* Fonts — in Tailwind v4, font-family utilities use --font-family-* */
-  --font-family-sans: 'Inter', sans-serif;
+  --font-family-sans: 'Space Grotesk', sans-serif;
   --font-family-mono: 'JetBrains Mono', monospace;
   --font-family-display: 'Rajdhani', sans-serif;
 }
 
 :root {
-  --bg: #0A0A0A;
-  --surface: #111111;
-  --surface-2: #1A1A1A;
-  --surface-3: #222222;
-  --border: #2A2A2A;
+  --bg: #07111b;
+  --bg-deep: #050c14;
+  --surface: rgba(12, 24, 36, 0.8);
+  --surface-2: rgba(18, 33, 49, 0.88);
+  --surface-3: rgba(28, 45, 63, 0.92);
+  --border: rgba(152, 181, 211, 0.14);
   --red: #E8002D;
   --red-dim: #9B0020;
-  --text: #FFFFFF;
-  --text-2: #A1A1AA;
-  --text-3: #52525B;
+  --gold: #f2c879;
+  --sky: #85d7ff;
+  --text: #F4F7FB;
+  --text-2: #9fb2c6;
+  --text-3: #5e7289;
   --green: #22C55E;
   --teal: #2CF4C5;
+  --shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.28);
+  --shadow-glow: 0 0 0 1px rgba(133, 215, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -41,19 +48,36 @@
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(133, 215, 255, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(232, 0, 45, 0.1), transparent 24%),
+    radial-gradient(circle at bottom center, rgba(44, 244, 197, 0.08), transparent 30%),
+    linear-gradient(180deg, #09111a 0%, #07111b 35%, #050b13 100%);
   color: var(--text);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(circle at center, black, transparent 82%);
+  opacity: 0.5;
+  z-index: -2;
 }
 
 /* Guarantee fixed TopBar (56px) + BottomNav (80px) clearance
    regardless of Tailwind utility class resolution */
 main {
-  padding-top: 3.5rem;
-  /* = h-14 TopBar  */
-  padding-bottom: 5rem;
-  /* = pb-20 BottomNav buffer */
+  padding-top: 5.25rem;
+  padding-bottom: 6.5rem;
   min-height: 100vh;
 }
 
@@ -64,6 +88,122 @@ main {
 
 .display {
   font-family: 'Rajdhani', sans-serif;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: "";
+  position: fixed;
+  inset: auto;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 999px;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.app-shell::before {
+  top: 5rem;
+  right: -6rem;
+  background: rgba(232, 0, 45, 0.12);
+}
+
+.app-shell::after {
+  bottom: 5rem;
+  left: -8rem;
+  background: rgba(44, 244, 197, 0.1);
+}
+
+.layout-wrapper {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 36px;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(18, 33, 49, 0.88) 0%, rgba(10, 22, 34, 0.92) 100%);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.panel-soft {
+  background: linear-gradient(180deg, rgba(17, 30, 44, 0.78) 0%, rgba(10, 20, 31, 0.85) 100%);
+  border: 1px solid rgba(152, 181, 211, 0.1);
+  border-radius: 18px;
+  box-shadow: var(--shadow-glow);
+  backdrop-filter: blur(16px);
+}
+
+.eyebrow {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-3);
+}
+
+.page-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.page-subtitle {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.telemetry-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.telemetry-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.telemetry-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.telemetry-driver-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.telemetry-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.telemetry-chart-card {
+  overflow: hidden;
+}
+
+.telemetry-tooltip {
+  max-width: min(280px, calc(100vw - 32px));
 }
 
 ::-webkit-scrollbar {
@@ -111,11 +251,17 @@ main {
 @media (max-width: 768px) {
   main {
     padding-left: 0 !important;
+    padding-top: 4.75rem;
+    padding-bottom: 7rem;
   }
 
   /* Layout wrapper — tighter side padding on mobile */
   .layout-wrapper {
-    padding: 16px 12px !important;
+    padding: 14px 12px 28px !important;
+  }
+
+  .page-title {
+    font-size: 2rem;
   }
 
   /* Home page — Hero + Track Conditions stack */
@@ -208,6 +354,26 @@ main {
     grid-template-columns: 1fr !important;
   }
 
+  .telemetry-top-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .telemetry-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .telemetry-driver-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .telemetry-tooltip {
+    left: 12px !important;
+    right: 12px;
+    top: auto !important;
+    bottom: 88px;
+    width: auto;
+  }
+
   /* Hero countdown positioning */
   .hero-bottom-content {
     flex-direction: column !important;
@@ -226,6 +392,10 @@ main {
 @media (min-width: 769px) and (max-width: 1024px) {
   .stat-grid {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .telemetry-top-grid {
+    grid-template-columns: 1fr !important;
   }
 
   .driver-header,

@@ -627,24 +627,24 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
+    <div ref={containerRef} className="telemetry-stack">
 
       {/* Header */}
-      <div style={{ marginBottom: '20px' }}>
-        <h1 style={{
-          fontFamily: 'Rajdhani, sans-serif', fontWeight: 700,
-          fontSize: '32px', color: '#fff', lineHeight: 1,
-        }}>
+      <section className="panel" style={{ padding: '22px 22px 18px', marginBottom: '6px' }}>
+        <div className="eyebrow" style={{ marginBottom: '10px' }}>
+          Session Console
+        </div>
+        <h1 className="page-title">
           {sessionModeLabel(sessionType) || 'Telemetry'}
         </h1>
-        <p style={{ color: '#52525B', fontSize: '13px', marginTop: '4px', fontFamily: 'monospace' }}>
+        <p className="page-subtitle" style={{ marginTop: '8px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
           {isRaceSession(sessionType)
             ? 'Lap time evolution · position changes · stint pace'
             : isPracticeSession(sessionType)
               ? 'Long run pace · tyre degradation rate'
               : 'Fastest lap telemetry — distance-aligned overlay'}
         </p>
-      </div>
+      </section>
 
       {/* ── Race mode ── */}
       {isRaceSession(sessionType) && (
@@ -659,108 +659,104 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       {/* ── Qualifying mode ── */}
       {!isRaceSession(sessionType) && !isPracticeSession(sessionType) && (
         <>
-          {/* Segment selector — Q1 / Q2 / Q3 */}
-          {qualiSegments?.segments && (
-            <div style={{
-              background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
-              padding: '12px 16px', marginBottom: '8px',
-              display: 'flex', alignItems: 'center', gap: '16px',
-            }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', flexShrink: 0 }}>
-                SEGMENT
-              </span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
-                  const isActive = selectedSegment === seg
-                  const segColour = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? '#FFD700' : '#E8002D'
-                  const count = qualiSegments.segments[seg]?.length ?? 0
-                  const isDisabled = count === 0
-                  return (
-                    <button key={seg} disabled={isDisabled} onClick={() => setSelectedSegment(seg)} style={{
-                      padding: '5px 16px', borderRadius: '8px',
-                      border: isActive ? `1.5px solid ${segColour}` : '1.5px solid #2A2A2A',
-                      background: isActive ? `${segColour}22` : 'transparent',
-                      color: isDisabled ? '#3F3F46' : isActive ? '#fff' : '#52525B',
-                      fontSize: '13px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 400,
-                      transition: 'all 0.15s', opacity: isDisabled ? 0.45 : 1,
-                      cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    }}>
-                      {seg}
-                      <span style={{ marginLeft: '6px', fontSize: '10px', color: isActive ? segColour : '#3F3F46' }}>
-                        {count}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: 'auto' }}>
-                {selectedSegment === 'Q3' ? 'Top 10 fastest laps' : selectedSegment === 'Q2' ? 'Top 15 fastest laps' : 'All 20 drivers'}
-              </span>
-            </div>
-          )}
-
-          {/* Driver selector */}
-          <div style={{
-            background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
-            padding: '14px 16px', marginBottom: '10px',
-          }}>
-            <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>
-              DRIVERS (MAX 4)
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {drivers.map(d => {
-                const isSel = selected.includes(d.driver_number)
-                const colour = teamColour(d.team_colour, d.team_name)
-                const isUnavailable = !isRaceSession(sessionType) && !isPracticeSession(sessionType) && qualiSegments?.segments
-                  ? !segmentDriverNumbers.has(d.driver_number)
-                  : false
-                const segmentLap = segmentLapByDriver.get(d.driver_number)
-                return (
-                  <button key={d.driver_number} disabled={isUnavailable} onClick={() => toggleDriver(d.driver_number)} style={{
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '4px 10px', borderRadius: '20px',
-                    border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
-                    background: isSel ? `${colour}18` : 'transparent',
-                    color: isUnavailable ? '#3F3F46' : isSel ? '#fff' : '#52525B',
-                    fontSize: '12px', fontWeight: isSel ? 700 : 400,
-                    fontFamily: 'monospace', transition: 'all 0.12s',
-                    opacity: isUnavailable ? 0.45 : 1,
-                    cursor: isUnavailable ? 'not-allowed' : 'pointer',
-                  }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isUnavailable ? '#3F3F46' : colour, display: 'inline-block' }} />
-                    {d.abbreviation}
-                    {segmentLap ? <span style={{ color: '#71717A', fontSize: '10px' }}>L{segmentLap}</span> : null}
-                    {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
-                  </button>
-                )
-              })}
-            </div>
-            {driverData.length > 0 && (
-              <div style={{ display: 'flex', gap: '24px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #1A1A1A' }}>
-                {driverData.map(d => (
-                  <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '24px', height: '2px', background: d.colour }} />
-                    <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#A1A1AA', fontWeight: 600 }}>
-                      {d.abbr}
-                      {(() => {
-                        const driver = drivers.find(x => x.abbreviation === d.abbr)
-                        const lapNumber = driver ? telLapNumbers.get(driver.driver_number) : null
-                        return lapNumber ? ` · L${lapNumber}` : ''
-                      })()}
-                    </span>
+          <div className="telemetry-top-grid">
+            <div className="panel-soft" style={{ padding: '16px' }}>
+              {/* Segment selector — Q1 / Q2 / Q3 */}
+              {qualiSegments?.segments && (
+                <div style={{ marginBottom: '14px' }}>
+                  <div className="eyebrow" style={{ marginBottom: '10px' }}>
+                    Segment Lens
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="telemetry-chip-row" style={{ alignItems: 'center' }}>
+                    {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
+                      const isActive = selectedSegment === seg
+                      const segColour = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? '#FFD700' : '#E8002D'
+                      const count = qualiSegments.segments[seg]?.length ?? 0
+                      const isDisabled = count === 0
+                      return (
+                        <button key={seg} disabled={isDisabled} onClick={() => setSelectedSegment(seg)} style={{
+                          padding: '8px 16px', borderRadius: '999px',
+                          border: isActive ? `1.5px solid ${segColour}` : '1px solid rgba(152, 181, 211, 0.14)',
+                          background: isActive ? `${segColour}22` : 'rgba(255,255,255,0.02)',
+                          color: isDisabled ? '#3F3F46' : isActive ? '#fff' : '#9fb2c6',
+                          fontSize: '13px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 500,
+                          transition: 'all 0.15s', opacity: isDisabled ? 0.45 : 1,
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        }}>
+                          {seg}
+                          <span style={{ marginLeft: '6px', fontSize: '10px', color: isActive ? segColour : '#5e7289' }}>
+                            {count}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#5e7289', marginTop: '10px' }}>
+                    {selectedSegment === 'Q3' ? 'Top 10 shootout telemetry' : selectedSegment === 'Q2' ? 'Mid-session cutline comparison' : 'Full-field opening benchmark'}
+                  </div>
+                </div>
+              )}
 
-          {segmentEntries.length > 0 && (
-            <div className="segment-stats-grid" style={{
-              background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
-              padding: '12px 16px', marginBottom: '10px',
-              display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px',
-            }}>
-              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+              {/* Driver selector */}
+              <div>
+                <div className="eyebrow" style={{ marginBottom: '10px' }}>
+                  Drivers (max 4)
+                </div>
+                <div className="telemetry-driver-grid">
+                  {drivers.map(d => {
+                    const isSel = selected.includes(d.driver_number)
+                    const colour = teamColour(d.team_colour, d.team_name)
+                    const isUnavailable = !isRaceSession(sessionType) && !isPracticeSession(sessionType) && qualiSegments?.segments
+                      ? !segmentDriverNumbers.has(d.driver_number)
+                      : false
+                    const segmentLap = segmentLapByDriver.get(d.driver_number)
+                    return (
+                      <button key={d.driver_number} disabled={isUnavailable} onClick={() => toggleDriver(d.driver_number)} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: '8px', padding: '10px 12px', borderRadius: '14px',
+                        border: isSel ? `1.5px solid ${colour}` : '1px solid rgba(152, 181, 211, 0.12)',
+                        background: isSel ? `${colour}18` : 'rgba(255,255,255,0.02)',
+                        color: isUnavailable ? '#3F3F46' : isSel ? '#fff' : '#c2d1df',
+                        fontSize: '12px', fontWeight: isSel ? 700 : 500,
+                        fontFamily: 'monospace', transition: 'all 0.12s',
+                        opacity: isUnavailable ? 0.45 : 1,
+                        cursor: isUnavailable ? 'not-allowed' : 'pointer',
+                      }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isUnavailable ? '#3F3F46' : colour, display: 'inline-block', flexShrink: 0 }} />
+                          <span>{d.abbreviation}</span>
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          {segmentLap ? <span style={{ color: '#9fb2c6', fontSize: '10px' }}>L{segmentLap}</span> : null}
+                          {isSel && <span style={{ color: colour, fontSize: '10px' }}>●</span>}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {driverData.length > 0 && (
+                  <div className="telemetry-chip-row" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(152, 181, 211, 0.1)' }}>
+                    {driverData.map(d => (
+                      <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '999px', background: 'rgba(255,255,255,0.03)' }}>
+                        <div style={{ width: '24px', height: '2px', background: d.colour }} />
+                        <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#d8e4ee', fontWeight: 600 }}>
+                          {d.abbr}
+                          {(() => {
+                            const driver = drivers.find(x => x.abbreviation === d.abbr)
+                            const lapNumber = driver ? telLapNumbers.get(driver.driver_number) : null
+                            return lapNumber ? ` · L${lapNumber}` : ''
+                          })()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {segmentEntries.length > 0 && (
+              <div className="panel-soft telemetry-summary-grid" style={{ padding: '16px' }}>
+              <div style={{ padding: '12px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(152, 181, 211, 0.1)', minWidth: 0 }}>
                 <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
                   SEGMENT
                 </div>
@@ -771,7 +767,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   {segmentSummary.label} · {segmentSummary.count} drivers
                 </div>
               </div>
-              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+              <div style={{ padding: '12px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(152, 181, 211, 0.1)', minWidth: 0 }}>
                 <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
                   FASTEST
                 </div>
@@ -782,7 +778,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   {segmentSummary.leader ? `${formatLapTime(segmentSummary.leader.lap_time_ms)} · L${segmentSummary.leader.lap_number}` : 'No lap'}
                 </div>
               </div>
-              <div style={{ padding: '10px', borderRadius: '10px', background: '#0F0F10', border: '1px solid #1A1A1A' }}>
+              <div style={{ padding: '12px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(152, 181, 211, 0.1)', minWidth: 0 }}>
                 <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '6px' }}>
                   CUTOFF
                 </div>
@@ -797,11 +793,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       : 'Not available'}
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
 
           {loading && (
-            <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+            <div className="panel-soft" style={{ textAlign: 'center', padding: '48px', color: '#5e7289', fontFamily: 'monospace', fontSize: '13px' }}>
               Loading telemetry...
             </div>
           )}
@@ -810,10 +807,9 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             <>
               {/* Tooltip */}
               {tooltipData && (
-                <div style={{
+                <div className="telemetry-tooltip panel-soft" style={{
                   position: 'fixed', left: 80, top: 80, zIndex: 200, pointerEvents: 'none',
-                  background: '#111111ee', border: '1px solid #2A2A2A', borderRadius: '10px',
-                  padding: '10px 14px', backdropFilter: 'blur(8px)',
+                  padding: '10px 14px',
                 }}>
                   <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginBottom: '8px' }}>
                     {(tooltipData.dist / 1000).toFixed(2)} km
@@ -837,10 +833,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
               {/* Speed / Throttle / Gear / RPM */}
               {CHARTS.map((cfg, i) => (
-                <div key={cfg.field} style={{
-                  background: '#111111', border: '1px solid #2A2A2A',
-                  borderRadius: '12px', overflow: 'hidden', marginBottom: '8px',
-                }}>
+                <div key={cfg.field} className="panel-soft telemetry-chart-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px 2px' }}>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>{cfg.label}</span>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>{cfg.unit}</span>
@@ -857,7 +850,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
               {/* Speed Delta */}
               {driverData.length >= 2 && (
-                <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+                <div className="panel-soft telemetry-chart-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px 2px' }}>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>SPEED DELTA</span>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>
@@ -872,7 +865,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
               {/* DRS — hidden for 2026 */}
               {!is2026 && (
-                <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
+                <div className="panel-soft telemetry-chart-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 8px' }}>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>DRS OPEN</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -889,7 +882,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
               {/* Sector Times */}
               {driverData.length >= 2 && (
-                <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '12px 16px', marginBottom: '8px' }}>
+                <div className="panel-soft" style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '14px' }}>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>SECTOR TIMES</span>
                     <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>fastest telemetry lap · from timing data</span>
@@ -968,10 +961,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
               {/* Q1 / Q2 / Q3 Segment Leaderboards */}
               {qualiSegments?.segments && (
-                <div style={{
-                  background: '#111111', border: '1px solid #2A2A2A',
-                  borderRadius: '12px', padding: '12px 16px', marginBottom: '8px',
-                }}>
+                <div className="panel-soft" style={{ padding: '12px 16px' }}>
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>
@@ -988,12 +978,13 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                             key={seg}
                             onClick={() => setActiveSegment(seg)}
                             style={{
-                              padding: '4px 12px', borderRadius: '6px', cursor: 'pointer',
+                              padding: '6px 12px', borderRadius: '999px', cursor: 'pointer',
                               border: isActive ? `1.5px solid ${segColour}` : '1.5px solid #2A2A2A',
                               background: isActive ? `${segColour}18` : 'transparent',
                               color: isActive ? '#fff' : '#52525B',
                               fontSize: '11px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 400,
                               transition: 'all 0.12s',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             {seg}
@@ -1015,7 +1006,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     const cutLine = activeSegment === 'Q1' ? 15 : activeSegment === 'Q2' ? 10 : null
 
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', overflowX: 'auto' }}>
+                        <div style={{ minWidth: '620px' }}>
                         {/* Column headers */}
                         <div style={{
                           display: 'grid',
@@ -1149,6 +1141,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                             </div>
                           )
                         })}
+                        </div>
                       </div>
                     )
                   })()}
