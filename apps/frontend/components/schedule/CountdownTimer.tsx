@@ -88,7 +88,7 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
             { label: 'MIN', value: timeLeft.mins },
             { label: 'SEC', value: timeLeft.secs, isRed: true }
           ].map((unit, idx) => (
-            <div key={idx} style={{
+            <div key={idx} className="countdown-unit" style={{
               background: 'rgba(21, 21, 24, 0.8)',
               backdropFilter: 'blur(4px)',
               borderRadius: '8px',
@@ -100,7 +100,7 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
               justifyContent: 'center',
               border: '1px solid rgba(255, 255, 255, 0.1)'
             }}>
-              <span style={{
+              <span className="countdown-value" style={{
                 fontSize: '18px',
                 fontWeight: 800,
                 fontFamily: 'Rajdhani, sans-serif',

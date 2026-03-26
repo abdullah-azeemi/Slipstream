@@ -191,6 +191,8 @@ def load_fp2_compound_usage(engine) -> pd.DataFrame:
 
     Returns: one row per (gp_name, year, team_name, compound) with lap counts.
     """
+    expected_columns = ['gp_name', 'year', 'team_name', 'compound', 'laps']
+
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT
@@ -211,7 +213,10 @@ def load_fp2_compound_usage(engine) -> pd.DataFrame:
             GROUP BY s.gp_name, s.year, d.team_name, l.compound
         """)).mappings().all()
 
-    return pd.DataFrame([dict(r) for r in rows])
+    if not rows:
+        return pd.DataFrame(columns=expected_columns)
+
+    return pd.DataFrame([dict(r) for r in rows], columns=expected_columns)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -408,6 +413,10 @@ def compute_fp2_strategy(
         fp2_hard_laps_pct: % of FP2 laps on HARD (0-1)
         fp2_medium_laps_pct: % of FP2 laps on MEDIUM (0-1)
     """
+    required_columns = {'team_name', 'gp_name', 'year', 'compound', 'laps'}
+    if fp2_data.empty or not required_columns.issubset(fp2_data.columns):
+        return {'fp2_hard_laps_pct': 0.0, 'fp2_medium_laps_pct': 0.0}
+
     mask = (
         (fp2_data['team_name'] == team_name) &
         (fp2_data['gp_name']   == gp_name) &

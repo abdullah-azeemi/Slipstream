@@ -8,7 +8,6 @@ import {
   getSegmentLapByDriver,
   getSegmentSummary,
   reconcileSelectedDrivers,
-  type QualiSegmentEntry,
   type QualiSegmentsData,
 } from '@/lib/telemetry-quali'
 import { teamColour, formatLapTime } from '@/lib/utils'
@@ -280,7 +279,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       const next = reconcileSelectedDrivers(prev, drivers, segmentDriverNumbers)
       return next.length === prev.length && next.every((dn, i) => dn === prev[i]) ? prev : next
     })
-  }, [drivers, qualiSegments, selectedSegment, sessionType, segmentDriverKey])
+  }, [drivers, qualiSegments, selectedSegment, sessionType, segmentDriverKey, segmentDriverNumbers])
 
   // Load telemetry (qualifying mode only)
   useEffect(() => {
@@ -361,7 +360,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         setQualiSegments(data)
       })
       .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, sessionType])
 
   // Build driver render data (qualifying canvas)
@@ -757,7 +755,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           </div>
 
           {segmentEntries.length > 0 && (
-            <div style={{
+            <div className="segment-stats-grid" style={{
               background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px',
               padding: '12px 16px', marginBottom: '10px',
               display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px',

@@ -136,10 +136,10 @@ export default async function HomePage() {
       </div>
 
       {/* ── Hero + Track Conditions ────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px', alignItems: 'stretch' }}>
+      <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px', alignItems: 'stretch' }}>
 
         {/* Hero */}
-        <div style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', height: '360px' }}>
+        <div className="hero-card" style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', height: '360px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={heroImage} alt={heroRace?.event_name || latest?.gp_name}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -162,17 +162,17 @@ export default async function HomePage() {
 
           {/* Bottom Content Layer */}
           <div style={{ position: 'absolute', inset: 0, padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div className="hero-bottom-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
 
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                   {heroRace?.flag && <span style={{ fontSize: '24px', lineHeight: 1 }}>{heroRace.flag}</span>}
-                  <h1 style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1, margin: 0, textTransform: 'uppercase' }}>
+                  <h1 className="hero-title" style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '32px', color: '#fff', lineHeight: 1, margin: 0, textTransform: 'uppercase' }}>
                     {heroRace ? heroRace.event_name : (latest?.gp_name?.replace(' Grand Prix', '') + ' GP')}
                   </h1>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#D4D4D8', fontSize: '11px', marginBottom: '20px' }}>
+                <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#D4D4D8', fontSize: '11px', marginBottom: '20px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><MapPin size={14} /> {heroRace ? heroRace.circuit : latest?.country}</span>
                   <span>·</span>
                   <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : latest?.year}</span>
@@ -246,7 +246,7 @@ export default async function HomePage() {
 
       {/* ── Stat cards ─────────────────────────────────────────────── */}
       {pole && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
             { label: 'CHAMPIONSHIP LEADER', value: standings.drivers[0]?.code ?? '—', sub: `${standings.drivers[0]?.points ?? 0} pts · ${standings.drivers[0]?.team_name ?? ''}`, Icon: Trophy, valueColour: '#FFD700', mono: false },
             { label: 'POLE / FASTEST LAP', value: formatLapTime(pole.lap_time_ms), sub: `${pole.abbreviation} — ${pole.team_name ?? ''}`, Icon: Clock, valueColour: '#E8002D', mono: true },
@@ -284,14 +284,14 @@ export default async function HomePage() {
           </div>
 
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
-            <span>POS</span><span></span><span>DRIVER</span><span>TEAM</span><span>PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span style={{ textAlign: 'right' }}>W</span>
+          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
+            <span>POS</span><span></span><span>DRIVER</span><span className="driver-hide-mobile">TEAM</span><span className="driver-hide-mobile">PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span className="driver-hide-mobile driver-wins-col" style={{ textAlign: 'right' }}>W</span>
           </div>
 
           {standings.drivers.slice(0, 10).map((driver: { position: number, code: string, full_name: string, team_name: string, points: number, wins: number }) => {
             const colour = constructorColour(driver.team_name)
             return (
-              <div key={driver.code} style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '11px 20px', borderBottom: '1px solid #1A1A1A', alignItems: 'center' }}>
+              <div key={driver.code} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '11px 20px', borderBottom: '1px solid #1A1A1A', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#52525B' }}>
                   {String(driver.position).padStart(2, '0')}
                 </span>
@@ -305,10 +305,10 @@ export default async function HomePage() {
                     <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace' }}>{driver.code}</div>
                   </div>
                 </div>
-                <span style={{ fontSize: '12px', color: '#71717A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
-                <PtsBar pts={driver.points} max={maxDriverPts} colour={colour} />
+                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#71717A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
+                <span className="driver-hide-mobile"><PtsBar pts={driver.points} max={maxDriverPts} colour={colour} /></span>
                 <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 700, textAlign: 'right' }}>{driver.points}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#52525B', textAlign: 'right' }}>{driver.wins}</span>
+                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#52525B', textAlign: 'right' }}>{driver.wins}</span>
               </div>
             )
           })}
@@ -331,7 +331,7 @@ export default async function HomePage() {
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: '#1A1A1A' }}>
+          <div className="constructor-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: '#1A1A1A' }}>
             {standings.constructors.map((con: { position: number, team_name: string, points: number, wins: number }) => {
               const colour = constructorColour(con.team_name)
               return (

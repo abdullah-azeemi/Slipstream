@@ -112,4 +112,128 @@ main {
   main {
     padding-left: 0 !important;
   }
+
+  /* Layout wrapper — tighter side padding on mobile */
+  .layout-wrapper {
+    padding: 16px 12px !important;
+  }
+
+  /* Home page — Hero + Track Conditions stack */
+  .hero-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero-card {
+    height: 260px !important;
+  }
+
+  .hero-title {
+    font-size: 22px !important;
+  }
+
+  .hero-meta {
+    font-size: 10px !important;
+  }
+
+  /* Stat cards — 2 columns on mobile */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Driver standings — hide optional columns */
+  .driver-header,
+  .driver-row {
+    grid-template-columns: 32px 24px 1fr 50px !important;
+  }
+
+  .driver-hide-mobile {
+    display: none !important;
+  }
+
+  /* Constructor grid — single column */
+  .constructor-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Predictions — simplified grid */
+  .predictions-header,
+  .predictions-row {
+    grid-template-columns: 28px 24px 1fr 70px !important;
+  }
+
+  .predictions-hide-mobile {
+    display: none !important;
+  }
+
+  /* Predictions podium — smaller padding */
+  .podium-grid {
+    gap: 6px !important;
+  }
+
+  .podium-card {
+    padding: 10px !important;
+  }
+
+  /* NextRaceCard — stack title and timer */
+  .next-race-top {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .next-race-title {
+    font-size: 22px !important;
+  }
+
+  .next-race-timer-unit {
+    min-width: 52px !important;
+    padding: 8px !important;
+  }
+
+  .next-race-timer-value {
+    font-size: 22px !important;
+  }
+
+  /* CountdownTimer — smaller on mobile */
+  .countdown-unit {
+    min-width: 44px !important;
+    padding: 6px 8px !important;
+  }
+
+  .countdown-value {
+    font-size: 15px !important;
+  }
+
+  /* Telemetry segment stats — stack */
+  .segment-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hero countdown positioning */
+  .hero-bottom-content {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  /* Predictions header — stack */
+  .predictions-page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .driver-header,
+  .driver-row {
+    grid-template-columns: 36px 28px 1fr 120px 60px 48px !important;
+  }
+
+  .driver-wins-col {
+    display: none !important;
+  }
 }

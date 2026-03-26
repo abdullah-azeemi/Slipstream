@@ -116,7 +116,7 @@ export default function PredictionsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '720px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+      <div className="predictions-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
             <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#E8002D18', border: '1px solid #E8002D33', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -185,13 +185,13 @@ export default function PredictionsPage() {
           </div>
 
           {/* Podium highlight */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+          <div className="podium-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
             {data.predictions.slice(0, 3).map((p, i) => {
               const colour  = '#' + p.team_colour
               const medals  = ['#FFD700', '#C0C0C0', '#CD7F32']
               const labels  = ['WINNER', '2ND PLACE', '3RD PLACE']
               return (
-                <div key={p.driver_number} style={{ background: '#111111', border: `1px solid ${medals[i]}33`, borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                <div key={p.driver_number} className="podium-card" style={{ background: '#111111', border: `1px solid ${medals[i]}33`, borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
                   <div style={{ fontSize: '9px', fontFamily: 'monospace', color: medals[i], letterSpacing: '0.1em', marginBottom: '8px' }}>{labels[i]}</div>
                   <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: colour, margin: '0 auto 8px' }} />
                   <div style={{ fontSize: '20px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, color: colour }}>{p.abbreviation}</div>
@@ -208,8 +208,8 @@ export default function PredictionsPage() {
           {/* Full grid */}
           <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
             {/* Column headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '8px 16px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
-              <span>PRED</span><span>GRID</span><span>DRIVER</span><span>WIN %</span><span>PODIUM %</span><span>PROBABILITY</span>
+            <div className="predictions-header" style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '8px 16px', fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid #1A1A1A' }}>
+              <span>PRED</span><span>GRID</span><span>DRIVER</span><span className="predictions-hide-mobile">WIN %</span><span className="predictions-hide-mobile">PODIUM %</span><span className="predictions-hide-mobile">PROBABILITY</span>
             </div>
 
             {data.predictions.map((p, i) => {
@@ -221,6 +221,7 @@ export default function PredictionsPage() {
                 <div key={p.driver_number}>
                   <div
                     onClick={() => setExpanded(isExpand ? null : p.driver_number)}
+                    className="predictions-row"
                     style={{ display: 'grid', gridTemplateColumns: '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '10px 16px', borderBottom: '1px solid #0F0F0F', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s', background: isExpand ? '#161616' : 'transparent' }}
                     onMouseEnter={e => { if (!isExpand) e.currentTarget.style.background = '#141414' }}
                     onMouseLeave={e => { if (!isExpand) e.currentTarget.style.background = 'transparent' }}
@@ -248,7 +249,7 @@ export default function PredictionsPage() {
                     </div>
 
                     {/* Win % */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div className="predictions-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <ProbBar value={p.win_probability} colour={p.team_colour} max={maxWin} />
                       <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#fff', width: '32px', textAlign: 'right', flexShrink: 0 }}>
                         {(p.win_probability * 100).toFixed(0)}%
@@ -256,12 +257,12 @@ export default function PredictionsPage() {
                     </div>
 
                     {/* Podium % */}
-                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: p.podium_probability > 0.5 ? '#2CF4C5' : '#71717A', textAlign: 'center' }}>
+                    <div className="predictions-hide-mobile" style={{ fontSize: '12px', fontFamily: 'monospace', color: p.podium_probability > 0.5 ? '#2CF4C5' : '#71717A', textAlign: 'center' }}>
                       {(p.podium_probability * 100).toFixed(0)}%
                     </div>
 
                     {/* Mini position probability bars */}
-                    <div style={{ display: 'flex', gap: '1px', alignItems: 'flex-end', height: '20px' }}>
+                    <div className="predictions-hide-mobile" style={{ display: 'flex', gap: '1px', alignItems: 'flex-end', height: '20px' }}>
                       {[1,2,3,4,5,6,7,8,9,10].map(pos => {
                         const prob = p.position_probabilities[String(pos)] ?? 0
                         const h    = Math.max(2, prob * 100)

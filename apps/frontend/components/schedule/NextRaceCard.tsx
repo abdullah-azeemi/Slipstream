@@ -133,7 +133,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
       <div style={{ padding: '24px 24px 24px 30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
         {/* Top Section: Title & Timer */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+        <div className="next-race-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 600, color: '#A1A1AA', letterSpacing: '0.05em', fontFamily: 'monospace' }}>
@@ -141,7 +141,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {race.flag && <span style={{ fontSize: '28px', lineHeight: 1 }}>{race.flag}</span>}
-              <h2 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '0.02em', fontFamily: 'Rajdhani, sans-serif', textTransform: 'uppercase' }}>
+              <h2 className="next-race-title" style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '0.02em', fontFamily: 'Rajdhani, sans-serif', textTransform: 'uppercase' }}>
                 {race.event_name}
               </h2>
             </div>
@@ -157,7 +157,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
               { label: 'MIN', value: timeLeft.mins },
               { label: 'SEC', value: timeLeft.secs, isRed: true }
             ].map((unit, idx) => (
-              <div key={idx} style={{
+              <div key={idx} className="next-race-timer-unit" style={{
                 background: '#151518',
                 borderRadius: '8px',
                 padding: '12px',
@@ -168,7 +168,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
                 justifyContent: 'center',
                 border: '1px solid #2A2A2D'
               }}>
-                <span style={{ 
+                <span className="next-race-timer-value" style={{ 
                   fontSize: '28px', 
                   fontWeight: 800, 
                   fontFamily: 'Rajdhani, sans-serif', 
