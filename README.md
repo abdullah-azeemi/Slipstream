@@ -34,6 +34,10 @@ Drop the screenshot file at `.github/assets/qualifying-telemetry.png` if you wan
 - **Pit stop analysis** — undercut/overcut verdict for each stop: position before vs 3 laps after
 - **Stint pace** — clean lap averages + degradation rate (ms/lap) per stint
 
+![Race analysis showing pace, gaps, and stint intelligence](.github/assets/race-analysis.png)
+
+Drop the screenshot file at `.github/assets/race-analysis.png` if you want this image to render on GitHub.
+
 ### Practice — Friday Intelligence
 - **Gap to session best** — every lap as a dot showing gap to the fastest time of the session
 - **Compound delta table** — each driver's best time per compound and gap to session fastest on that tyre
@@ -244,6 +248,10 @@ Slipstream's current ML pipeline predicts race finishing positions from qualifyi
 Training is built from weekends that have both `Q` and `R` sessions. Missing `FP2` does not block training or prediction; it falls back to neutral strategy values.
 
 See [docs/ml-race-prediction.md](./docs/ml-race-prediction.md) for the full feature-to-session map, ingest checklist, and common local failure modes.
+
+![Prediction view showing projected finishing order and model confidence](.github/assets/predictions.png)
+
+Drop the screenshot file at `.github/assets/predictions.png` if you want this image to render on GitHub.
 
 ---
 
