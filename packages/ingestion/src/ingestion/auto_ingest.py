@@ -48,6 +48,38 @@ def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
     return {(r[0], r[1], r[2]) for r in rows}
 
 
+def purge_practice_sessions(engine, current_year: int, current_gp: str) -> int:
+    """Keep only practice sessions for the current GP and same GP from the previous year."""
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT session_key
+            FROM sessions
+            WHERE session_type = ANY(:practice_types)
+              AND NOT (
+                (year = :current_year AND gp_name = :current_gp)
+                OR
+                (year = :previous_year AND gp_name = :current_gp)
+              )
+        """), {
+            "practice_types": ['FP1', 'FP2', 'FP3'],
+            "current_year": current_year,
+            "previous_year": current_year - 1,
+            "current_gp": current_gp,
+        }).scalars().all()
+
+        session_keys = list(rows)
+        if not session_keys:
+            return 0
+
+        conn.execute(text("DELETE FROM telemetry WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM lap_telemetry_stats WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM lap_times WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM drivers WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM sessions WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.commit()
+        return len(session_keys)
+
+
 def get_fastf1_schedule(year: int) -> list[dict]:
     """Fetch the F1 event schedule from FastF1."""
     try:
@@ -183,6 +215,7 @@ def main():
 
     new_sessions = 0
     failed       = 0
+    latest_gp_ingested: str | None = None
 
     for event in schedule:
         gp_name = event["gp_name"]
@@ -205,6 +238,7 @@ def main():
             if success:
                 new_sessions += 1
                 ingested.add(key)   # prevent re-attempting in same run
+                latest_gp_ingested = gp_name
             else:
                 failed += 1
 
@@ -214,6 +248,9 @@ def main():
              total_in_db=len(ingested))
 
     if new_sessions > 0:
+        if latest_gp_ingested:
+            deleted = purge_practice_sessions(engine, CURRENT_YEAR, latest_gp_ingested)
+            log.info("auto_ingest.practice_purged", gp=latest_gp_ingested, deleted=deleted)
         # Retrain ML model if new race weekends were added
         log.info("auto_ingest.retraining_model")
         try:

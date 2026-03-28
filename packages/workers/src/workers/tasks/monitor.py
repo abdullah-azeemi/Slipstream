@@ -2,7 +2,7 @@
 Celery task: monitor for new completed F1 sessions.
 
 Runs on schedule (Sunday 20:00 UTC + Monday 08:00 UTC).
-Checks the 2026 calendar against what's in the DB and
+Checks the current-season calendar against what's in the DB and
 triggers ingestion for any missing sessions.
 """
 from __future__ import annotations
@@ -31,22 +31,23 @@ def get_engine():
 @app.task(name='workers.tasks.monitor.check_completed_sessions')
 def check_completed_sessions():
     """
-    Check 2026 calendar for race weekends that have completed
+    Check the current calendar for race weekends that have completed
     but haven't been ingested yet. Triggers ingest_weekend for each.
 
     Logic:
-    1. Fetch 2026 schedule from FastF1
+    1. Fetch the current-year schedule from FastF1
     2. Filter to weekends that ended more than 4 hours ago
        (FastF1 data takes ~2-4h to appear after race end)
     3. Check DB for existing sessions
     4. Trigger ingestion for any missing weekends
     """
     import fastf1
+    current_year = datetime.datetime.now(datetime.timezone.utc).year
 
     log.info("monitor.check.start")
 
     try:
-        schedule = fastf1.get_event_schedule(2026, include_testing=False)
+        schedule = fastf1.get_event_schedule(current_year, include_testing=False)
     except Exception as e:
         log.error("monitor.schedule_fetch_failed", error=str(e))
         return {"error": str(e)}
@@ -75,13 +76,16 @@ def check_completed_sessions():
             # Check if we already have both Q and R for this GP
             existing = conn.execute(text("""
                 SELECT session_type FROM sessions
-                WHERE year = 2026 AND gp_name = :gp_name
-            """), {"gp_name": gp_name}).scalars().all()
+                WHERE year = :year AND gp_name = :gp_name
+            """), {"year": current_year, "gp_name": gp_name}).scalars().all()
 
-            has_quali = 'Q' in existing
-            has_race  = 'R' in existing
+            required_sessions = {'Q', 'R'}
+            if gp_name not in SPRINT_GPS:
+                required_sessions.update({'FP1', 'FP2', 'FP3'})
+            else:
+                required_sessions.add('FP1')
 
-            if has_quali and has_race:
+            if required_sessions.issubset(set(existing)):
                 log.debug("monitor.already_ingested", gp=gp_name)
                 continue
 
@@ -89,10 +93,10 @@ def check_completed_sessions():
             is_sprint = gp_name in SPRINT_GPS
             log.info("monitor.triggering_ingest",
                      gp=gp_name, sprint=is_sprint,
-                     has_quali=has_quali, has_race=has_race)
+                     existing_sessions=existing, required_sessions=sorted(required_sessions))
 
             from workers.tasks.ingest import ingest_weekend
-            ingest_weekend.delay(2026, _gp_to_fastf1_name(gp_name), is_sprint)
+            ingest_weekend.delay(current_year, _gp_to_fastf1_name(gp_name), is_sprint)
             triggered.append(gp_name)
 
     log.info("monitor.check.done",

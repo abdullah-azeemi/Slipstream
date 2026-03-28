@@ -116,7 +116,7 @@ export default function PredictionsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '920px', margin: '0 auto' }}>
 
       {/* Header */}
-      <section className="panel fade-up" style={{ padding: '22px 22px 18px' }}>
+      <section className="panel fade-up" style={{ padding: '22px 22px 18px', position: 'relative', zIndex: 5, overflow: 'visible' }}>
         <div className="predictions-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
           <div>
             <div className="eyebrow" style={{ marginBottom: '10px' }}>Prediction Lab</div>
@@ -135,13 +135,13 @@ export default function PredictionsPage() {
 
           {/* Session selector */}
           {sessions.length > 0 && (
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <button onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(152, 181, 211, 0.14)', color: '#fff', fontSize: '12px', padding: '10px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 20 }}>
+              <button onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(152, 181, 211, 0.14)', color: '#fff', fontSize: '12px', padding: '10px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap', position: 'relative', zIndex: 21 }}>
                 {selected ? `${selected.gp_name.replace(' Grand Prix', '')} ${selected.year} Q` : 'Select session'}
                 <ChevronDown size={12} style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
               </button>
               {dropOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(10,20,31,0.96)', border: '1px solid rgba(152, 181, 211, 0.14)', borderRadius: '16px', overflow: 'hidden', zIndex: 100, minWidth: '220px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(10,20,31,0.98)', border: '1px solid rgba(152, 181, 211, 0.14)', borderRadius: '16px', overflow: 'hidden', zIndex: 999, minWidth: '220px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 18px 44px rgba(0,0,0,0.58)' }}>
                   {sessions.map(s => (
                     <button key={s.session_key} onClick={() => { setSelectedKey(s.session_key); setDropOpen(false) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', cursor: 'pointer', background: selectedKey === s.session_key ? 'rgba(255,255,255,0.06)' : 'transparent', color: selectedKey === s.session_key ? '#fff' : '#9fb2c6', fontFamily: 'monospace', border: 'none', borderBottom: '1px solid rgba(152,181,211,0.08)' }}>
                       {s.gp_name.replace(' Grand Prix', '')} {s.year}

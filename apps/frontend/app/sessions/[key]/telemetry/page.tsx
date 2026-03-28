@@ -1003,7 +1003,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   {(() => {
                     const entries = qualiSegments.segments[activeSegment] ?? []
                     const segColour = activeSegment === 'Q1' ? '#3671C6' : activeSegment === 'Q2' ? '#FFD700' : '#E8002D'
-                    const cutLine = activeSegment === 'Q1' ? 15 : activeSegment === 'Q2' ? 10 : null
+                    const advancingCutoff = activeSegment === 'Q1' ? 16 : activeSegment === 'Q2' ? 10 : null
 
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', overflowX: 'auto' }}>
@@ -1025,7 +1025,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         {entries.map((entry, idx) => {
                           const isFastest = idx === 0
                           const isEliminated = entry.eliminated
-                          const showCutLine = cutLine !== null && idx === cutLine - 1
+                          const showCutLine = advancingCutoff !== null && entry.position === advancingCutoff
 
                           const fmtMs = (ms: number | null) => {
                             if (ms === null) return '—'
@@ -1042,20 +1042,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
                           return (
                             <div key={entry.driver_number}>
-                              {/* Cut line separator */}
-                              {showCutLine && (
-                                <div style={{
-                                  height: '1px', background: '#E8002D33',
-                                  margin: '4px 0', position: 'relative',
-                                }}>
-                                  <span style={{
-                                    position: 'absolute', right: 0, top: '-8px',
-                                    fontSize: '8px', fontFamily: 'monospace', color: '#E8002D66',
-                                  }}>
-                                    ELIMINATION LINE
-                                  </span>
-                                </div>
-                              )}
                               <div style={{
                                 display: 'grid',
                                 gridTemplateColumns: '28px 36px 1fr 80px 60px 60px 60px',
@@ -1138,6 +1124,25 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   {entry.s3_ms ? (entry.s3_ms / 1000).toFixed(3) : '—'}
                                 </span>
                               </div>
+                              {showCutLine && (
+                                <div style={{
+                                  height: '1px',
+                                  background: '#E8002D33',
+                                  margin: '6px 0 2px',
+                                  position: 'relative',
+                                }}>
+                                  <span style={{
+                                    position: 'absolute',
+                                    right: 0,
+                                    top: '-8px',
+                                    fontSize: '8px',
+                                    fontFamily: 'monospace',
+                                    color: '#E8002D66',
+                                  }}>
+                                    ELIMINATION BELOW
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )
                         })}

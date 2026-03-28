@@ -86,3 +86,56 @@ def storage_report():
                  size=r['total_size'])
 
     return report
+
+
+@app.task(name='workers.tasks.retention.purge_practice_sessions')
+def purge_practice_sessions(current_year: int, current_gp: str):
+    """
+    Keep only the practice sessions needed for the active modelling window.
+
+    Policy:
+    - Keep FP1/FP2/FP3 for the current GP in the current season
+    - Keep FP1/FP2/FP3 for the same GP from the previous season
+    - Purge all other practice sessions to stay within Railway storage limits
+    """
+    from sqlalchemy import text
+
+    engine = get_engine()
+    practice_types = ('FP1', 'FP2', 'FP3')
+
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT session_key
+            FROM sessions
+            WHERE session_type = ANY(:practice_types)
+              AND NOT (
+                (year = :current_year AND gp_name = :current_gp)
+                OR
+                (year = :previous_year AND gp_name = :current_gp)
+              )
+        """), {
+            "practice_types": list(practice_types),
+            "current_year": current_year,
+            "previous_year": current_year - 1,
+            "current_gp": current_gp,
+        }).scalars().all()
+
+        session_keys = list(rows)
+        if not session_keys:
+          log.info("retention.practice_purge_skipped", year=current_year, gp=current_gp, deleted_sessions=0)
+          return {"deleted_sessions": 0}
+
+        conn.execute(text("DELETE FROM telemetry WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM lap_telemetry_stats WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM lap_times WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM drivers WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(text("DELETE FROM sessions WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.commit()
+
+    log.info(
+        "retention.practice_purged",
+        year=current_year,
+        gp=current_gp,
+        deleted_sessions=len(session_keys),
+    )
+    return {"deleted_sessions": len(session_keys)}

@@ -7,7 +7,9 @@ FastF1 session type strings (use these exactly):
 """
 from __future__ import annotations
 import structlog
+from sqlalchemy import create_engine, text
 from workers.celery_app import app
+from workers.config import settings
 
 log = structlog.get_logger()
 
@@ -21,6 +23,39 @@ SESSION_MAP = {
     'FP2': 'Practice 2',
     'FP3': 'Practice 3',
 }
+
+
+def _weekend_sessions(is_sprint: bool) -> list[tuple[str, bool]]:
+    if is_sprint:
+        return [
+            ('FP1', True),
+            ('Q', False),
+            ('SQ', True),
+            ('S', True),
+            ('R', True),
+        ]
+    return [
+        ('FP1', True),
+        ('FP2', True),
+        ('FP3', True),
+        ('Q', False),
+        ('R', True),
+    ]
+
+
+def _existing_session_types(year: int, gp_name: str) -> set[str]:
+    engine = create_engine(settings.database_url)
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT session_type
+            FROM sessions
+            WHERE year = :year AND gp_name = :gp_name
+        """), {"year": year, "gp_name": gp_name}).scalars().all()
+    return set(rows)
+
+
+def _full_gp_name(gp: str) -> str:
+    return gp if gp.endswith('Grand Prix') else f'{gp} Grand Prix'
 
 
 @app.task(
@@ -92,8 +127,8 @@ def ingest_weekend(year: int, gp: str, is_sprint: bool = False):
     """
     Ingest a full race weekend sequentially.
 
-    Conventional: Q → R
-    Sprint:       Q → SQ → S → R
+    Conventional: FP1 → FP2 → FP3 → Q → R
+    Sprint:       FP1 → Q → SQ → S → R
     
     Telemetry only loaded for Qualifying.
     After completion, triggers stats computation for the quali session.
@@ -101,22 +136,11 @@ def ingest_weekend(year: int, gp: str, is_sprint: bool = False):
     log.info("task.ingest_weekend.start",
              year=year, gp=gp, sprint=is_sprint)
 
-    # (session_type, skip_telemetry)
-    if is_sprint:
-        sessions = [
-            ('Q',  False),   # Qualifying — WITH telemetry
-            ('SQ', True),    # Sprint Qualifying
-            ('S',  True),    # Sprint
-            ('R',  True),    # Race
-        ]
-    else:
-        sessions = [
-            ('Q', False),    # Qualifying — WITH telemetry
-            ('R', True),     # Race
-        ]
+    sessions = _weekend_sessions(is_sprint)
 
     results      = []
     quali_key    = None
+    full_gp_name = _full_gp_name(gp)
 
     for stype, skip_tel in sessions:
         try:
@@ -139,15 +163,41 @@ def ingest_weekend(year: int, gp: str, is_sprint: bool = False):
                       error=str(e))
             # Continue with remaining sessions — don't abort the weekend
 
+    # Backfill the same GP from the previous season for the model context.
+    previous_year = year - 1
+    previous_existing = _existing_session_types(previous_year, full_gp_name)
+    if previous_existing != set(stype for stype, _ in sessions):
+        log.info(
+            "task.ingest_weekend.backfill_previous_year",
+            gp=gp,
+            previous_year=previous_year,
+            existing_sessions=sorted(previous_existing),
+        )
+        for stype, skip_tel in sessions:
+            if stype in previous_existing:
+                continue
+            try:
+                ingest_session.apply(args=(previous_year, gp, stype, skip_tel)).get(timeout=600)
+            except Exception as e:
+                log.warning(
+                    "task.ingest_weekend.backfill_failed",
+                    gp=gp,
+                    previous_year=previous_year,
+                    session_type=stype,
+                    error=str(e),
+                )
+
     # Trigger downstream tasks
     if quali_key:
         from workers.tasks.stats import compute_stats
         from workers.tasks.train import retrain_model
+        from workers.tasks.retention import purge_practice_sessions
         # Chain: compute stats → retrain model
         compute_stats.apply_async(
             args=(quali_key,),
             link=retrain_model.si()
         )
+        purge_practice_sessions.delay(year, full_gp_name)
         log.info("task.ingest_weekend.downstream_triggered",
                  quali_key=quali_key)
 
