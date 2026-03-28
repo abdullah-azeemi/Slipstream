@@ -1,7 +1,7 @@
 
 # =============================================================================
 
-# Pitwall — Developer Commands
+# Slipstream — Developer Commands
 
 # =============================================================================
 
@@ -17,7 +17,7 @@ help:
 
 	@echo ""
 
-	@echo "Pitwall — Available Commands"
+	@echo "Slipstream — Available Commands"
 
 	@echo "─────────────────────────────────────────"
 

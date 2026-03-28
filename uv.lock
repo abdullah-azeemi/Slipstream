@@ -10,9 +10,9 @@ resolution-markers = [
 [manifest]
 members = [
     "ml",
-    "pitwall-backend",
-    "pitwall-ingestion",
-    "pitwall-stream",
+    "slipstream-backend",
+    "slipstream-ingestion",
+    "slipstream-stream",
     "workers",
 ]
 
@@ -2275,7 +2275,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pitwall-backend"
+name = "slipstream-backend"
 version = "0.1.0"
 source = { editable = "apps/backend" }
 dependencies = [
@@ -2308,7 +2308,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "pitwall-ingestion"
+name = "slipstream-ingestion"
 version = "0.1.0"
 source = { editable = "packages/ingestion" }
 dependencies = [
@@ -2333,7 +2333,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "pitwall-stream"
+name = "slipstream-stream"
 version = "0.1.0"
 source = { editable = "packages/stream" }
 dependencies = [

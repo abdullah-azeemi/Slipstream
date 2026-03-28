@@ -1,6 +1,6 @@
 # ML Race Prediction
 
-Pitwall's ML module predicts race finishing positions from qualifying performance, historical race context, and an optional FP2 strategy signal.
+Slipstream's ML module predicts race finishing positions from qualifying performance, historical race context, and an optional FP2 strategy signal.
 
 This document answers three practical questions:
 
@@ -27,7 +27,7 @@ It does **not** currently use:
 
 ### Training
 
-For training, Pitwall builds examples from weekends that have:
+For training, Slipstream builds examples from weekends that have:
 
 - one qualifying session (`Q`)
 - one race session (`R`)
@@ -87,7 +87,7 @@ Implementation notes:
 
 ### Static circuit context
 
-These flags come from Pitwall's circuit categorisation:
+These flags come from Slipstream's circuit categorisation:
 
 - `is_street_circuit`
 - `is_power_circuit`

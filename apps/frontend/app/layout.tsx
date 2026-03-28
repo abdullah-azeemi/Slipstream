@@ -4,7 +4,7 @@ import BottomNav from '@/components/layout/BottomNav'
 import TopBar from '@/components/layout/TopBar'
 
 export const metadata: Metadata = {
-  title: 'Pitwall — F1 Analytics',
+  title: 'Slipstream — F1 Analytics',
   description: 'Post-race F1 intelligence.',
 }
 

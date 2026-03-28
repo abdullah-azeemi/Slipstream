@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We want Pitwall to be an open, welcoming, and respectful project for everyone.
+We want Slipstream to be an open, welcoming, and respectful project for everyone.
 
 Contributors, maintainers, and community members are expected to make participation in this project a harassment-free experience regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
 

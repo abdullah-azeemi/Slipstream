@@ -1,4 +1,4 @@
-# Contributing to Pitwall
+# Contributing to Slipstream
 
 Thank you for your interest. This guide gets you from zero to a running dev environment.
 
@@ -14,8 +14,8 @@ Thank you for your interest. This guide gets you from zero to a running dev envi
 
 ## Setup
 ```bash
-git clone https://github.com/abdullah-azeemi/Pitwall
-cd Pitwall
+git clone https://github.com/abdullah-azeemi/Slipstream
+cd Slipstream
 make install    # installs all Python + JS dependencies
 make up         # starts Docker infrastructure
 make migrate    # runs database migrations

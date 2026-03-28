@@ -12,7 +12,7 @@ export default function TopBar() {
           </div>
           <div className="flex flex-col">
             <span className="font-display text-xl font-bold tracking-[0.22em] text-white">
-              PITWALL
+              SLIPSTREAM
             </span>
             <span className="hidden font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--text-3)] md:block">
               Race Intel Console

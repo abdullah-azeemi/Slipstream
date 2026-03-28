@@ -155,7 +155,7 @@ def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
 
 def main():
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment("pitwall-race-prediction")
+    mlflow.set_experiment("slipstream-race-prediction")
 
     log.info("train.start")
 
@@ -173,7 +173,7 @@ def main():
     print(df[FEATURE_COLS + [TARGET_COL, 'abbreviation', 'year']].head(10).to_string())
     print(f"\nShape: {df.shape}")
 
-    with mlflow.start_run(run_name="pitwall-race-predictor"):
+    with mlflow.start_run(run_name="slipstream-race-predictor"):
 
         # Cross validation
         cv_metrics = cross_validate(df)

@@ -1,6 +1,6 @@
 # Architecture
 
-Pitwall is an F1 analytics monorepo built around one shared database and several focused services.
+Slipstream is an F1 analytics monorepo built around one shared database and several focused services.
 
 This document is the "map" of the project:
 
@@ -30,7 +30,7 @@ flowchart LR
 
 ### Frontend
 
-Path: [apps/frontend](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/frontend)
+Path: [apps/frontend](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/frontend)
 
 Responsibilities:
 
@@ -48,7 +48,7 @@ Tech:
 
 ### Backend API
 
-Path: [apps/backend](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/backend)
+Path: [apps/backend](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/backend)
 
 Responsibilities:
 
@@ -70,7 +70,7 @@ Important route groups:
 
 ### Ingestion
 
-Path: [packages/ingestion](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/ingestion)
+Path: [packages/ingestion](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/ingestion)
 
 Responsibilities:
 
@@ -86,7 +86,7 @@ Notable behavior:
 
 ### ML
 
-Path: [packages/ml](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/ml)
+Path: [packages/ml](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/ml)
 
 Responsibilities:
 
@@ -95,11 +95,11 @@ Responsibilities:
 - run inference for unseen qualifying sessions
 - log training runs to MLflow
 
-See [docs/ml-race-prediction.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/ml-race-prediction.md) for the detailed feature and session requirements.
+See [docs/ml-race-prediction.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/ml-race-prediction.md) for the detailed feature and session requirements.
 
 ### Workers
 
-Path: [packages/workers](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/workers)
+Path: [packages/workers](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/workers)
 
 Responsibilities:
 
@@ -112,7 +112,7 @@ These are designed to run with Celery, Redis, and the local infrastructure stack
 
 ### Stream
 
-Path: [packages/stream](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/stream)
+Path: [packages/stream](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/stream)
 
 Purpose:
 
@@ -147,7 +147,7 @@ Purpose:
 
 ## Shared infrastructure
 
-Infrastructure file: [infra/docker-compose.yml](/Users/abdullahmusharaf/Desktop/F1/Pitwall/infra/docker-compose.yml)
+Infrastructure file: [infra/docker-compose.yml](/Users/abdullahmusharaf/Desktop/F1/Slipstream/infra/docker-compose.yml)
 
 Local services:
 
@@ -175,7 +175,7 @@ When a derived concept is critical to UX or correctness, store it in the databas
 
 ### Keep telemetry selective
 
-Telemetry is high-volume data, so Pitwall stores it only where it adds clear product value. Right now that means segment-best qualifying laps rather than every lap of every session.
+Telemetry is high-volume data, so Slipstream stores it only where it adds clear product value. Right now that means segment-best qualifying laps rather than every lap of every session.
 
 ### Prefer reproducible local defaults
 

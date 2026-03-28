@@ -1,4 +1,4 @@
-# Pitwall
+# Slipstream
 
 **Open-source F1 post-race analytics platform.**
 
@@ -46,7 +46,7 @@ Live driver and constructor standings from the official Jolpica F1 API. Updates 
 
 ## Why this project exists
 
-Pitwall is built to make high-quality F1 analysis accessible without paid telemetry feeds or closed tooling.
+Slipstream is built to make high-quality F1 analysis accessible without paid telemetry feeds or closed tooling.
 
 The goal is to give fans, builders, and contributors a practical analytics stack that can:
 
@@ -145,8 +145,8 @@ flowchart LR
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/abdullah-azeemi/Pitwall.git
-cd Pitwall
+git clone https://github.com/abdullah-azeemi/Slipstream.git
+cd Slipstream
 cp .env.example .env
 ```
 
@@ -228,11 +228,11 @@ done
 
 Storage estimate: ~200MB for 5 circuits × 4 seasons (lap times only, no telemetry for historical races).
 
-**Telemetry note:** Telemetry is large, but Pitwall stores only the segment-best qualifying telemetry laps per driver (`best Q1`, `best Q2`, `best Q3`) rather than every qualifying lap. All other analysis panels (race, FP) use only `lap_times` which is compact.
+**Telemetry note:** Telemetry is large, but Slipstream stores only the segment-best qualifying telemetry laps per driver (`best Q1`, `best Q2`, `best Q3`) rather than every qualifying lap. All other analysis panels (race, FP) use only `lap_times` which is compact.
 
 ### ML prediction data requirements
 
-Pitwall's current ML pipeline predicts race finishing positions from qualifying-era information plus historical race context.
+Slipstream's current ML pipeline predicts race finishing positions from qualifying-era information plus historical race context.
 
 - Live prediction needs the current `Q` session.
 - Historical form features need past `R` sessions in the database.
@@ -317,7 +317,7 @@ When shipping qualifying telemetry changes to Railway/Vercel:
 
 ## Public launch note
 
-If you are preparing Pitwall for a public Railway deployment, do not treat the hosted database as a full historical archive.
+If you are preparing Slipstream for a public Railway deployment, do not treat the hosted database as a full historical archive.
 
 Railway storage is limited, so the best launch strategy is:
 
@@ -372,7 +372,7 @@ lsof -ti:8000 | xargs kill -9   # kill stuck backend port
 - **[OpenF1](https://openf1.org/)** — live timing API (roadmap)
 - **[Jolpica](https://jolpi.ca/)** — official F1 standings
 
-All data is sourced from public APIs. Pitwall stores processed data locally — no data is redistributed.
+All data is sourced from public APIs. Slipstream stores processed data locally — no data is redistributed.
 
 ---
 

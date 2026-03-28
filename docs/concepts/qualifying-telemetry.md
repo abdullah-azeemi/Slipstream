@@ -1,12 +1,12 @@
 # Qualifying Telemetry
 
-Qualifying telemetry is one of the most product-visible features in Pitwall, and also one of the easiest places to get subtly wrong.
+Qualifying telemetry is one of the most product-visible features in Slipstream, and also one of the easiest places to get subtly wrong.
 
 This doc explains:
 
 - why qualifying telemetry is special
 - why `Q1/Q2/Q3` cannot be treated as a simple "fastest lap" problem
-- why Pitwall stores `quali_segment`
+- why Slipstream stores `quali_segment`
 - how the frontend and backend cooperate
 
 ## The problem
@@ -44,7 +44,7 @@ So the UI needs to know:
 
 ## Current design
 
-Pitwall uses a persisted-segment model.
+Slipstream uses a persisted-segment model.
 
 ### 1. Persist `quali_segment` on `lap_times`
 
@@ -153,14 +153,14 @@ Do not assume the frontend is wrong before verifying which lap numbers the backe
 
 ## Related code
 
-- [analysis.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/backend/src/backend/api/v1/analysis.py)
-- [telemetry.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/backend/src/backend/api/v1/telemetry.py)
-- [page.tsx](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/frontend/app/sessions/[key]/telemetry/page.tsx)
-- [telemetry-quali.ts](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/frontend/lib/telemetry-quali.ts)
-- [fastf1_client.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/ingestion/src/ingestion/fastf1_client.py)
+- [analysis.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/backend/src/backend/api/v1/analysis.py)
+- [telemetry.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/backend/src/backend/api/v1/telemetry.py)
+- [page.tsx](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/frontend/app/sessions/[key]/telemetry/page.tsx)
+- [telemetry-quali.ts](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/frontend/lib/telemetry-quali.ts)
+- [fastf1_client.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/ingestion/src/ingestion/fastf1_client.py)
 
 ## Related docs
 
-- [docs/data-model.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/data-model.md)
-- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/ingestion.md)
-- [README.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/README.md)
+- [docs/data-model.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/data-model.md)
+- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/ingestion.md)
+- [README.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/README.md)

@@ -1,6 +1,6 @@
 # Deployment
 
-This guide covers the practical deployment flow for Pitwall's current stack.
+This guide covers the practical deployment flow for Slipstream's current stack.
 
 Today that usually means:
 
@@ -189,6 +189,6 @@ For data-backed features, code-only rollback is often not enough if the issue is
 
 ## Related docs
 
-- [docs/local-development.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/local-development.md)
-- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/ingestion.md)
-- [README.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/README.md)
+- [docs/local-development.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/local-development.md)
+- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/ingestion.md)
+- [README.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/README.md)

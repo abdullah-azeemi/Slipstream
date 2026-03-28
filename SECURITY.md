@@ -2,7 +2,7 @@
 
 ## Supported Scope
 
-Pitwall is an open-source F1 analytics platform. Security reports are especially helpful for issues involving:
+Slipstream is an open-source F1 analytics platform. Security reports are especially helpful for issues involving:
 
 - authentication or authorization bypasses
 - remote code execution
