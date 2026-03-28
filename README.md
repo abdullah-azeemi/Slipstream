@@ -247,6 +247,16 @@ Slipstream's current ML pipeline predicts race finishing positions from qualifyi
 
 Training is built from weekends that have both `Q` and `R` sessions. Missing `FP2` does not block training or prediction; it falls back to neutral strategy values.
 
+On deployed environments, the predictions endpoint can train the model on demand the first time it is requested if no model file exists yet. That first request can be noticeably slower than later ones.
+
+For Railway-style deployments, set:
+
+```bash
+ML_MODELS_DIR=/app/ml_models
+```
+
+and mount persistent storage at the same path if you want trained models to survive redeploys.
+
 See [docs/ml-race-prediction.md](./docs/ml-race-prediction.md) for the full feature-to-session map, ingest checklist, and common local failure modes.
 
 ![Prediction view showing projected finishing order and model confidence](.github/assets/predictions.png)

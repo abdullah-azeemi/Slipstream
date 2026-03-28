@@ -100,6 +100,7 @@ Expected behavior after a correct deploy:
 Check:
 
 - `DATABASE_URL`
+- `ML_MODELS_DIR` if deployed predictions need persisted model files
 - `AUTO_INGEST_ENABLED` if you want to disable the built-in backend scheduler
 - `AUTO_INGEST_INTERVAL_MINUTES` to control how often production checks for new sessions
 - `REDIS_URL` if workers are in use
@@ -139,6 +140,19 @@ Safety:
 - runs are guarded by a PostgreSQL advisory lock so only one instance ingests at a time
 - local `flask --debug` and tests do not start the scheduler by default
 
+### Deployed ML predictions
+
+Slipstream's deployed predictions can train on demand from the web service when a request arrives and no model file exists yet.
+
+Practical implications:
+
+- the first prediction request after a fresh deploy may be slow
+- model files should live in a persistent directory such as `/app/ml_models`
+- `ML_MODELS_DIR=/app/ml_models` should be set on the deployed backend
+- if `MLFLOW_TRACKING_URI` is unreachable, training continues and only the tracking/logging step is skipped
+
+This is the simplest production path when you do not want a separate long-running trainer service.
+
 ### Rotate exposed credentials immediately
 
 If a Railway database password is ever pasted in chat, logs, screenshots, or shell history:
@@ -176,6 +190,12 @@ After deploy, check:
 4. telemetry compare works for a known qualifying session
 5. any new endpoint returns the expected shape
 6. if ML changed, training or inference still runs against the intended environment
+
+For ML specifically:
+
+1. hit a known qualifying predictions endpoint once and expect the first request to take longer if the model is being built
+2. confirm later requests are much faster
+3. confirm the response includes model metadata rather than `503 Model not trained`
 
 ## Rollback mindset
 

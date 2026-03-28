@@ -25,6 +25,8 @@ It does **not** currently use:
 - Sprint sessions (`S`, `SQ`)
 - The current race session itself
 
+In deployed environments, prediction requests may also trigger model training if no saved model exists yet. This means the first prediction request after a fresh deploy can be slow while the model is built and written to disk.
+
 ### Training
 
 For training, Slipstream builds examples from weekends that have:
@@ -33,6 +35,8 @@ For training, Slipstream builds examples from weekends that have:
 - one race session (`R`)
 
 `FP2` is optional enrichment. If there is no matching FP2 data, the model still trains and uses neutral strategy values.
+
+Model files are stored in `ML_MODELS_DIR` when that environment variable is set, otherwise they default to `./ml_models`.
 
 ## Feature to session map
 
@@ -126,6 +130,16 @@ for year in 2022 2023 2024 2025; do
 done
 ```
 
+### Deployed training behavior
+
+On Railway-style deployments:
+
+- set `ML_MODELS_DIR=/app/ml_models`
+- mount persistent storage at `/app/ml_models` if you want models to survive redeploys
+- the web service can train on demand when a predictions request arrives and no model file exists yet
+
+This allows deployed predictions to work without a separate always-on ML trainer service, at the cost of a slower first prediction request.
+
 ## Common local issues
 
 ### `KeyError: 'team_name'` during `uv run python -m ml.train`
@@ -168,6 +182,18 @@ Example local setting:
 ```bash
 DATABASE_URL=postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall
 ```
+
+### MLflow connection errors on Railway
+
+Cause:
+
+- `MLFLOW_TRACKING_URI` points to a server that does not exist in the deployed environment
+
+Current behavior:
+
+- training no longer fails just because MLflow is unavailable
+- model files still save locally to `ML_MODELS_DIR`
+- MLflow logging is skipped when the tracking server cannot be reached
 
 ## Mental model
 
