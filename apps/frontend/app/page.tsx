@@ -1,9 +1,9 @@
 import { api } from '@/lib/api'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, teamColour, sessionTypeLabel } from '@/lib/utils'
-import Link from 'next/link'
 import { MapPin, Thermometer, Wind, Droplets, Clock, Trophy, Zap, Flag } from 'lucide-react'
 import CountdownTimer from '@/components/schedule/CountdownTimer'
+import ChampionshipStandings from '@/components/home/ChampionshipStandings'
 
 export const revalidate = 60
 
@@ -23,30 +23,6 @@ async function fetchStandings(year: number) {
   }
 }
 
-// ── Team colour map for constructors (Ergast names → hex) ────────────────────
-
-const CONSTRUCTOR_COLOURS: Record<string, string> = {
-  'Mercedes': '27F4D2',
-  'Red Bull': '3671C6',
-  'Ferrari': 'E8002D',
-  'McLaren': 'FF8000',
-  'Aston Martin': '229971',
-  'Alpine': 'FF87BC',
-  'Williams': '64C4FF',
-  'Haas F1 Team': 'B6BABD',
-  'Kick Sauber': '52E252',
-  'RB': '6692FF',
-  'Racing Bulls': '6692FF',
-  'Cadillac': 'C8A217',
-}
-
-function constructorColour(name: string): string {
-  for (const [k, v] of Object.entries(CONSTRUCTOR_COLOURS)) {
-    if (name?.includes(k) || k.includes(name ?? '')) return '#' + v
-  }
-  return '#666666'
-}
-
 // ── Circuit image map ─────────────────────────────────────────────────────────
 
 function getCircuitImage(gpName: string): string {
@@ -62,38 +38,6 @@ function getCircuitImage(gpName: string): string {
   return 'https://images.unsplash.com/photo-1541447271487-09612b3f49f7?w=1200&q=80'
 }
 
-// ── Position badge ────────────────────────────────────────────────────────────
-
-function PosBadge({ pos }: { pos: number }) {
-  const gold = pos === 1
-  const silver = pos === 2
-  const bronze = pos === 3
-  const bg = gold ? '#FFD70022' : silver ? '#C0C0C022' : bronze ? '#CD7F3222' : 'transparent'
-  const col = gold ? '#FFD700' : silver ? '#C0C0C0' : bronze ? '#CD7F32' : '#52525B'
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      width: '28px', height: '28px', borderRadius: '6px',
-      background: bg, color: col,
-      fontSize: '12px', fontFamily: 'monospace', fontWeight: 700,
-      flexShrink: 0,
-    }}>
-      {pos}
-    </span>
-  )
-}
-
-// ── Points bar ────────────────────────────────────────────────────────────────
-
-function PtsBar({ pts, max, colour }: { pts: number; max: number; colour: string }) {
-  const pct = max > 0 ? (pts / max) * 100 : 0
-  return (
-    <div style={{ flex: 1, height: '4px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: colour + 'AA', borderRadius: '2px', transition: 'width 0.4s ease' }} />
-    </div>
-  )
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default async function HomePage() {
@@ -107,9 +51,7 @@ export default async function HomePage() {
     fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 60 } }).then(r => r.json()).catch(() => null),
   ])
 
-  const maxConPts = standings.constructors[0]?.points ?? 1
   const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
-  const maxDriverPts = standings.drivers[0]?.points ?? 1
 
   // Use nextRace as the Hero if available, otherwise latest session
   const heroRace = nextRace?.race
@@ -276,93 +218,12 @@ export default async function HomePage() {
         </div>
       )}
 
-      {/* ── Driver Championship Standings ──────────────────────────── */}
-      {standings.drivers.length > 0 && (
-        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.12)' }}>
-            <div>
-              <span style={{ fontWeight: 600, color: '#fff', fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Driver Championship</span>
-              <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#5e7289' }}>
-                {currentYear} · {standings.round} race{standings.round !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <Link href="/sessions" style={{ color: '#f2c879', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
-              All Sessions →
-            </Link>
-          </div>
-
-          {/* Column headers */}
-          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
-            <span>POS</span><span></span><span>DRIVER</span><span className="driver-hide-mobile">TEAM</span><span className="driver-hide-mobile">PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span className="driver-hide-mobile driver-wins-col" style={{ textAlign: 'right' }}>W</span>
-          </div>
-
-          {standings.drivers.slice(0, 10).map((driver: { position: number, code: string, full_name: string, team_name: string, points: number, wins: number }) => {
-            const colour = constructorColour(driver.team_name)
-            return (
-              <div key={driver.code} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '12px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>
-                  {String(driver.position).padStart(2, '0')}
-                </span>
-                <PosBadge pos={driver.position} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {driver.full_name}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#5e7289', fontFamily: 'monospace' }}>{driver.code}</div>
-                  </div>
-                </div>
-                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#9fb2c6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
-                <span className="driver-hide-mobile"><PtsBar pts={driver.points} max={maxDriverPts} colour={colour} /></span>
-                <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 700, textAlign: 'right' }}>{driver.points}</span>
-                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#5e7289', textAlign: 'right' }}>{driver.wins}</span>
-              </div>
-            )
-          })}
-
-          {standings.drivers.length > 10 && (
-            <div style={{ padding: '12px 20px', fontSize: '11px', color: '#5e7289', fontFamily: 'monospace', textAlign: 'center' }}>
-              +{standings.drivers.length - 10} more drivers
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Constructor Championship ────────────────────────────────── */}
-      {standings.constructors.length > 0 && (
-        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-          <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.12)' }}>
-            <span style={{ fontWeight: 600, color: '#fff', fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Constructor Championship</span>
-            <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#5e7289' }}>
-              {currentYear}
-            </span>
-          </div>
-
-          <div className="constructor-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: 'rgba(152, 181, 211, 0.08)' }}>
-            {standings.constructors.map((con: { position: number, team_name: string, points: number, wins: number }) => {
-              const colour = constructorColour(con.team_name)
-              return (
-                <div key={con.team_name} style={{ background: 'linear-gradient(180deg, rgba(18, 33, 49, 0.88) 0%, rgba(10, 20, 31, 0.9) 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <PosBadge pos={con.position} />
-                  <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {con.team_name}
-                    </div>
-                    <PtsBar pts={con.points} max={maxConPts} colour={colour} />
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontFamily: 'monospace', fontSize: '15px', fontWeight: 700, color: '#fff' }}>{con.points}</div>
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#5e7289' }}>{con.wins}W</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      <ChampionshipStandings
+        drivers={standings.drivers}
+        constructors={standings.constructors}
+        currentYear={currentYear}
+        round={standings.round}
+      />
 
     </div>
   )

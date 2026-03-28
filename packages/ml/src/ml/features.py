@@ -756,6 +756,7 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
         pole_gap_pct   = round(gap_ms / max(pole_time, 1) * 100, 4)
 
         rows.append({
+            'gp_name':               gp_name,
             'driver_number':        driver_number,
             'abbreviation':         r['abbreviation'],
             'team_name':            team_name,

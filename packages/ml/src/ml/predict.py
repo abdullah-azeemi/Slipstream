@@ -10,21 +10,27 @@ noise added to simulate race uncertainty (crashes, strategy, weather).
 from __future__ import annotations
 import pickle
 import numpy as np
-from pathlib import Path
 import structlog
 
 from ml.features import build_inference_features, FEATURE_COLS
+from ml.model_store import GLOBAL_MODEL_PATH, gp_model_path
 
 log       = structlog.get_logger()
-MODEL_PATH = Path("./ml_models/race_predictor.pkl")
 
 
-def load_model():
-    if not MODEL_PATH.exists():
+def load_model(gp_name: str | None = None):
+    model_path = gp_model_path(gp_name) if gp_name else GLOBAL_MODEL_PATH
+
+    if gp_name and not model_path.exists():
+        log.warning("model.gp_missing", gp_name=gp_name, fallback=str(GLOBAL_MODEL_PATH))
+        model_path = GLOBAL_MODEL_PATH
+
+    if not model_path.exists():
         raise FileNotFoundError(
-            f"No model found at {MODEL_PATH}. Run: uv run python -m ml.train"
+            f"No model found at {model_path}. Run: uv run python -m ml.train"
         )
-    with open(MODEL_PATH, 'rb') as f:
+
+    with open(model_path, 'rb') as f:
         return pickle.load(f)
 
 
@@ -46,8 +52,9 @@ def predict_race(quali_session_key: int, n_simulations: int = 1000) -> list[dict
         ...
     ]
     """
-    model    = load_model()
     features = build_inference_features(quali_session_key)
+    gp_name = str(features['gp_name'].iloc[0]) if 'gp_name' in features.columns and not features.empty else None
+    model = load_model(gp_name)
 
     X          = features[FEATURE_COLS]
     base_preds = model.predict(X)
@@ -103,8 +110,9 @@ def explain_prediction(quali_session_key: int) -> list[dict]:
         log.warning("shap.not_installed")
         return []
 
-    model    = load_model()
     features = build_inference_features(quali_session_key)
+    gp_name = str(features['gp_name'].iloc[0]) if 'gp_name' in features.columns and not features.empty else None
+    model = load_model(gp_name)
     X        = features[FEATURE_COLS]
 
     try:

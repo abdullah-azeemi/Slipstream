@@ -9,7 +9,6 @@ import json
 import os
 import pickle
 import tempfile
-from pathlib import Path
 
 import mlflow
 import numpy as np
@@ -20,11 +19,9 @@ import structlog
 
 from ml.config import settings
 from ml.features import build_feature_matrix, FEATURE_COLS, TARGET_COL
+from ml.model_store import GLOBAL_MODEL_PATH, gp_model_path
 
 log = structlog.get_logger()
-
-MODEL_PATH = Path("./ml_models/race_predictor.pkl")
-MODEL_PATH.parent.mkdir(exist_ok=True)
 
 # Disable FLAML's built-in MLflow auto-logging — we do it ourselves
 os.environ["FLAML_MAX_ITER"] = "0"  # no-op, just ensuring env is set
@@ -104,6 +101,28 @@ def train_final_model(df: pd.DataFrame) -> AutoML:
              best_estimator=model.best_estimator,
              best_config=str(model.best_config))
     return model
+
+
+def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
+    """Train one model per GP so live predictions can use circuit-specific history."""
+    gp_models: dict[str, str] = {}
+
+    for gp_name, gp_df in df.groupby("gp_name"):
+        if len(gp_df) < 20:
+            log.warning("gp_model.skip", gp_name=gp_name, rows=len(gp_df), reason="not enough rows")
+            continue
+
+        log.info("gp_model.train_start", gp_name=gp_name, rows=len(gp_df))
+        model = train_final_model(gp_df)
+        model_path = gp_model_path(gp_name)
+
+        with open(model_path, "wb") as f:
+            pickle.dump(model, f)
+
+        gp_models[gp_name] = str(model_path)
+        log.info("gp_model.saved", gp_name=gp_name, path=str(model_path))
+
+    return gp_models
 
 
 def main():
@@ -193,15 +212,20 @@ def main():
         except Exception as e:
             log.warning("feature_importance.failed", error=str(e))
 
-        # Save model pickle for fast inference
-        with open(MODEL_PATH, 'wb') as f:
+        # Save global fallback model pickle for fast inference
+        with open(GLOBAL_MODEL_PATH, 'wb') as f:
             pickle.dump(model, f)
 
-        # Also log the pickle as an artifact
-        #mlflow.log_artifact(str(MODEL_PATH), artifact_path="model")
+        gp_models = train_gp_models(df)
+        mlflow.log_metric("gp_model_count", len(gp_models))
 
-        log.info("model.saved", path=str(MODEL_PATH))
-        print(f"\n✅  Model saved  → {MODEL_PATH}")
+        # Also log the pickle as an artifact
+        #mlflow.log_artifact(str(GLOBAL_MODEL_PATH), artifact_path="model")
+
+        log.info("model.saved", path=str(GLOBAL_MODEL_PATH), gp_models=len(gp_models))
+        print(f"\n✅  Global model saved  → {GLOBAL_MODEL_PATH}")
+        if gp_models:
+            print(f"✅  GP-specific models saved  → {len(gp_models)}")
         print(f"    Best algorithm: {model.best_estimator}")
         print(f"    MLflow run logged → {settings.mlflow_tracking_uri}")
 
