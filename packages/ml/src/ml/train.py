@@ -5,6 +5,7 @@ Run with:
     uv run python -m ml.train
 """
 from __future__ import annotations
+from contextlib import nullcontext
 import json
 import os
 import pickle
@@ -154,8 +155,19 @@ def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
 
 
 def main():
-    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment("slipstream-race-prediction")
+    mlflow_enabled = True
+    mlflow_run = nullcontext()
+    try:
+        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+        mlflow.set_experiment("slipstream-race-prediction")
+        mlflow_run = mlflow.start_run(run_name="slipstream-race-predictor")
+    except Exception as e:
+        mlflow_enabled = False
+        log.warning(
+            "mlflow.unavailable",
+            tracking_uri=settings.mlflow_tracking_uri,
+            error=str(e),
+        )
 
     log.info("train.start")
 
@@ -173,7 +185,7 @@ def main():
     print(df[FEATURE_COLS + [TARGET_COL, 'abbreviation', 'year']].head(10).to_string())
     print(f"\nShape: {df.shape}")
 
-    with mlflow.start_run(run_name="slipstream-race-predictor"):
+    with mlflow_run:
 
         # Cross validation
         cv_metrics = cross_validate(df)
@@ -189,18 +201,19 @@ def main():
         model = train_final_model(df)
 
         # Log to MLflow manually (no FLAML auto-logging)
-        mlflow.log_params({
-            "best_estimator":  model.best_estimator,
-            "time_budget":     60,
-            "n_training_rows": len(df),
-            "n_features":      len(FEATURE_COLS),
-            "features":        json.dumps(FEATURE_COLS),
-        })
-        mlflow.log_metrics({
-            "cv_mae_mean":           cv_metrics['mae_mean'],
-            "cv_mae_std":            cv_metrics['mae_std'],
-            "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
-        })
+        if mlflow_enabled:
+            mlflow.log_params({
+                "best_estimator":  model.best_estimator,
+                "time_budget":     60,
+                "n_training_rows": len(df),
+                "n_features":      len(FEATURE_COLS),
+                "features":        json.dumps(FEATURE_COLS),
+            })
+            mlflow.log_metrics({
+                "cv_mae_mean":           cv_metrics['mae_mean'],
+                "cv_mae_std":            cv_metrics['mae_std'],
+                "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
+            })
 
         # Log feature importance — the most valuable thing to track.
         # WHY: knowing WHICH features the model relies on tells you:
@@ -221,16 +234,18 @@ def main():
                 )
                 # Log top features as metrics (MLflow shows these in charts)
                 for feat, imp in list(importances_sorted.items())[:10]:
-                    mlflow.log_metric(f"importance_{feat}", imp)
+                    if mlflow_enabled:
+                        mlflow.log_metric(f"importance_{feat}", imp)
 
                 # Log full importance as artifact
                 tmp = tempfile.mktemp(suffix=".json")
                 with open(tmp, "w") as f:
                     json.dump(importances_sorted, f, indent=2)
-                try:
-                    mlflow.log_artifact(tmp)
-                except Exception:
-                    pass  # artifact logging optional
+                if mlflow_enabled:
+                    try:
+                        mlflow.log_artifact(tmp)
+                    except Exception:
+                        pass  # artifact logging optional
                 os.unlink(tmp)
 
                 print("\n=== Feature Importance (top 10) ===")
@@ -256,7 +271,8 @@ def main():
         })
 
         gp_models = train_gp_models(df)
-        mlflow.log_metric("gp_model_count", len(gp_models))
+        if mlflow_enabled:
+            mlflow.log_metric("gp_model_count", len(gp_models))
 
         # Also log the pickle as an artifact
         #mlflow.log_artifact(str(GLOBAL_MODEL_PATH), artifact_path="model")
@@ -266,7 +282,10 @@ def main():
         if gp_models:
             print(f"✅  GP-specific models saved  → {len(gp_models)}")
         print(f"    Best algorithm: {model.best_estimator}")
-        print(f"    MLflow run logged → {settings.mlflow_tracking_uri}")
+        if mlflow_enabled:
+            print(f"    MLflow run logged → {settings.mlflow_tracking_uri}")
+        else:
+            print("    MLflow logging skipped (tracking server unavailable)")
 
 
 if __name__ == '__main__':
