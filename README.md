@@ -24,6 +24,8 @@ Qualifying sessions also support segment-aware comparison:
 
 ![Qualifying telemetry showing ANT vs RUS speed traces](.github/assets/qualifying-telemetry.png)
 
+Drop the screenshot file at `.github/assets/qualifying-telemetry.png` if you want this image to render on GitHub.
+
 ### Race — Lap-by-Lap Intelligence
 - **Lap time evolution** — every lap as a time series, compound-coloured dots, pit laps flagged
 - **Gap to leader** — cumulative time behind P1 per lap, correct across pit windows
@@ -356,13 +358,22 @@ lsof -ti:8000 | xargs kill -9   # kill stuck backend port
 
 ## Roadmap
 
+### Shipped
+
+- [x] Qualifying telemetry with Q1/Q2/Q3 segment-aware comparison
+- [x] Race analysis suite: pace, gaps, positions, pit stop and stint views
+- [x] Practice analysis views driven by compact `lap_times` data
+- [x] ML race prediction pipeline using qualifying, historical race context, and optional FP2 strategy signal
+- [x] Storage-aware auto-ingest flow for newly completed weekends
+
+### Next
+
 - [ ] Race engineer style insight summaries grounded in existing analytics endpoints
 - [ ] Better data quality checks and ingestion health reporting
-- [ ] Bulk ingestion script — ingest full 2022–2025 archive in one command
-- [ ] Auto-ingest 2026 — Celery beat task that detects new sessions and ingests automatically
-- [ ] ML predictions — FLAML podium predictions from qualifying results + historical data
-- [ ] What-If simulator — drag grid positions, toggle weather, rerun predictions
-- [ ] Live mode — OpenF1 streaming during race weekends via Kafka
+- [ ] Bulk ingestion utility for curated multi-season loading
+- [ ] Prediction UX polish and clearer model confidence/explanation cards
+- [ ] What-if simulator for grid and weather scenario testing
+- [ ] Live mode via OpenF1 streaming during race weekends
 
 ---
 
