@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
-MODEL_DIR = Path("./ml_models")
+MODEL_DIR = Path(os.getenv("ML_MODELS_DIR", "./ml_models"))
 GLOBAL_MODEL_PATH = MODEL_DIR / "race_predictor.pkl"
 GP_MODEL_DIR = MODEL_DIR / "gp"
 
