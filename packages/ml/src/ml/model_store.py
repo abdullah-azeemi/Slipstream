@@ -9,7 +9,7 @@ MODEL_DIR = Path(os.getenv("ML_MODELS_DIR", "./ml_models"))
 GLOBAL_MODEL_PATH = MODEL_DIR / "race_predictor.pkl"
 GP_MODEL_DIR = MODEL_DIR / "gp"
 
-MODEL_DIR.mkdir(exist_ok=True)
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
 GP_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 
