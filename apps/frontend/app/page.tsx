@@ -82,7 +82,7 @@ export default async function HomePage() {
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(133,215,255,0.22), transparent 28%), radial-gradient(circle at bottom left, rgba(232,0,45,0.16), transparent 26%)' }} />
 
           {/* Top-left Indicator */}
-          <div style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="hero-kicker" style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {heroRace ? (
               <span style={{ fontSize: '11px', fontWeight: 600, color: '#d4e3f1', letterSpacing: '0.14em', fontFamily: 'monospace', textTransform: 'uppercase', background: 'rgba(7,17,27,0.48)', border: '1px solid rgba(255,255,255,0.08)', width: 'fit-content', padding: '8px 12px', borderRadius: '999px', backdropFilter: 'blur(10px)' }}>
                 NEXT UP — ROUND {heroRace.round}
@@ -101,7 +101,7 @@ export default async function HomePage() {
             <div className="hero-bottom-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
 
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div className="hero-title-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                   {heroRace?.flag && <span style={{ fontSize: '24px', lineHeight: 1 }}>{heroRace.flag}</span>}
                   <h1 className="hero-title" style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '36px', color: '#fff', lineHeight: 0.95, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     {heroRace ? heroRace.event_name : (latest?.gp_name?.replace(' Grand Prix', '') + ' GP')}
@@ -114,14 +114,14 @@ export default async function HomePage() {
                   <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : latest?.year}</span>
                 </div>
 
-                <div className="telemetry-chip-row">
-                  <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
+                <div className="telemetry-chip-row hero-chip-grid">
+                  <div className="panel-soft hero-chip-card" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
                     <div className="eyebrow" style={{ marginBottom: '6px' }}>Weekend Status</div>
                     <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
                       {heroSession?.name ?? latest?.session_name ?? 'Live'}
                     </div>
                   </div>
-                  <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
+                  <div className="panel-soft hero-chip-card" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
                     <div className="eyebrow" style={{ marginBottom: '6px' }}>Track Focus</div>
                     <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
                       {heroRace?.circuit ?? latest?.gp_name ?? 'Analysis'}

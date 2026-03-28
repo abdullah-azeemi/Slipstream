@@ -300,15 +300,44 @@ main {
   }
 
   .hero-card {
-    height: 260px !important;
+    height: auto !important;
+    min-height: 420px;
   }
 
   .hero-title {
-    font-size: 22px !important;
+    font-size: 18px !important;
+    line-height: 0.92 !important;
+    letter-spacing: 0.02em !important;
   }
 
   .hero-meta {
     font-size: 10px !important;
+    flex-wrap: wrap;
+    gap: 6px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .hero-kicker {
+    top: 16px !important;
+    left: 16px !important;
+    right: 16px;
+  }
+
+  .hero-title-row {
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .hero-chip-grid {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px !important;
+  }
+
+  .hero-chip-card {
+    min-width: 0;
+    padding: 10px !important;
   }
 
   /* Stat cards — 2 columns on mobile */
@@ -409,6 +438,36 @@ main {
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 12px !important;
+  }
+
+  .bottom-nav-shell {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav-inner {
+    height: 76px !important;
+    border-radius: 22px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    gap: 2px;
+  }
+
+  .bottom-nav-link {
+    border-radius: 18px !important;
+    padding: 10px 2px 8px !important;
+    gap: 4px !important;
+  }
+
+  .bottom-nav-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .bottom-nav-label {
+    font-size: 8px !important;
+    letter-spacing: 0.03em !important;
   }
 
   /* Predictions header — stack */
