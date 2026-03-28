@@ -9,6 +9,7 @@ noise added to simulate race uncertainty (crashes, strategy, weather).
 """
 from __future__ import annotations
 import pickle
+import threading
 import numpy as np
 import structlog
 
@@ -16,6 +17,27 @@ from ml.features import build_inference_features, FEATURE_COLS
 from ml.model_store import GLOBAL_MODEL_PATH, gp_model_path
 
 log       = structlog.get_logger()
+_train_lock = threading.Lock()
+
+
+def ensure_model_available(gp_name: str | None = None) -> None:
+    model_path = gp_model_path(gp_name) if gp_name else GLOBAL_MODEL_PATH
+    if gp_name and not model_path.exists() and GLOBAL_MODEL_PATH.exists():
+        return
+    if model_path.exists():
+        return
+
+    with _train_lock:
+        model_path = gp_model_path(gp_name) if gp_name else GLOBAL_MODEL_PATH
+        if gp_name and not model_path.exists() and GLOBAL_MODEL_PATH.exists():
+            return
+        if model_path.exists():
+            return
+
+        log.info("model.train_on_demand.start", gp_name=gp_name)
+        from ml.train import main as train_main
+        train_main()
+        log.info("model.train_on_demand.done", gp_name=gp_name)
 
 
 def load_model(gp_name: str | None = None):
@@ -54,6 +76,7 @@ def predict_race(quali_session_key: int, n_simulations: int = 1000) -> list[dict
     """
     features = build_inference_features(quali_session_key)
     gp_name = str(features['gp_name'].iloc[0]) if 'gp_name' in features.columns and not features.empty else None
+    ensure_model_available(gp_name)
     model = load_model(gp_name)
 
     X          = features[FEATURE_COLS]
@@ -112,6 +135,7 @@ def explain_prediction(quali_session_key: int) -> list[dict]:
 
     features = build_inference_features(quali_session_key)
     gp_name = str(features['gp_name'].iloc[0]) if 'gp_name' in features.columns and not features.empty else None
+    ensure_model_available(gp_name)
     model = load_model(gp_name)
     X        = features[FEATURE_COLS]
 

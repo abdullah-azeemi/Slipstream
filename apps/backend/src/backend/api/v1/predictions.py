@@ -37,7 +37,7 @@ def race_predictions(session_key: int):
         predictions  = predict_race(session_key)
         explanations = explain_prediction(session_key)
     except FileNotFoundError:
-        return jsonify({"error": "Model not trained. Run: uv run python -m ml.train"}), 503
+        return jsonify({"error": "Model training did not produce a readable model file"}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
