@@ -16,8 +16,9 @@ export default function TelemetryLandingPage() {
   useEffect(() => {
     fetch(`${BASE}/api/v1/sessions`)
       .then(r => r.json())
-      .then((all: Session[]) => {
-        const qualiSessions = all
+      .then((all: Session[] | { error?: string }) => {
+        const rows = Array.isArray(all) ? all : []
+        const qualiSessions = rows
           .filter(session => session.session_type === 'Q')
           .sort((a, b) => new Date(b.date_start ?? 0).getTime() - new Date(a.date_start ?? 0).getTime())
 
@@ -126,18 +127,36 @@ export default function TelemetryLandingPage() {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '8px',
-              border: 'none',
+              justifyContent: 'space-between',
+              gap: '10px',
+              minWidth: '190px',
+              border: matchingSession ? '1px solid rgba(242, 200, 121, 0.28)' : '1px solid rgba(152, 181, 211, 0.1)',
               borderRadius: '999px',
-              background: matchingSession ? '#E8002D' : 'rgba(255,255,255,0.08)',
-              color: '#fff',
-              padding: '12px 16px',
-              fontWeight: 700,
+              background: matchingSession
+                ? 'linear-gradient(180deg, rgba(23, 40, 58, 0.96) 0%, rgba(14, 25, 37, 0.96) 100%)'
+                : 'rgba(255,255,255,0.04)',
+              boxShadow: matchingSession ? '0 10px 24px rgba(0, 0, 0, 0.22)' : 'none',
+              color: matchingSession ? '#F4F7FB' : '#718397',
+              padding: '10px 14px',
+              fontWeight: 600,
+              fontSize: '12px',
+              fontFamily: 'JetBrains Mono, monospace',
               cursor: matchingSession ? 'pointer' : 'not-allowed',
             }}
           >
-            Open Telemetry
-            <ChevronRight size={16} />
+            <span>Open Telemetry</span>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '24px',
+              height: '24px',
+              borderRadius: '999px',
+              background: matchingSession ? 'rgba(242, 200, 121, 0.14)' : 'rgba(255,255,255,0.05)',
+              color: matchingSession ? '#f2c879' : '#5e7289',
+            }}>
+              <ChevronRight size={14} />
+            </span>
           </button>
           {matchingSession && (
             <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px' }}>

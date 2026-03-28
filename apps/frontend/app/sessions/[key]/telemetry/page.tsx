@@ -675,16 +675,32 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       const isDisabled = count === 0
                       return (
                         <button key={seg} disabled={isDisabled} onClick={() => setSelectedSegment(seg)} style={{
-                          padding: '8px 16px', borderRadius: '999px',
-                          border: isActive ? `1.5px solid ${segColour}` : '1px solid rgba(152, 181, 211, 0.14)',
-                          background: isActive ? `${segColour}22` : 'rgba(255,255,255,0.02)',
-                          color: isDisabled ? '#3F3F46' : isActive ? '#fff' : '#9fb2c6',
-                          fontSize: '13px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 500,
-                          transition: 'all 0.15s', opacity: isDisabled ? 0.45 : 1,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '7px 12px',
+                          borderRadius: '14px',
+                          border: isActive ? `1px solid ${segColour}55` : '1px solid rgba(152, 181, 211, 0.12)',
+                          background: isActive
+                            ? 'linear-gradient(180deg, rgba(24, 42, 60, 0.94) 0%, rgba(14, 24, 36, 0.94) 100%)'
+                            : 'rgba(255,255,255,0.02)',
+                          boxShadow: isActive ? 'inset 0 0 0 1px rgba(255,255,255,0.03)' : 'none',
+                          color: isDisabled ? '#3F3F46' : isActive ? '#f3f7fb' : '#9fb2c6',
+                          fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', fontWeight: isActive ? 700 : 500,
+                          transition: 'all 0.15s ease', opacity: isDisabled ? 0.45 : 1,
                           cursor: isDisabled ? 'not-allowed' : 'pointer',
                         }}>
-                          {seg}
-                          <span style={{ marginLeft: '6px', fontSize: '10px', color: isActive ? segColour : '#5e7289' }}>
+                          <span style={{ color: isActive ? '#f3f7fb' : '#9fb2c6' }}>{seg}</span>
+                          <span style={{
+                            minWidth: '20px',
+                            padding: '2px 6px',
+                            borderRadius: '999px',
+                            background: isActive ? `${segColour}20` : 'rgba(255,255,255,0.04)',
+                            color: isActive ? segColour : '#5e7289',
+                            fontSize: '10px',
+                            lineHeight: 1.2,
+                            textAlign: 'center',
+                          }}>
                             {count}
                           </span>
                         </button>
@@ -713,12 +729,15 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     return (
                       <button key={d.driver_number} disabled={isUnavailable} onClick={() => toggleDriver(d.driver_number)} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        gap: '8px', padding: '10px 12px', borderRadius: '14px',
-                        border: isSel ? `1.5px solid ${colour}` : '1px solid rgba(152, 181, 211, 0.12)',
-                        background: isSel ? `${colour}18` : 'rgba(255,255,255,0.02)',
-                        color: isUnavailable ? '#3F3F46' : isSel ? '#fff' : '#c2d1df',
+                        gap: '8px', padding: '10px 12px', borderRadius: '12px',
+                        border: isSel ? `1px solid ${colour}55` : '1px solid rgba(152, 181, 211, 0.12)',
+                        background: isSel
+                          ? 'linear-gradient(180deg, rgba(22, 39, 56, 0.92) 0%, rgba(12, 22, 33, 0.94) 100%)'
+                          : 'rgba(255,255,255,0.02)',
+                        boxShadow: isSel ? 'inset 0 0 0 1px rgba(255,255,255,0.03)' : 'none',
+                        color: isUnavailable ? '#3F3F46' : isSel ? '#f4f7fb' : '#c2d1df',
                         fontSize: '12px', fontWeight: isSel ? 700 : 500,
-                        fontFamily: 'monospace', transition: 'all 0.12s',
+                        fontFamily: 'JetBrains Mono, monospace', transition: 'all 0.12s ease',
                         opacity: isUnavailable ? 0.45 : 1,
                         cursor: isUnavailable ? 'not-allowed' : 'pointer',
                       }}>
@@ -728,7 +747,18 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                           {segmentLap ? <span style={{ color: '#9fb2c6', fontSize: '10px' }}>L{segmentLap}</span> : null}
-                          {isSel && <span style={{ color: colour, fontSize: '10px' }}>●</span>}
+                          {isSel && <span style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '999px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: `${colour}20`,
+                            color: colour,
+                            fontSize: '10px',
+                            fontWeight: 700,
+                          }}>✓</span>}
                         </span>
                       </button>
                     )
@@ -978,18 +1008,30 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                             key={seg}
                             onClick={() => setActiveSegment(seg)}
                             style={{
-                              padding: '6px 12px', borderRadius: '999px', cursor: 'pointer',
-                              border: isActive ? `1.5px solid ${segColour}` : '1.5px solid #2A2A2A',
-                              background: isActive ? `${segColour}18` : 'transparent',
-                              color: isActive ? '#fff' : '#52525B',
-                              fontSize: '11px', fontFamily: 'monospace', fontWeight: isActive ? 700 : 400,
-                              transition: 'all 0.12s',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 10px',
+                              borderRadius: '12px', cursor: 'pointer',
+                              border: isActive ? `1px solid ${segColour}55` : '1px solid #243242',
+                              background: isActive
+                                ? 'linear-gradient(180deg, rgba(24, 42, 60, 0.94) 0%, rgba(14, 24, 36, 0.94) 100%)'
+                                : 'rgba(255,255,255,0.02)',
+                              color: isActive ? '#f4f7fb' : '#7b8ea3',
+                              fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', fontWeight: isActive ? 700 : 500,
+                              transition: 'all 0.12s ease',
                               whiteSpace: 'nowrap',
                             }}
                           >
                             {seg}
                             {count > 0 && (
-                              <span style={{ marginLeft: '5px', fontSize: '9px', color: isActive ? segColour : '#3F3F46' }}>
+                              <span style={{
+                                padding: '1px 5px',
+                                borderRadius: '999px',
+                                background: isActive ? `${segColour}20` : 'rgba(255,255,255,0.04)',
+                                fontSize: '9px',
+                                color: isActive ? segColour : '#52657a',
+                              }}>
                                 {count}
                               </span>
                             )}

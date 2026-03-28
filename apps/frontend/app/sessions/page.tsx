@@ -34,9 +34,10 @@ export default function SessionsPage() {
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/api/v1/sessions`)
       .then(r => r.json())
-      .then((data: Session[]) => {
-        setSessions(data)
-        setAllYears([...new Set(data.map(s => s.year))].sort((a, b) => b - a))
+      .then((data: Session[] | { error?: string }) => {
+        const rows = Array.isArray(data) ? data : []
+        setSessions(rows)
+        setAllYears([...new Set(rows.map(s => s.year))].sort((a, b) => b - a))
       })
       .catch(console.error)
       .finally(() => setLoading(false))
