@@ -19,13 +19,11 @@ from datetime import datetime, timezone
 import fastf1
 import structlog
 from sqlalchemy import create_engine, text
+from ingestion.config import settings
 
 log = structlog.get_logger()
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall",
-)
+AUTO_INGEST_LOCK_ID = 48219031
 
 # Sessions to ingest per race weekend — order matters (FP before Q before R)
 SESSION_TYPES = [
@@ -37,6 +35,15 @@ SESSION_TYPES = [
 ]
 
 CURRENT_YEAR = datetime.now().year
+
+
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL", settings.database_url)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
 
 
 def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
@@ -200,67 +207,93 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
         return False
 
 
-def main():
-    engine = create_engine(DATABASE_URL)
+def run_once() -> bool:
+    engine = create_engine(_database_url())
+    lock_acquired = False
+
+    with engine.connect() as conn:
+        lock_acquired = bool(
+            conn.execute(
+                text("SELECT pg_try_advisory_lock(:lock_id)"),
+                {"lock_id": AUTO_INGEST_LOCK_ID},
+            ).scalar()
+        )
+
+    if not lock_acquired:
+        log.info("auto_ingest.skip_locked")
+        return False
+
     ingested = get_ingested_sessions(engine)
+    try:
+        log.info("auto_ingest.start",
+                 year=CURRENT_YEAR,
+                 already_ingested=len(ingested))
 
-    log.info("auto_ingest.start",
-             year=CURRENT_YEAR,
-             already_ingested=len(ingested))
+        schedule = get_fastf1_schedule(CURRENT_YEAR)
+        if not schedule:
+            log.warning("auto_ingest.no_schedule")
+            return False
 
-    schedule = get_fastf1_schedule(CURRENT_YEAR)
-    if not schedule:
-        log.warning("auto_ingest.no_schedule")
-        return
+        new_sessions = 0
+        failed       = 0
+        latest_gp_ingested: str | None = None
 
-    new_sessions = 0
-    failed       = 0
-    latest_gp_ingested: str | None = None
+        for event in schedule:
+            gp_name = event["gp_name"]
 
-    for event in schedule:
-        gp_name = event["gp_name"]
+            for session_type, _ in SESSION_TYPES:
+                key = (CURRENT_YEAR, gp_name, session_type)
 
-        for session_type, _ in SESSION_TYPES:
-            key = (CURRENT_YEAR, gp_name, session_type)
+                # Skip if already in DB
+                if key in ingested:
+                    continue
 
-            # Skip if already in DB
-            if key in ingested:
-                continue
+                # Skip if session hasn't completed yet
+                if not session_has_completed(event, session_type):
+                    log.info("auto_ingest.not_ready",
+                             gp=gp_name, session=session_type)
+                    continue
 
-            # Skip if session hasn't completed yet
-            if not session_has_completed(event, session_type):
-                log.info("auto_ingest.not_ready",
-                         gp=gp_name, session=session_type)
-                continue
+                # Ingest it
+                success = ingest_session(CURRENT_YEAR, gp_name, session_type)
+                if success:
+                    new_sessions += 1
+                    ingested.add(key)   # prevent re-attempting in same run
+                    latest_gp_ingested = gp_name
+                else:
+                    failed += 1
 
-            # Ingest it
-            success = ingest_session(CURRENT_YEAR, gp_name, session_type)
-            if success:
-                new_sessions += 1
-                ingested.add(key)   # prevent re-attempting in same run
-                latest_gp_ingested = gp_name
-            else:
-                failed += 1
+        log.info("auto_ingest.done",
+                 new_sessions=new_sessions,
+                 failed=failed,
+                 total_in_db=len(ingested))
 
-    log.info("auto_ingest.done",
-             new_sessions=new_sessions,
-             failed=failed,
-             total_in_db=len(ingested))
+        if new_sessions > 0:
+            if latest_gp_ingested:
+                deleted = purge_practice_sessions(engine, CURRENT_YEAR, latest_gp_ingested)
+                log.info("auto_ingest.practice_purged", gp=latest_gp_ingested, deleted=deleted)
+            # Retrain ML model if new race weekends were added
+            log.info("auto_ingest.retraining_model")
+            try:
+                subprocess.run(
+                    ["uv", "run", "python", "-m", "ml.train"],
+                    capture_output=True, text=True, timeout=300,
+                )
+                log.info("auto_ingest.model_retrained")
+            except Exception as e:
+                log.warning("auto_ingest.retrain_failed", error=str(e))
 
-    if new_sessions > 0:
-        if latest_gp_ingested:
-            deleted = purge_practice_sessions(engine, CURRENT_YEAR, latest_gp_ingested)
-            log.info("auto_ingest.practice_purged", gp=latest_gp_ingested, deleted=deleted)
-        # Retrain ML model if new race weekends were added
-        log.info("auto_ingest.retraining_model")
-        try:
-            subprocess.run(
-                ["uv", "run", "python", "-m", "ml.train"],
-                capture_output=True, text=True, timeout=300,
+        return new_sessions > 0
+    finally:
+        with engine.connect() as conn:
+            conn.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": AUTO_INGEST_LOCK_ID},
             )
-            log.info("auto_ingest.model_retrained")
-        except Exception as e:
-            log.warning("auto_ingest.retrain_failed", error=str(e))
+
+
+def main():
+    run_once()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
 import structlog
+import threading
+import time
 from flask import Flask
 from flask_cors import CORS
 from sqlalchemy import create_engine
@@ -7,6 +9,44 @@ from backend import extensions
 from backend.config import settings
 
 log = structlog.get_logger()
+_auto_ingest_thread: threading.Thread | None = None
+
+
+def _start_auto_ingest_scheduler() -> None:
+    global _auto_ingest_thread
+
+    if _auto_ingest_thread and _auto_ingest_thread.is_alive():
+        return
+
+    interval_seconds = max(settings.auto_ingest_interval_minutes, 15) * 60
+
+    def runner() -> None:
+        from ingestion.auto_ingest import run_once
+
+        if settings.auto_ingest_on_startup:
+            try:
+                run_once()
+            except Exception as exc:
+                log.warning("auto_ingest.startup_failed", error=str(exc))
+
+        while True:
+            time.sleep(interval_seconds)
+            try:
+                run_once()
+            except Exception as exc:
+                log.warning("auto_ingest.interval_failed", error=str(exc))
+
+    _auto_ingest_thread = threading.Thread(
+        target=runner,
+        name="pitwall-auto-ingest",
+        daemon=True,
+    )
+    _auto_ingest_thread.start()
+    log.info(
+        "auto_ingest.scheduler_started",
+        interval_minutes=max(settings.auto_ingest_interval_minutes, 15),
+        run_on_startup=settings.auto_ingest_on_startup,
+    )
 
 
 def create_app() -> Flask:
@@ -54,6 +94,9 @@ def create_app() -> Flask:
     def server_error(e):
         log.exception("unhandled_exception", error=str(e))
         return {"error": "Internal server error", "code": 500}, 500
+
+    if settings.auto_ingest_enabled and not settings.testing and not settings.debug:
+        _start_auto_ingest_scheduler()
 
     log.info("app.created", debug=settings.debug)
     return app

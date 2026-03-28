@@ -19,8 +19,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     kafka_bootstrap_servers: str = "localhost:9092"
 
-    # MLflow — optional
+    # MLflow
     mlflow_tracking_uri: str = "http://localhost:5001"
+
+    # Auto-ingest scheduler for single-service deploys like Railway
+    auto_ingest_enabled: bool = True
+    auto_ingest_on_startup: bool = True
+    auto_ingest_interval_minutes: int = 360
 
     model_config = SettingsConfigDict(
         env_file=".env",
