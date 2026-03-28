@@ -32,6 +32,17 @@ type PredictionResponse = {
   gp_name: string
   year: number
   predictions: Prediction[]
+  model?: {
+    scope?: 'global' | 'gp'
+    best_estimator?: string | null
+    cv_mae_mean?: number | null
+    cv_mae_std?: number | null
+    cv_top3_accuracy_mean?: number | null
+    cv_folds?: number | null
+    n_training_rows?: number | null
+    years?: number[]
+    gp_name?: string | null
+  }
 }
 
 type QualiSession = {
@@ -111,6 +122,14 @@ export default function PredictionsPage() {
 
   const selected = sessions.find(s => s.session_key === selectedKey)
   const maxWin   = data ? Math.max(...data.predictions.map(p => p.win_probability)) : 1
+  const modelLabel = data?.model?.scope === 'gp' ? 'GP-specific model' : 'Global fallback model'
+  const modelName = data?.model?.best_estimator ?? 'AutoML'
+  const coverageLabel = data?.model?.scope === 'gp'
+    ? `${data.model?.gp_name ?? data?.gp_name ?? 'Circuit'} · ${(data.model?.years?.length ?? 0)} season${(data.model?.years?.length ?? 0) === 1 ? '' : 's'}`
+    : `${data?.model?.n_training_rows ?? 0} training rows`
+  const maeLabel = data?.model?.cv_mae_mean != null
+    ? `${data.model.cv_mae_mean}${data.model.cv_mae_std != null ? ` ± ${data.model.cv_mae_std}` : ''} pos`
+    : 'n/a'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '920px', margin: '0 auto' }}>
@@ -129,7 +148,7 @@ export default function PredictionsPage() {
             </h1>
             </div>
             <p className="page-subtitle" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', margin: 0 }}>
-              FLAML AutoML · ExtraTree · trained on 26 race weekends · MAE 3.8 positions
+              Live race forecast from qualifying pace, circuit history, and current form
             </p>
           </div>
 
@@ -154,17 +173,18 @@ export default function PredictionsPage() {
         </div>
 
         <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
-          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
-            <div className="eyebrow" style={{ marginBottom: '6px' }}>Model</div>
-            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>ExtraTree</div>
+            <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
+              <div className="eyebrow" style={{ marginBottom: '6px' }}>Model</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{modelName}</div>
+            <div style={{ fontSize: '10px', color: '#71717A', fontFamily: 'JetBrains Mono, monospace', marginTop: '4px' }}>{modelLabel}</div>
           </div>
           <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
             <div className="eyebrow" style={{ marginBottom: '6px' }}>Coverage</div>
-            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>26 weekends</div>
+            <div style={{ fontSize: '18px', color: '#fff', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{coverageLabel}</div>
           </div>
           <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '150px' }}>
             <div className="eyebrow" style={{ marginBottom: '6px' }}>MAE</div>
-            <div style={{ fontSize: '18px', color: '#f2c879', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>3.8 pos</div>
+            <div style={{ fontSize: '18px', color: '#f2c879', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{maeLabel}</div>
           </div>
         </div>
       </section>

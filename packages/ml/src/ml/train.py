@@ -19,7 +19,13 @@ import structlog
 
 from ml.config import settings
 from ml.features import build_feature_matrix, FEATURE_COLS, TARGET_COL
-from ml.model_store import GLOBAL_MODEL_PATH, gp_model_path
+from ml.model_store import (
+    GLOBAL_MODEL_PATH,
+    global_metadata_path,
+    gp_metadata_path,
+    gp_model_path,
+    save_metadata,
+)
 
 log = structlog.get_logger()
 
@@ -74,6 +80,14 @@ def cross_validate(df: pd.DataFrame) -> dict:
                  top3_accuracy=round(overlap / 3.0, 2),
                  best_model=model.best_estimator)
 
+    if not errors:
+        return {
+            "mae_mean": None,
+            "mae_std": None,
+            "top3_accuracy_mean": None,
+            "n_folds": 0,
+        }
+
     return {
         "mae_mean":           round(float(np.mean(errors)), 3),
         "mae_std":            round(float(np.std(errors)),  3),
@@ -115,12 +129,26 @@ def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
         log.info("gp_model.train_start", gp_name=gp_name, rows=len(gp_df))
         model = train_final_model(gp_df)
         model_path = gp_model_path(gp_name)
+        metadata_path = gp_metadata_path(gp_name)
 
         with open(model_path, "wb") as f:
             pickle.dump(model, f)
 
+        gp_cv_metrics = cross_validate(gp_df)
+        save_metadata(metadata_path, {
+            "model_scope": "gp",
+            "gp_name": gp_name,
+            "best_estimator": model.best_estimator,
+            "n_training_rows": len(gp_df),
+            "years": sorted(int(y) for y in gp_df['year'].unique()),
+            "cv_mae_mean": gp_cv_metrics["mae_mean"],
+            "cv_mae_std": gp_cv_metrics["mae_std"],
+            "cv_top3_accuracy_mean": gp_cv_metrics["top3_accuracy_mean"],
+            "cv_folds": gp_cv_metrics["n_folds"],
+        })
+
         gp_models[gp_name] = str(model_path)
-        log.info("gp_model.saved", gp_name=gp_name, path=str(model_path))
+        log.info("gp_model.saved", gp_name=gp_name, path=str(model_path), metadata=str(metadata_path))
 
     return gp_models
 
@@ -215,6 +243,17 @@ def main():
         # Save global fallback model pickle for fast inference
         with open(GLOBAL_MODEL_PATH, 'wb') as f:
             pickle.dump(model, f)
+
+        save_metadata(global_metadata_path(), {
+            "model_scope": "global",
+            "best_estimator": model.best_estimator,
+            "n_training_rows": len(df),
+            "years": sorted(int(y) for y in df['year'].unique()),
+            "cv_mae_mean": cv_metrics['mae_mean'],
+            "cv_mae_std": cv_metrics['mae_std'],
+            "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
+            "cv_folds": cv_metrics['n_folds'],
+        })
 
         gp_models = train_gp_models(df)
         mlflow.log_metric("gp_model_count", len(gp_models))

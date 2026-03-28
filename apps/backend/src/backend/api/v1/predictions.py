@@ -29,6 +29,7 @@ def race_predictions(session_key: int):
 
     try:
         from ml.predict import predict_race, explain_prediction
+        from ml.model_store import global_metadata_path, gp_metadata_path, load_metadata
     except ImportError:
         return jsonify({"error": "ML package not available — check uv workspace"}), 503
 
@@ -56,11 +57,26 @@ def race_predictions(session_key: int):
     for p in predictions:
         p["team_colour"] = colour_map.get(p["driver_number"], "666666")
 
+    gp_metadata = load_metadata(gp_metadata_path(row[1]))
+    global_metadata = load_metadata(global_metadata_path())
+    model_metadata = gp_metadata or global_metadata or {}
+
     return jsonify({
         "session_key": session_key,
         "gp_name":     row[1],
         "year":        row[2],
         "predictions": predictions,
+        "model": {
+            "scope": model_metadata.get("model_scope", "global"),
+            "best_estimator": model_metadata.get("best_estimator"),
+            "cv_mae_mean": model_metadata.get("cv_mae_mean"),
+            "cv_mae_std": model_metadata.get("cv_mae_std"),
+            "cv_top3_accuracy_mean": model_metadata.get("cv_top3_accuracy_mean"),
+            "cv_folds": model_metadata.get("cv_folds"),
+            "n_training_rows": model_metadata.get("n_training_rows"),
+            "years": model_metadata.get("years", []),
+            "gp_name": model_metadata.get("gp_name", row[1] if gp_metadata else None),
+        },
     })
 
 
