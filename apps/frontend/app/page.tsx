@@ -14,8 +14,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 async function fetchStandings(year: number) {
   try {
     const [d, c] = await Promise.all([
-      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
-      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { cache: 'no-store' }).then(r => r.json()),
     ])
     return { drivers: d.standings ?? [], constructors: c.standings ?? [], round: d.round ?? 0 }
   } catch {
@@ -42,13 +42,21 @@ function getCircuitImage(gpName: string): string {
 
 export default async function HomePage() {
   const sessions = await api.sessions.list(true).catch(() => [])
-  const latest = sessions[0] ?? null
-  const currentYear = latest?.year ?? new Date().getFullYear()
+  const latestListed = sessions[0] ?? null
+  const latestWeekendRace = latestListed
+    ? sessions.find(
+      s => s.year === latestListed.year
+        && s.gp_name === latestListed.gp_name
+        && s.session_type === 'R',
+    ) ?? null
+    : null
+  const featuredSession = latestWeekendRace ?? latestListed
+  const currentYear = featuredSession?.year ?? new Date().getFullYear()
 
   const [fastestLaps, standings, nextRace] = await Promise.all([
-    latest ? api.laps.fastest(latest.session_key, true).catch(() => []) : Promise.resolve([]),
+    featuredSession ? api.laps.fastest(featuredSession.session_key, true).catch(() => []) : Promise.resolve([]),
     fetchStandings(currentYear),
-    fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 60 } }).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/v1/schedule/next-race`, { cache: 'no-store' }).then(r => r.json()).catch(() => null),
   ])
 
   const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
@@ -56,7 +64,7 @@ export default async function HomePage() {
   // Use nextRace as the Hero if available, otherwise latest session
   const heroRace = nextRace?.race
   const heroSession = nextRace?.next_session
-  const heroImage = getCircuitImage(heroRace?.event_name ?? latest?.gp_name ?? '')
+  const heroImage = getCircuitImage(heroRace?.event_name ?? featuredSession?.gp_name ?? '')
 
   function formatDateToDayMonthYear(dateString: string) {
     if (!dateString) return ''
@@ -76,7 +84,7 @@ export default async function HomePage() {
         {/* Hero */}
         <div className="hero-card panel" style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', height: '390px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={heroImage} alt={heroRace?.event_name || latest?.gp_name}
+          <img src={heroImage} alt={heroRace?.event_name || featuredSession?.gp_name}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(4,10,18,0.28) 0%, rgba(5,14,22,0.58) 38%, rgba(6,12,20,0.96) 100%)' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(133,215,255,0.22), transparent 28%), radial-gradient(circle at bottom left, rgba(232,0,45,0.16), transparent 26%)' }} />
@@ -88,9 +96,9 @@ export default async function HomePage() {
                 NEXT UP — ROUND {heroRace.round}
               </span>
             ) : (
-              latest && (
+              featuredSession && (
                 <span style={{ background: '#E8002D', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', padding: '7px 12px', borderRadius: '999px', fontFamily: 'monospace', boxShadow: '0 0 18px rgba(232,0,45,0.35)' }}>
-                  {sessionTypeLabel(latest.session_type).toUpperCase()}
+                  {sessionTypeLabel(featuredSession.session_type).toUpperCase()}
                 </span>
               )
             )}
@@ -104,27 +112,27 @@ export default async function HomePage() {
                 <div className="hero-title-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                   {heroRace?.flag && <span style={{ fontSize: '24px', lineHeight: 1 }}>{heroRace.flag}</span>}
                   <h1 className="hero-title" style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '36px', color: '#fff', lineHeight: 0.95, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                    {heroRace ? heroRace.event_name : (latest?.gp_name?.replace(' Grand Prix', '') + ' GP')}
+                    {heroRace ? heroRace.event_name : (featuredSession?.gp_name?.replace(' Grand Prix', '') + ' GP')}
                   </h1>
                 </div>
 
                 <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#d4e3f1', fontSize: '11px', marginBottom: '20px', fontFamily: 'JetBrains Mono, monospace' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><MapPin size={14} /> {heroRace ? heroRace.circuit : latest?.country}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><MapPin size={14} /> {heroRace ? heroRace.circuit : featuredSession?.country}</span>
                   <span>·</span>
-                  <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : latest?.year}</span>
+                  <span>{heroRace ? formatDateToDayMonthYear(heroRace.event_date) : featuredSession?.year}</span>
                 </div>
 
                 <div className="telemetry-chip-row hero-chip-grid">
                   <div className="panel-soft hero-chip-card" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
                     <div className="eyebrow" style={{ marginBottom: '6px' }}>Weekend Status</div>
                     <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
-                      {heroSession?.name ?? latest?.session_name ?? 'Live'}
+                      {heroSession?.name ?? featuredSession?.session_name ?? 'Live'}
                     </div>
                   </div>
                   <div className="panel-soft hero-chip-card" style={{ padding: '10px 12px', borderRadius: '16px', background: 'rgba(7,17,27,0.38)' }}>
                     <div className="eyebrow" style={{ marginBottom: '6px' }}>Track Focus</div>
                     <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
-                      {heroRace?.circuit ?? latest?.gp_name ?? 'Analysis'}
+                      {heroRace?.circuit ?? featuredSession?.gp_name ?? 'Analysis'}
                     </div>
                   </div>
                 </div>
@@ -147,7 +155,7 @@ export default async function HomePage() {
         <div className="panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', borderRadius: '28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontWeight: 600, color: '#fff', fontSize: '15px' }}>Track Conditions</span>
-            {latest?.track_temp_c && (
+            {featuredSession?.track_temp_c && (
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80' }} />
             )}
           </div>
@@ -156,19 +164,19 @@ export default async function HomePage() {
             {
               Icon: Thermometer,
               label: 'Track Temp',
-              value: latest?.track_temp_c != null ? `${latest.track_temp_c}°C` : '—',
+              value: featuredSession?.track_temp_c != null ? `${featuredSession.track_temp_c}°C` : '—',
               accent: '#f97316',
             },
             {
               Icon: Wind,
               label: 'Air Temp',
-              value: latest?.air_temp_c != null ? `${latest.air_temp_c}°C` : '—',
+              value: featuredSession?.air_temp_c != null ? `${featuredSession.air_temp_c}°C` : '—',
               accent: '#60a5fa',
             },
             {
               Icon: Droplets,
               label: 'Humidity',
-              value: latest?.humidity_pct != null ? `${latest.humidity_pct}%` : '—',
+              value: featuredSession?.humidity_pct != null ? `${featuredSession.humidity_pct}%` : '—',
               accent: '#34d399',
             },
           ].map(({ Icon, label, value, accent }) => (
@@ -184,11 +192,11 @@ export default async function HomePage() {
           ))}
 
           {/* Rainfall indicator */}
-          {latest?.rainfall != null && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: latest.rainfall ? '#3671C622' : '#1A1A1A', borderRadius: '10px', border: `1px solid ${latest.rainfall ? '#3671C644' : '#2A2A2A'}` }}>
-              <span style={{ fontSize: '16px' }}>{latest.rainfall ? '🌧' : '☀️'}</span>
-              <span style={{ fontSize: '12px', fontFamily: 'monospace', color: latest.rainfall ? '#60a5fa' : '#71717A' }}>
-                {latest.rainfall ? 'Wet conditions' : 'Dry conditions'}
+          {featuredSession?.rainfall != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: featuredSession.rainfall ? '#3671C622' : '#1A1A1A', borderRadius: '10px', border: `1px solid ${featuredSession.rainfall ? '#3671C644' : '#2A2A2A'}` }}>
+              <span style={{ fontSize: '16px' }}>{featuredSession.rainfall ? '🌧' : '☀️'}</span>
+              <span style={{ fontSize: '12px', fontFamily: 'monospace', color: featuredSession.rainfall ? '#60a5fa' : '#71717A' }}>
+                {featuredSession.rainfall ? 'Wet conditions' : 'Dry conditions'}
               </span>
             </div>
           )}
@@ -200,9 +208,9 @@ export default async function HomePage() {
         <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
             { label: 'CHAMPIONSHIP LEADER', value: standings.drivers[0]?.code ?? '—', sub: `${standings.drivers[0]?.points ?? 0} pts · ${standings.drivers[0]?.team_name ?? ''}`, Icon: Trophy, valueColour: '#FFD700', mono: false },
-            { label: 'POLE / FASTEST LAP', value: formatLapTime(pole.lap_time_ms), sub: `${pole.abbreviation} — ${pole.team_name ?? ''}`, Icon: Clock, valueColour: '#E8002D', mono: true },
+            { label: featuredSession?.session_type === 'R' ? 'RACE FASTEST LAP' : 'POLE / FASTEST LAP', value: formatLapTime(pole.lap_time_ms), sub: `${pole.abbreviation} — ${pole.team_name ?? ''}`, Icon: Clock, valueColour: '#E8002D', mono: true },
             { label: 'LEADING CONSTRUCTOR', value: standings.constructors[0]?.team_name?.split(' ')[0] ?? '—', sub: `${standings.constructors[0]?.points ?? 0} pts`, Icon: Zap, valueColour: '#fff', mono: false },
-            { label: 'SESSION', value: sessionTypeLabel(latest?.session_type ?? ''), sub: `${latest?.year} ${latest?.gp_name?.replace(' Grand Prix', ' GP')}`, Icon: Flag, valueColour: '#fff', mono: false },
+            { label: 'SESSION', value: sessionTypeLabel(featuredSession?.session_type ?? ''), sub: `${featuredSession?.year} ${featuredSession?.gp_name?.replace(' Grand Prix', ' GP')}`, Icon: Flag, valueColour: '#fff', mono: false },
           ].map(({ label, value, sub, Icon, valueColour, mono }) => (
             <div key={label} className="panel-soft" style={{ borderRadius: '22px', padding: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>

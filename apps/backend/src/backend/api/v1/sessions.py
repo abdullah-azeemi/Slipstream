@@ -271,8 +271,9 @@ def driver_standings():
         pass
 
     try:
-        ergast = Ergast()
-        result = ergast.get_driver_standings(season=year, result_type="raw")
+        with fastf1.Cache.disabled():
+            ergast = Ergast()
+            result = ergast.get_driver_standings(season=year, result_type="raw")
         # result is an ErgastRawResponse which behaves like a list of rounds
         if not result:
             return jsonify([])
@@ -326,8 +327,9 @@ def constructor_standings():
         pass
 
     try:
-        ergast = Ergast()
-        result = ergast.get_constructor_standings(season=year, result_type="raw")
+        with fastf1.Cache.disabled():
+            ergast = Ergast()
+            result = ergast.get_constructor_standings(season=year, result_type="raw")
         if not result:
             return jsonify([])
 

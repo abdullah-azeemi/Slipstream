@@ -180,27 +180,26 @@ def next_race():
     Used by the home page countdown card.
     """
     races = _load_schedule()
-    now = _now_utc()
+    next_race_data, next_session = _find_next_session(races)
 
-    # Find the next race (where race day is in the future, or we're mid-weekend)
-    next_race_data = None
-    for race in races:
-        try:
-            from datetime import datetime as dt
-            race_date_str = race["event_date"]
-            # event_date is the Sunday race day
-            race_dt = dt.fromisoformat(str(race_date_str).split(" ")[0])
-            if race_dt.date() >= now.date():
-                next_race_data = race
-                break
-        except Exception:
-            continue
+    # Fallback: if session-level lookup fails, return the next race day that is
+    # still ahead of us. This keeps the endpoint usable even if a session time
+    # is missing or malformed.
+    if not next_race_data:
+        now = _now_utc()
+        for race in races:
+            try:
+                from datetime import datetime as dt
+                race_date_str = race["event_date"]
+                race_dt = dt.fromisoformat(str(race_date_str).split(" ")[0])
+                if race_dt.date() > now.date():
+                    next_race_data = race
+                    break
+            except Exception:
+                continue
 
     if not next_race_data:
         return jsonify({"error": "No upcoming races found"}), 404
-
-    # Also find the very next individual session
-    _, next_session = _find_next_session(races)
 
     return jsonify(
         {
