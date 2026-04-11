@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import Image from 'next/image'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, teamColour, sessionTypeLabel } from '@/lib/utils'
 import { MapPin, Thermometer, Wind, Droplets, Clock, Trophy, Zap, Flag } from 'lucide-react'
@@ -14,8 +15,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 async function fetchStandings(year: number) {
   try {
     const [d, c] = await Promise.all([
-      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { cache: 'no-store' }).then(r => r.json()),
-      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
     ])
     return { drivers: d.standings ?? [], constructors: c.standings ?? [], round: d.round ?? 0 }
   } catch {
@@ -56,7 +57,7 @@ export default async function HomePage() {
   const [fastestLaps, standings, nextRace] = await Promise.all([
     featuredSession ? api.laps.fastest(featuredSession.session_key, true).catch(() => []) : Promise.resolve([]),
     fetchStandings(currentYear),
-    fetch(`${BASE}/api/v1/schedule/next-race`, { cache: 'no-store' }).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 300 } }).then(r => r.json()).catch(() => null),
   ])
 
   const pole = (fastestLaps as { laps?: { lap_time_ms: number; abbreviation: string; team_name?: string }[] })?.laps?.[0] ?? null
@@ -83,9 +84,14 @@ export default async function HomePage() {
 
         {/* Hero */}
         <div className="hero-card panel" style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', height: '390px' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={heroImage} alt={heroRace?.event_name || featuredSession?.gp_name}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <Image
+            src={heroImage}
+            alt={heroRace?.event_name || featuredSession?.gp_name || 'Slipstream hero circuit'}
+            fill
+            priority
+            sizes="(max-width: 900px) 100vw, 900px"
+            style={{ objectFit: 'cover' }}
+          />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(4,10,18,0.28) 0%, rgba(5,14,22,0.58) 38%, rgba(6,12,20,0.96) 100%)' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(133,215,255,0.22), transparent 28%), radial-gradient(circle at bottom left, rgba(232,0,45,0.16), transparent 26%)' }} />
 
