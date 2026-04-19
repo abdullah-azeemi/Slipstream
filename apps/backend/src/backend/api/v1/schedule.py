@@ -173,6 +173,27 @@ def _find_next_session(races: list[dict]) -> tuple[dict | None, dict | None]:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=1)
+def _load_results(year: int) -> dict[int, list[str]]:
+    """Fetch Top 3 finishers for all rounds of the season."""
+    log.info(f"Loading {year} race results from Ergast...")
+    try:
+        from fastf1.ergast import Ergast
+        ergast = Ergast()
+        # Get all race results for the season
+        results = ergast.get_race_results(season=year, result_type='raw')
+        
+        round_results = {}
+        for round_data in results:
+            r_num = int(round_data.get("round", 0))
+            drivers = round_data.get("Results", [])[:3]
+            round_results[r_num] = [d.get("Driver", {}).get("code", "???") for d in drivers]
+        return round_results
+    except Exception as e:
+        log.warning(f"Failed to load race results: {e}")
+        return {}
+
+
 @schedule_bp.route("/schedule/next-race", methods=["GET"])
 def next_race():
     """
@@ -212,10 +233,10 @@ def next_race():
 @schedule_bp.route("/schedule/2026", methods=["GET"])
 def full_schedule():
     """
-    Returns the complete 2026 F1 calendar.
-    Used by the /schedule frontend page.
+    Returns the complete 2026 F1 calendar enrichment with Top 3 winners.
     """
     races = _load_schedule()
+    results = _load_results(2026)
     now = _now_utc()
 
     # Tag each race as past / current / upcoming
@@ -233,6 +254,8 @@ def full_schedule():
         except Exception:
             status = "upcoming"
 
-        enriched.append({**race, "status": status})
+        # Add dynamic top finishers from season results
+        race_results = results.get(race["round"], [])
+        enriched.append({**race, "status": status, "top_finishers": race_results})
 
     return jsonify({"season": 2026, "total_rounds": len(enriched), "races": enriched})

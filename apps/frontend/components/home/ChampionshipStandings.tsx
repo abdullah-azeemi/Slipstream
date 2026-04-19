@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
+import { UserCircle } from 'lucide-react'
 
 type DriverStanding = {
   position: number
@@ -10,6 +10,7 @@ type DriverStanding = {
   team_name: string
   points: number
   wins: number
+  nationality?: string
 }
 
 type ConstructorStanding = {
@@ -32,186 +33,221 @@ function constructorColour(name: string): string {
     'Kick Sauber': '#52E252',
     RB: '#6692FF',
     'Racing Bulls': '#6692FF',
-    Cadillac: '#C8A217',
   }
 
   for (const [key, value] of Object.entries(colours)) {
-    if (name?.includes(key) || key.includes(name ?? '')) return value
+    if (name?.toLowerCase().includes(key.toLowerCase())) return value
   }
-  return '#666666'
-}
-
-function PosBadge({ pos }: { pos: number }) {
-  const gold = pos === 1
-  const silver = pos === 2
-  const bronze = pos === 3
-  const bg = gold ? '#FFD70022' : silver ? '#C0C0C022' : bronze ? '#CD7F3222' : 'transparent'
-  const col = gold ? '#FFD700' : silver ? '#C0C0C0' : bronze ? '#CD7F32' : '#52525B'
-
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: '28px',
-      height: '28px',
-      borderRadius: '6px',
-      background: bg,
-      color: col,
-      fontSize: '12px',
-      fontFamily: 'monospace',
-      fontWeight: 700,
-      flexShrink: 0,
-    }}>
-      {pos}
-    </span>
-  )
-}
-
-function PtsBar({ pts, max, colour }: { pts: number; max: number; colour: string }) {
-  const pct = max > 0 ? (pts / max) * 100 : 0
-  return (
-    <div style={{ flex: 1, height: '4px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: `${colour}AA`, borderRadius: '2px', transition: 'width 0.4s ease' }} />
-    </div>
-  )
-}
-
-function StandingsTableHeader({ title, subtitle, hrefLabel }: { title: string; subtitle: string; hrefLabel?: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.12)' }}>
-      <div>
-        <span style={{ fontWeight: 600, color: '#fff', fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
-        <span style={{ marginLeft: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#5e7289' }}>{subtitle}</span>
-      </div>
-      {hrefLabel ? (
-        <Link href="/sessions" style={{ color: '#f2c879', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
-          {hrefLabel}
-        </Link>
-      ) : null}
-    </div>
-  )
+  return '#64748B'
 }
 
 export default function ChampionshipStandings({
   drivers,
   constructors,
-  currentYear,
-  round,
+  images = {}
 }: {
   drivers: DriverStanding[]
   constructors: ConstructorStanding[]
   currentYear: number
   round: number
+  images?: Record<string, string>
 }) {
-  const [showAllDrivers, setShowAllDrivers] = useState(false)
-  const maxDriverPts = drivers[0]?.points ?? 1
-  const maxConstructorPts = constructors[0]?.points ?? 1
-  const visibleDrivers = useMemo(
-    () => (showAllDrivers ? drivers : drivers.slice(0, 10)),
-    [drivers, showAllDrivers],
-  )
+  const [activeTab, setActiveTab] = useState<'drivers' | 'constructors'>('drivers')
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  const visibleDrivers = useMemo(() => isExpanded ? drivers : drivers.slice(0, 10), [drivers, isExpanded])
+  // In 2026 there are 11 teams, so we show 11 by default for constructors
+  const visibleConstructors = useMemo(() => isExpanded ? constructors : constructors.slice(0, 11), [constructors, isExpanded])
 
   return (
-    <>
-      {drivers.length > 0 && (
-        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-          <StandingsTableHeader
-            title="Driver Championship"
-            subtitle={`${currentYear} · ${round} race${round !== 1 ? 's' : ''}`}
-            hrefLabel="All Sessions →"
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* Tab Switcher */}
+      <div style={{ display: 'flex', gap: 24, marginBottom: 24, borderBottom: '1px solid #F1F5F9' }}>
+        <button
+          onClick={() => setActiveTab('drivers')}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '12px 0',
+            fontSize: 12,
+            fontWeight: 800,
+            color: activeTab === 'drivers' ? '#E8002D' : '#94A3B8',
+            cursor: 'pointer',
+            position: 'relative',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}
+        >
+          DRIVERS
+          {activeTab === 'drivers' && <div style={{ position: 'absolute', bottom: -1, left: 0, right: 0, height: 2, background: '#E8002D' }} />}
+        </button>
+        <button
+          onClick={() => setActiveTab('constructors')}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '12px 0',
+            fontSize: 12,
+            fontWeight: 800,
+            color: activeTab === 'constructors' ? '#E8002D' : '#94A3B8',
+            cursor: 'pointer',
+            position: 'relative',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}
+        >
+          CONSTRUCTORS
+          {activeTab === 'constructors' && <div style={{ position: 'absolute', bottom: -1, left: 0, right: 0, height: 2, background: '#E8002D' }} />}
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {activeTab === 'drivers' ? (
+          visibleDrivers.map((driver) => (
+            <DriverRow key={driver.code} driver={driver} imageUrl={images[driver.code]} />
+          ))
+        ) : (
+          visibleConstructors.map((constructor) => (
+            <ConstructorRow key={constructor.team_name} constructor={constructor} />
+          ))
+        )}
+      </div>
+
+      {/* See More Toggle */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            padding: '10px 24px',
+            borderRadius: 12,
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#64748B',
+            cursor: 'pointer',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#F8FAFC';
+            e.currentTarget.style.borderColor = '#CBD5E1';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#FFFFFF';
+            e.currentTarget.style.borderColor = '#E2E8F0';
+          }}
+        >
+          {isExpanded ? 'Show Less' : 'See More Standings'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function DriverRow({ driver, imageUrl }: { driver: DriverStanding, imageUrl?: string }) {
+  const colour = constructorColour(driver.team_name)
+  const [imgError, setImgError] = useState(false)
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '40px 64px 1.5fr 1.2fr 100px 80px',
+      alignItems: 'center',
+      padding: '16px 20px',
+      background: '#FFFFFF',
+      borderRadius: 16,
+      border: '1px solid #F1F5F9',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+      cursor: 'pointer',
+    }} className="standing-row">
+      {/* Position */}
+      <span style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', fontFamily: 'Inter, sans-serif' }}>
+        {String(driver.position).padStart(2, '0')}
+      </span>
+
+      {/* Avatar Container */}
+      <div style={{
+        width: 48,
+        height: 48,
+        borderRadius: '50%',
+        background: '#F8FAFC',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid #E2E8F0',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
+        {imageUrl && !imgError ? (
+          <img
+            src={imageUrl}
+            alt={driver.full_name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={() => setImgError(true)}
           />
+        ) : (
+          <UserCircle size={52} color="#CBD5E1" strokeWidth={1} style={{ marginTop: 8 }} />
+        )}
+      </div>
 
-          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
-            <span>POS</span><span></span><span>DRIVER</span><span className="driver-hide-mobile">TEAM</span><span className="driver-hide-mobile">PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span className="driver-hide-mobile driver-wins-col" style={{ textAlign: 'right' }}>W</span>
-          </div>
+      {/* Driver Info */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase' }}>{driver.full_name}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>{driver.nationality || 'F1 DRIVER'}</span>
+      </div>
 
-          {visibleDrivers.map((driver) => {
-            const colour = constructorColour(driver.team_name)
-            return (
-              <div key={`${driver.code}-${driver.position}`} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '12px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>
-                  {String(driver.position).padStart(2, '0')}
-                </span>
-                <PosBadge pos={driver.position} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {driver.full_name}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#5e7289', fontFamily: 'monospace' }}>{driver.code}</div>
-                  </div>
-                </div>
-                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#9fb2c6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{driver.team_name}</span>
-                <span className="driver-hide-mobile"><PtsBar pts={driver.points} max={maxDriverPts} colour={colour} /></span>
-                <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 700, textAlign: 'right' }}>{driver.points}</span>
-                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#5e7289', textAlign: 'right' }}>{driver.wins}</span>
-              </div>
-            )
-          })}
+      {/* Team Info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 3, height: 24, background: colour, borderRadius: 2 }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B' }}>{driver.team_name}</span>
+      </div>
 
-          {drivers.length > 10 && (
-            <button
-              type="button"
-              onClick={() => setShowAllDrivers(value => !value)}
-              style={{
-                width: '100%',
-                padding: '14px 20px',
-                fontSize: '11px',
-                color: '#f2c879',
-                fontFamily: 'monospace',
-                textAlign: 'center',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {showAllDrivers ? 'Show top 10 only' : `+${drivers.length - 10} more drivers`}
-            </button>
-          )}
-        </div>
-      )}
+      {/* Points */}
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>{driver.points}</span>
+      </div>
 
-      {constructors.length > 0 && (
-        <div className="panel" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-          <StandingsTableHeader
-            title="Constructor Championship"
-            subtitle={`${currentYear} · teams`}
-          />
+      <style jsx>{`
+        .standing-row:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+          border-color: #E2E8F0;
+        }
+      `}</style>
+    </div>
+  )
+}
 
-          <div className="driver-header" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '8px 20px', fontSize: '9px', color: '#5e7289', fontFamily: 'monospace', letterSpacing: '0.1em', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
-            <span>POS</span><span></span><span>TEAM</span><span className="driver-hide-mobile">NAME</span><span className="driver-hide-mobile">PTS BAR</span><span style={{ textAlign: 'right' }}>PTS</span><span className="driver-hide-mobile driver-wins-col" style={{ textAlign: 'right' }}>W</span>
-          </div>
+function ConstructorRow({ constructor }: { constructor: ConstructorStanding }) {
+  const colour = constructorColour(constructor.team_name)
 
-          {constructors.map((constructor) => {
-            const colour = constructorColour(constructor.team_name)
-            return (
-              <div key={`${constructor.team_name}-${constructor.position}`} className="driver-row" style={{ display: 'grid', gridTemplateColumns: '40px 28px 1fr 140px 60px 48px 48px', gap: '8px', padding: '12px 20px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#5e7289' }}>
-                  {String(constructor.position).padStart(2, '0')}
-                </span>
-                <PosBadge pos={constructor.position} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {constructor.team_name}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#5e7289', fontFamily: 'monospace' }}>
-                      {constructor.team_name.split(' ')[0]}
-                    </div>
-                  </div>
-                </div>
-                <span className="driver-hide-mobile" style={{ fontSize: '12px', color: '#9fb2c6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{constructor.team_name}</span>
-                <span className="driver-hide-mobile"><PtsBar pts={constructor.points} max={maxConstructorPts} colour={colour} /></span>
-                <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 700, textAlign: 'right' }}>{constructor.points}</span>
-                <span className="driver-hide-mobile driver-wins-col" style={{ fontFamily: 'monospace', fontSize: '12px', color: '#5e7289', textAlign: 'right' }}>{constructor.wins}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </>
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '40px 1.5fr 1fr 80px',
+      alignItems: 'center',
+      padding: '16px 20px',
+      background: '#FFFFFF',
+      borderRadius: 16,
+      border: '1px solid #F1F5F9',
+      cursor: 'pointer',
+    }} className="standing-row">
+      <span style={{ fontSize: 18, fontWeight: 900, color: '#0F172A' }}>
+        {String(constructor.position).padStart(2, '0')}
+      </span>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 3, height: 24, background: colour, borderRadius: 2 }} />
+        <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase' }}>{constructor.team_name}</span>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>{constructor.points}</span>
+      </div>
+    </div>
   )
 }

@@ -1,498 +1,260 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-@import "tailwindcss";
-
-@theme {
-  /* Colors — generates bg-*, text-*, border-* utilities */
-  --color-bg: #07111b;
-  --color-surface: #0d1824;
-  --color-surface2: #132231;
-  --color-surface3: #1b2d3f;
-  --color-border: rgba(152, 181, 211, 0.14);
-  --color-red: #E8002D;
-  --color-red-dim: #9B0020;
-  --color-teal: #2CF4C5;
-  --color-gold: #f2c879;
-  --color-sky: #85d7ff;
-
-  /* Fonts — in Tailwind v4, font-family utilities use --font-family-* */
-  --font-family-sans: 'Space Grotesk', sans-serif;
-  --font-family-mono: 'JetBrains Mono', monospace;
-  --font-family-display: 'Rajdhani', sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --bg: #07111b;
-  --bg-deep: #050c14;
-  --surface: rgba(12, 24, 36, 0.8);
-  --surface-2: rgba(18, 33, 49, 0.88);
-  --surface-3: rgba(28, 45, 63, 0.92);
-  --border: rgba(152, 181, 211, 0.14);
-  --red: #E8002D;
-  --red-dim: #9B0020;
-  --gold: #f2c879;
-  --sky: #85d7ff;
-  --text: #F4F7FB;
-  --text-2: #9fb2c6;
-  --text-3: #5e7289;
-  --green: #22C55E;
-  --teal: #2CF4C5;
-  --shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.28);
-  --shadow-glow: 0 0 0 1px rgba(133, 215, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.28);
+  --red:        #E8002D;
+  --red-hover:  #C0001F;
+  --red-soft:   #FEE2E7;
+  --navy:       #1E293B;
+  --navy-hover: #0F172A;
+  --green:      #10B981;
+  --green-soft: #D1FAE5;
+  --neutral:    #64748B;
+
+  --bg:         #F8FAFC;
+  --bg-deep:    #F1F5F9;
+  --surface:    #FFFFFF;
+  --surface-2:  #F8FAFC;
+  --surface-3:  #F1F5F9;
+
+  --text:       #0F172A;
+  --text-2:     #334155;
+  --text-3:     #64748B;
+  --text-4:     #94A3B8;
+
+  --border:     #E2E8F0;
+  --border-2:   #CBD5E1;
+
+  --shadow-sm:  0 1px 3px rgba(15,23,42,0.07), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md:  0 4px 16px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
+  --shadow-lg:  0 12px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05);
+  --shadow-xl:  0 24px 64px rgba(15,23,42,0.12), 0 8px 24px rgba(15,23,42,0.06);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
 
 body {
-  background:
-    radial-gradient(circle at top left, rgba(133, 215, 255, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(232, 0, 45, 0.1), transparent 24%),
-    radial-gradient(circle at bottom center, rgba(44, 244, 197, 0.08), transparent 30%),
-    linear-gradient(180deg, #09111a 0%, #07111b 35%, #050b13 100%);
+  background: var(--bg);
   color: var(--text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 120px 120px;
-  mask-image: radial-gradient(circle at center, black, transparent 82%);
-  opacity: 0.5;
-  z-index: -2;
-}
-
-/* Guarantee fixed TopBar (56px) + BottomNav (80px) clearance
-   regardless of Tailwind utility class resolution */
 main {
-  padding-top: 5.25rem;
-  padding-bottom: 6.5rem;
+  padding-top: 72px;
+  padding-bottom: 96px;
   min-height: 100vh;
 }
 
-
-.mono {
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.display {
-  font-family: 'Rajdhani', sans-serif;
-}
-
-.app-shell {
-  position: relative;
-  isolation: isolate;
-}
-
-.app-shell::before,
-.app-shell::after {
-  content: "";
-  position: fixed;
-  inset: auto;
-  width: 22rem;
-  height: 22rem;
-  border-radius: 999px;
-  filter: blur(80px);
-  pointer-events: none;
-  z-index: -1;
-}
-
-.app-shell::before {
-  top: 5rem;
-  right: -6rem;
-  background: rgba(232, 0, 45, 0.12);
-}
-
-.app-shell::after {
-  bottom: 5rem;
-  left: -8rem;
-  background: rgba(44, 244, 197, 0.1);
+main.landing {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .layout-wrapper {
-  max-width: 1180px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 28px 24px 36px;
+  padding: 32px 24px 48px;
 }
 
-.panel {
-  background: linear-gradient(180deg, rgba(18, 33, 49, 0.88) 0%, rgba(10, 22, 34, 0.92) 100%);
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(18px);
-}
-
-.panel-soft {
-  background: linear-gradient(180deg, rgba(17, 30, 44, 0.78) 0%, rgba(10, 20, 31, 0.85) 100%);
-  border: 1px solid rgba(152, 181, 211, 0.1);
-  border-radius: 18px;
-  box-shadow: var(--shadow-glow);
-  backdrop-filter: blur(16px);
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
-}
-
-.eyebrow {
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-3);
-}
+/* ── Typography ── */
+.mono    { font-family: 'JetBrains Mono', monospace; }
+.display { font-family: 'Inter', sans-serif; }
 
 .page-title {
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  font-size: clamp(2rem, 4vw, 3.25rem);
-  line-height: 0.95;
-  letter-spacing: 0.02em;
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   color: var(--text);
 }
 
 .page-subtitle {
-  color: var(--text-2);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  max-width: 62ch;
+  color: var(--text-3);
+  font-size: 1rem;
+  line-height: 1.7;
+  max-width: 60ch;
 }
 
-.telemetry-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.eyebrow {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--red);
 }
 
+/* ── Panels ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.panel-soft {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+
+.panel-soft:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-2);
+  transform: translateY(-2px);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--red);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  box-shadow: 0 4px 14px rgba(232,0,45,0.28);
+}
+.btn-primary:hover {
+  background: var(--red-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(232,0,45,0.36);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--navy);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 180ms ease, transform 180ms ease;
+}
+.btn-secondary:hover { background: var(--navy-hover); transform: translateY(-1px); }
+
+.btn-outlined {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 24px;
+  background: transparent;
+  color: var(--navy);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-2);
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+.btn-outlined:hover {
+  border-color: var(--navy);
+  background: var(--bg-deep);
+  transform: translateY(-1px);
+}
+
+/* ── Animations ── */
+.fade-up   { animation: fadeUp 420ms ease both; }
+.fade-up-1 { animation: fadeUp 500ms 60ms ease both; }
+.fade-up-2 { animation: fadeUp 500ms 120ms ease both; }
+.fade-up-3 { animation: fadeUp 500ms 180ms ease both; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Tyre chips ── */
+.tyre-soft   { background: #E8002D; color: #fff; }
+.tyre-medium { background: #FFD700; color: #000; }
+.tyre-hard   { background: #1E293B; color: #fff; }
+.tyre-inter  { background: #10B981; color: #fff; }
+.tyre-wet    { background: #2563EB; color: #fff; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--neutral); }
+
+/* ── Telemetry layouts ── */
 .telemetry-top-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 16px;
   align-items: start;
 }
 
-.telemetry-chip-row {
+/* ── Bottom nav ── */
+.bottom-nav-shell {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 50;
+  background: rgba(255,255,255,0.94);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav-inner {
+  max-width: 600px;
+  margin: 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-around;
+  height: 60px;
 }
 
-.telemetry-driver-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
+.bottom-nav-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: background 150ms ease;
 }
 
-.telemetry-summary-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
+.bottom-nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.04em;
 }
 
-.telemetry-chart-card {
-  overflow: hidden;
-}
-
-.telemetry-tooltip {
-  max-width: min(280px, calc(100vw - 32px));
-}
-
-.interactive-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(242, 200, 121, 0.22);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
-}
-
-.fade-up {
-  animation: fadeUp 420ms ease both;
-}
-
-.fade-up-delay-1 {
-  animation: fadeUp 520ms ease both;
-}
-
-.fade-up-delay-2 {
-  animation: fadeUp 620ms ease both;
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-3);
-}
-
-.tyre-soft {
-  background: #FF3333;
-  color: #fff;
-}
-
-.tyre-medium {
-  background: #FFD700;
-  color: #000;
-}
-
-.tyre-hard {
-  background: #FFFFFF;
-  color: #000;
-}
-
-.tyre-inter {
-  background: #39B54A;
-  color: #fff;
-}
-
-.tyre-wet {
-  background: #0067FF;
-  color: #fff;
-}
+/* ── Mobile ── */
 @media (max-width: 768px) {
-  main {
-    padding-left: 0 !important;
-    padding-top: 4.75rem;
-    padding-bottom: 7rem;
-  }
-
-  /* Layout wrapper — tighter side padding on mobile */
-  .layout-wrapper {
-    padding: 14px 12px 28px !important;
-  }
-
-  .page-title {
-    font-size: 2rem;
-  }
-
-  /* Home page — Hero + Track Conditions stack */
-  .hero-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .hero-card {
-    height: auto !important;
-    min-height: 420px;
-  }
-
-  .hero-title {
-    font-size: 18px !important;
-    line-height: 0.92 !important;
-    letter-spacing: 0.02em !important;
-  }
-
-  .hero-meta {
-    font-size: 10px !important;
-    flex-wrap: wrap;
-    gap: 6px !important;
-    margin-bottom: 14px !important;
-  }
-
-  .hero-kicker {
-    top: 16px !important;
-    left: 16px !important;
-    right: 16px;
-  }
-
-  .hero-title-row {
-    align-items: flex-start !important;
-    gap: 8px !important;
-  }
-
-  .hero-chip-grid {
-    width: 100%;
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px !important;
-  }
-
-  .hero-chip-card {
-    min-width: 0;
-    padding: 10px !important;
-  }
-
-  /* Stat cards — 2 columns on mobile */
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-
-  /* Driver standings — hide optional columns */
-  .driver-header,
-  .driver-row {
-    grid-template-columns: 32px 24px 1fr 50px !important;
-  }
-
-  .driver-hide-mobile {
-    display: none !important;
-  }
-
-  /* Constructor grid — single column */
-  .constructor-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Predictions — simplified grid */
-  .predictions-header,
-  .predictions-row {
-    grid-template-columns: 28px 24px 1fr 70px !important;
-  }
-
-  .predictions-hide-mobile {
-    display: none !important;
-  }
-
-  /* Predictions podium — smaller padding */
-  .podium-grid {
-    gap: 6px !important;
-  }
-
-  .podium-card {
-    padding: 10px !important;
-  }
-
-  /* NextRaceCard — stack title and timer */
-  .next-race-top {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-  }
-
-  .next-race-title {
-    font-size: 22px !important;
-  }
-
-  .next-race-timer-unit {
-    min-width: 52px !important;
-    padding: 8px !important;
-  }
-
-  .next-race-timer-value {
-    font-size: 22px !important;
-  }
-
-  /* CountdownTimer — smaller on mobile */
-  .countdown-unit {
-    min-width: 44px !important;
-    padding: 6px 8px !important;
-  }
-
-  .countdown-value {
-    font-size: 15px !important;
-  }
-
-  /* Telemetry segment stats — stack */
-  .segment-stats-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .telemetry-top-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .telemetry-summary-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .telemetry-driver-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .telemetry-tooltip {
-    left: 12px !important;
-    right: 12px;
-    top: auto !important;
-    bottom: 88px;
-    width: auto;
-  }
-
-  /* Hero countdown positioning */
-  .hero-bottom-content {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-  }
-
-  .bottom-nav-shell {
-    padding-left: 8px !important;
-    padding-right: 8px !important;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .bottom-nav-inner {
-    height: 76px !important;
-    border-radius: 22px !important;
-    padding-left: 4px !important;
-    padding-right: 4px !important;
-    gap: 2px;
-  }
-
-  .bottom-nav-link {
-    border-radius: 18px !important;
-    padding: 10px 2px 8px !important;
-    gap: 4px !important;
-  }
-
-  .bottom-nav-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  .bottom-nav-label {
-    font-size: 8px !important;
-    letter-spacing: 0.03em !important;
-  }
-
-  /* Predictions header — stack */
-  .predictions-page-header {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-  }
-}
-
-/* Tablet adjustments */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-
-  .telemetry-top-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .driver-header,
-  .driver-row {
-    grid-template-columns: 36px 28px 1fr 120px 60px 48px !important;
-  }
-
-  .driver-wins-col {
-    display: none !important;
-  }
+  main { padding-top: 64px; padding-bottom: 88px; }
+  main.landing { padding-top: 0; padding-bottom: 0; }
+  .layout-wrapper { padding: 16px 16px 32px; }
+  .page-title { font-size: 2rem; }
+  .telemetry-top-grid { grid-template-columns: 1fr !important; }
 }

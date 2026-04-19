@@ -48,11 +48,19 @@ def _database_url() -> str:
 
 def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
     """Return set of (year, gp_name, session_type) already in DB."""
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT year, gp_name, session_type FROM sessions
-        """)).fetchall()
-    return {(r[0], r[1], r[2]) for r in rows}
+    from sqlalchemy.exc import ProgrammingError
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT year, gp_name, session_type FROM sessions
+            """)).fetchall()
+        return {(r[0], r[1], r[2]) for r in rows}
+    except ProgrammingError as exc:
+        # Check if it's an "UndefinedTable" error (table doesn't exist)
+        if "undefined_table" in str(exc) or "does not exist" in str(exc):
+            log.warning("auto_ingest.migration_required", error="The 'sessions' table does not exist. Please run 'make migrate'.")
+            return set()
+        raise exc
 
 
 def purge_practice_sessions(engine, current_year: int, current_gp: str) -> int:
