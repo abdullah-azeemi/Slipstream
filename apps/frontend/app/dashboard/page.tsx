@@ -126,7 +126,7 @@ export default async function DashboardPage() {
   const heroSession = nextRace?.next_session
 
   // Hero Image 
-  const heroImage = "https://images.unsplash.com/photo-1596464716127-f2a82984de30?q=80&w=2070&auto=format&fit=crop"
+  const heroImage = "https://images.unsplash.com/photo-1748465579870-d31c8d5ca7da?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
 
   const champLeader = standings.drivers[0]
   const constructorLeader = standings.constructors[0]
