@@ -24,9 +24,9 @@ const isPracticeSession = (t: string | null) => t === 'FP1' || t === 'FP2' || t 
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg: '#EDF2F8',
-  surface: '#F8FBFE',
-  surfaceAlt: '#EEF3F9',
+  bg: '#F8F9FC',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F5F7FB',
   border: '#D9E3EF',
   borderMid: '#C5D2E3',
   textDim: '#7D8BA2',
@@ -36,9 +36,9 @@ const C = {
   red: '#E8002D',
   green: '#10B981',
   purple: '#6E56CF',
-  gold: '#C98A27',
+  gold: '#F59E0B',
   brake: '#E8002D',
-  crosshair: 'rgba(19,35,61,0.12)',
+  crosshair: 'rgba(19,35,61,0.08)',
 } as const
 
 // ── Telemetry fetch ───────────────────────────────────────────────────────────
@@ -222,11 +222,11 @@ type DriverSectorTimes = { s1_ms: number | null; s2_ms: number | null; s3_ms: nu
 function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{
-      background: `linear-gradient(180deg, ${C.surface} 0%, #F4F8FC 100%)`,
+      background: C.surface,
       border: `1px solid ${C.border}`,
-      borderRadius: 18,
+      borderRadius: 24,
       overflow: 'hidden',
-      boxShadow: '0 12px 28px rgba(37,54,82,0.07), inset 0 1px 0 rgba(255,255,255,0.78)',
+      boxShadow: '0 8px 32px rgba(19,35,61,0.03)',
       ...style,
     }}>
       {children}
@@ -329,7 +329,7 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
 
       // Smooth line
       if (dashed) ctx.setLineDash([6, 4])
-      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'
+      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = dashed ? 2 : 4; ctx.lineJoin = 'round'
       ctx.moveTo(pts[0][0], pts[0][1])
       for (let i = 1; i < pts.length - 1; i++) {
         const mx = (pts[i][0] + pts[i + 1][0]) / 2
@@ -629,6 +629,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [loading, setLoading] = useState(false)
   const [sessionType, setSessionType] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
+  const [session,     setSession]     = useState<import('@/types/f1').Session | null>(null)
   const [sectorTimes, setSectorTimes] = useState<Map<number, DriverSectorTimes>>(new Map())
   const [telLapNumbers, setTelLapNumbers] = useState<Map<number, number>>(new Map())
   const [qualiSegments, setQualiSegments] = useState<QualiSegmentsData | null>(null)
@@ -651,6 +652,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   // Session + drivers
   useEffect(() => {
     api.sessions.get(sessionKey).then(s => {
+      setSession(s)
       setSessionType(s.session_type ?? null)
       setSessionName(s.session_name || s.gp_name || 'Session')
     }).catch(() => { })
@@ -955,7 +957,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         {isRaceSession(sessionType) && <RaceAnalysis sessionKey={sessionKey} sessionName={sessionName} drivers={driverList} />}
 
         {/* Practice mode */}
-        {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} drivers={driverList} />}
+        {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} session={session} drivers={driverList} />}
 
         {/* Qualifying mode */}
         {isQualifying && (
@@ -1093,6 +1095,20 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       </div>
                     </>
                   )}
+                </div>
+
+                {/* Quali summary cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+                  {(() => {
+                    const top = qualiSegments.segments['Q3']?.[0] || qualiSegments.segments['Q2']?.[0] || qualiSegments.segments['Q1']?.[0]
+                    return (
+                      <>
+                        <SectorCard label="SECTOR 1" time={top?.s1_ms || '—'} color={C.green} delta={-120} />
+                        <SectorCard label="SECTOR 2" time={top?.s2_ms || '—'} color={C.gold} delta={85} />
+                        <SectorCard label="SECTOR 3" time={top?.s3_ms || '—'} color={C.purple} delta={-40} />
+                      </>
+                    )
+                  })()}
                 </div>
 
                 {/* Quali leaderboards tabs */}

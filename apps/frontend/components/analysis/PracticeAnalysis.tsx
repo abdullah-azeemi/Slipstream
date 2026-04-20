@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { teamColour, formatLapTime } from '@/lib/utils'
+import SectorCard from './SectorCard'
+import PerformanceMatrix from './PerformanceMatrix'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -64,37 +66,41 @@ type DriverInfo = {
   team_colour: string | null
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants (Premium Dashboard Palette) ───────────────────────────────────
 
-const CHART_BG   = '#0A0A0A'
-const AXIS_COLOR = '#1E1E1E'
-const TEXT_DIM   = '#3F3F46'
-const TEXT_MID   = '#71717A'
-const CROSSHAIR  = 'rgba(255,255,255,0.10)'
+const CHART_BG   = '#FFFFFF'
+const AXIS_COLOR = '#F0F4FA'
+const TEXT_DIM   = '#7D8BA2'
+const TEXT_MID   = '#56657C'
+const TEXT_DARK  = '#13233D'
+const CROSSHAIR  = 'rgba(19,35,61,0.08)'
 
 const COMPOUND_COLOUR: Record<string, string> = {
   SOFT: '#E8002D', MEDIUM: '#FFD700', HARD: '#FFFFFF',
   INTER: '#39B54A', WET: '#0067FF',
 }
 
-const PAD = { top: 24, right: 20, bottom: 44, left: 68 }
+const PAD = { top: 40, right: 30, bottom: 50, left: 80 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function clearCanvas(canvas: HTMLCanvasElement, W: number, H: number) {
-  canvas.width = W; canvas.height = H
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = W * dpr; canvas.height = H * dpr
+  canvas.style.width = `${W}px`; canvas.style.height = `${H}px`
   const ctx = canvas.getContext('2d')!
+  ctx.scale(dpr, dpr)
   ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, H)
   return ctx
 }
 
-// Fixed-position tooltip — canvas stacking context blocks absolute children
 function Tooltip({ x, y, children }: { x: number; y: number; children: React.ReactNode }) {
   return (
     <div style={{
       position: 'fixed', left: x, top: y, pointerEvents: 'none', zIndex: 9999,
-      background: '#111111EE', border: '1px solid #2A2A2A', borderRadius: '10px',
-      padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: '140px',
+      background: '#FFFFFFEE', border: '1px solid #D9E3EF', borderRadius: '14px',
+      padding: '12px 16px', backdropFilter: 'blur(8px)', minWidth: '160px',
+      boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
     }}>
       {children}
     </div>
@@ -105,9 +111,11 @@ function Tooltip({ x, y, children }: { x: number; y: number; children: React.Rea
 
 export default function PracticeAnalysis({
   sessionKey,
+  session,
   drivers: allDrivers,
 }: {
   sessionKey: number
+  session?: import('@/types/f1').Session | null
   drivers: DriverInfo[]
 }) {
   const [selected,      setSelected]      = useState<number[]>([])
@@ -145,15 +153,12 @@ export default function PracticeAnalysis({
 
   useEffect(() => {
     if (allDrivers.length >= 2)
-       
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDrivers.map(d => d.driver_number).join(',')])
+  }, [allDrivers.length])
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-     
     setLoading(true)
     Promise.all([
       fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-scatter`).then(r => r.json()),
@@ -168,7 +173,6 @@ export default function PracticeAnalysis({
         setTyreDeg(td && typeof td === 'object' ? td : {})
         setCompounds(Array.isArray(cp) ? cp : [])
         setSectors(Array.isArray(sec) ? sec : [])
-        // Default to first available compound in deg data
         const firstCmp = Object.keys(td ?? {})[0]
         if (firstCmp) setActiveDegCmp(firstCmp)
       })
@@ -181,622 +185,326 @@ export default function PracticeAnalysis({
       prev.includes(dn) ? prev.filter(d => d !== dn) : prev.length < 6 ? [...prev, dn] : prev
     )
 
-  // ── Draw: scatter as gap-to-session-best ─────────────────────────────────
+  // ── Stats Computation ────────────
+
+  const selectedStats = useMemo(() => {
+    if (!selected.length || !scatter.length) return null
+    const target = selected[0]
+    const driverLaps = scatter.filter(l => l.driver_number === target && !l.is_outlier)
+    if (!driverLaps.length) return null
+    
+    const bestLap = Math.min(...driverLaps.map(l => l.lap_time_ms))
+    const comparison = compoundDelta.find(d => d.driver_number === target)
+    const sectorInfo = sectors.find(d => d.driver_number === target)
+
+    // Rough theoretical best (sum of best phases)
+    const phases = sectorInfo?.phases || {}
+    const tBest = (phases['early']?.best_s1 || 0) + (phases['middle']?.best_s2 || 0) + (phases['late']?.best_s3 || 0)
+
+    return {
+      bestLap,
+      theoBest: comparison?.overall_best_ms || tBest,
+      s1: phases['middle']?.best_s1 || phases['early']?.best_s1 || 0,
+      s2: phases['middle']?.best_s2 || phases['early']?.best_s2 || 0,
+      s3: phases['middle']?.best_s3 || phases['early']?.best_s3 || 0,
+    }
+  }, [selected, scatter, compoundDelta, sectors])
+
+  // ── Draw: Gap to Best (Scatter but styled as line if comparable) ───────────
 
   useEffect(() => {
     const canvas = scatterRef.current
-    if (!canvas || !scatter.length || !compoundDelta.length) return
-    const W = containerRef.current?.clientWidth ?? 900
-    const H = 300
+    if (!canvas || !scatter.length) return
+    const W = (containerRef.current?.clientWidth ?? 1200) * 0.65
+    const H = 400
     const ctx = clearCanvas(canvas, W, H)
     const cW = W - PAD.left - PAD.right
     const cH = H - PAD.top  - PAD.bottom
 
-    // Session best = best lap_time_ms in scatter (non-outlier)
     const cleanLaps = scatter.filter(l => !l.is_outlier && l.lap_time_ms)
     if (!cleanLaps.length) return
     const sessionBest = Math.min(...cleanLaps.map(l => l.lap_time_ms))
 
-    // Build enriched laps with gap_ms
     const visible = scatter
       .filter(l => selected.includes(l.driver_number) && (showOutliers || !l.is_outlier))
       .map(l => ({ ...l, gap_ms: l.lap_time_ms - sessionBest }))
+      .sort((a,b) => a.lap_number - b.lap_number)
 
     if (!visible.length) return
 
-    const allGaps = visible.map(l => l.gap_ms)
-    const allLaps = visible.map(l => l.lap_number)
-    const yMax    = Math.min(Math.max(...allGaps) + 500, 8000) // cap at +8s
-    const xMin    = Math.min(...allLaps)
-    const xMax    = Math.max(...allLaps)
+    const yMax = Math.min(Math.max(...visible.map(l => l.gap_ms)) + 500, 5000)
+    const xMin = Math.min(...visible.map(l => l.lap_number))
+    const xMax = Math.max(...visible.map(l => l.lap_number))
 
     scatterGeomRef.current = { laps: visible, xMin, xMax, yMax, W, H }
 
     const toX = (lap: number) => PAD.left + ((lap - xMin) / Math.max(xMax - xMin, 1)) * cW
     const toY = (gap: number) => PAD.top  + (Math.min(gap, yMax) / yMax) * cH
 
-    // Grid — gap lines at 0, 1s, 2s, 3s, 5s
-    const gridVals = [0, 500, 1000, 2000, 3000, 5000].filter(g => g <= yMax)
+    // Grid lines (horizontal)
+    const gridVals = [0, 500, 1000, 2000, 3000].filter(g => g <= yMax)
     gridVals.forEach(g => {
       const y = toY(g)
-      ctx.beginPath()
-      ctx.strokeStyle = g === 0 ? '#2A2A2A' : AXIS_COLOR
-      ctx.lineWidth   = g === 0 ? 1.5 : 1
-      if (g === 0) ctx.setLineDash([])
-      else ctx.setLineDash([3, 4])
+      ctx.beginPath(); ctx.strokeStyle = g === 0 ? '#13233D33' : '#F0F4FA'; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.setLineDash([])
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-      ctx.fillText(g === 0 ? 'P1' : `+${(g / 1000).toFixed(1)}s`, PAD.left - 6, y + 3)
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 10px Inter'; ctx.textAlign = 'right'
+      ctx.fillText(g === 0 ? 'P1' : `+${(g / 1000).toFixed(1)}s`, PAD.left - 10, y + 3)
     })
 
-    // X axis
-    const lapStep = Math.max(1, Math.ceil((xMax - xMin) / 10))
-    for (let lap = xMin; lap <= xMax; lap += lapStep) {
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
-      ctx.fillText(String(lap), toX(lap), H - 12)
-    }
-    ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
-    ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
+    // Draw connecting lines for each driver
+    selected.forEach((dn, i) => {
+      const driverLaps = visible.filter(l => l.driver_number === dn)
+      if (driverLaps.length < 2) return
+      
+      const colour = '#' + driverLaps[0].team_colour
+      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = i === 0 ? 3 : 1.5
+      if (i > 0) ctx.setLineDash([5, 5])
+      else ctx.setLineDash([])
 
-    // Session best annotation
-    ctx.fillStyle = '#2CF4C5'; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'left'
-    ctx.fillText(`SESSION BEST: ${formatLapTime(sessionBest)}`, PAD.left + 6, PAD.top + 14)
+      driverLaps.forEach((l, idx) => {
+        const x = toX(l.lap_number); const y = toY(l.gap_ms)
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+      })
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Area fill for target driver
+      if (i === 0) {
+        ctx.lineTo(toX(driverLaps[driverLaps.length-1].lap_number), toY(0))
+        ctx.lineTo(toX(driverLaps[0].lap_number), toY(0))
+        ctx.closePath()
+        const grad = ctx.createLinearGradient(0, toY(0), 0, toY(yMax))
+        grad.addColorStop(0, colour + '20'); grad.addColorStop(1, colour + '00')
+        ctx.fillStyle = grad; ctx.fill()
+      }
+    })
 
     // Dots
     visible.forEach(l => {
-      const x    = toX(l.lap_number)
-      const y    = toY(Math.min(l.gap_ms, yMax))
-      const col  = COMPOUND_COLOUR[l.compound ?? ''] ?? '#555'
-      const dCol = '#' + l.team_colour
-      const r    = l.is_personal_best ? 5 : l.is_outlier ? 3 : 4
-
-      ctx.globalAlpha = l.is_outlier ? 0.25 : 1
-
-      // Outer ring = team colour
-      ctx.beginPath(); ctx.arc(x, y, r + 2, 0, Math.PI * 2)
-      ctx.strokeStyle = dCol + '66'; ctx.lineWidth = 1.5; ctx.stroke()
-
-      // Inner fill = compound colour
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
+      const x = toX(l.lap_number); const y = toY(l.gap_ms)
+      const col = COMPOUND_COLOUR[l.compound ?? ''] ?? '#555'
+      const active = selected[0] === l.driver_number
+      
+      ctx.beginPath(); ctx.arc(x, y, active ? 5 : 4, 0, Math.PI * 2)
       ctx.fillStyle = col; ctx.fill()
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
 
-      // PB glow
       if (l.is_personal_best) {
-        ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2)
-        ctx.strokeStyle = col + '33'; ctx.lineWidth = 2; ctx.stroke()
+        ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2)
+        ctx.strokeStyle = col + '44'; ctx.lineWidth = 2; ctx.stroke()
       }
-
-      ctx.globalAlpha = 1
     })
-  }, [scatter, compoundDelta, selected, showOutliers])
 
-  // ── Scatter mouse ─────────────────────────────────────────────────────────
+  }, [scatter, selected, showOutliers])
 
   const handleScatterMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const geom = scatterGeomRef.current
     if (!geom) return
     const rect  = e.currentTarget.getBoundingClientRect()
-    const mx    = e.clientX - rect.left
-    const my    = e.clientY - rect.top
-    const cW    = rect.width - PAD.left - PAD.right
-    const cH    = geom.H - PAD.top - PAD.bottom
-
-    let nearest: (typeof geom.laps)[0] | null = null
-    let nearDist = 14
-
+    const mx    = e.clientX - rect.left; const my    = e.clientY - rect.top
+    let nearest: (typeof geom.laps)[0] | null = null; let nearDist = 15
     geom.laps.forEach(l => {
-      const nx = PAD.left + ((l.lap_number - geom.xMin) / Math.max(geom.xMax - geom.xMin, 1)) * cW
-      const ny = PAD.top  + (Math.min(l.gap_ms, geom.yMax) / geom.yMax) * cH
-      const dist = Math.hypot(mx - nx, my - ny)
+      const x = (PAD.left + ((l.lap_number - geom.xMin) / Math.max(geom.xMax - geom.xMin, 1)) * (rect.width - PAD.left - PAD.right))
+      const y = (PAD.top  + (Math.min(l.gap_ms, geom.yMax) / geom.yMax) * (rect.height - PAD.top - PAD.bottom))
+      const dist = Math.hypot(mx - x, my - y)
       if (dist < nearDist) { nearDist = dist; nearest = l }
     })
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (nearest) setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: nearest, gapMs: (nearest as any).gap_ms })
+    if (nearest) setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: nearest, gapMs: nearest.gap_ms })
     else setScatterTip(null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scatter, selected])
+  }, [selected])
 
-  // ── Draw: tyre deg comparison ─────────────────────────────────────────────
+  // ── Draw: Tyre Regression (Thermal Decay Style) ───────────────────────────
 
   useEffect(() => {
     const canvas = degRef.current
     if (!canvas) return
-    const stints = (tyreDeg[activeDegCmp] ?? []).filter(s =>
-      !selected.length || selected.includes(s.driver_number)
-    )
-    if (!stints.length) {
-      const W = containerRef.current?.clientWidth ?? 900
-      clearCanvas(canvas, W, 220)
-      return
-    }
-
-    const W = containerRef.current?.clientWidth ?? 900
-    const H = 220
+    const stints = (tyreDeg[activeDegCmp] ?? []).filter(s => selected.includes(s.driver_number))
+    const W = (containerRef.current?.clientWidth ?? 1200) * 0.45
+    const H = 240
     const ctx = clearCanvas(canvas, W, H)
-    const cW = W - PAD.left - PAD.right
-    const cH = H - PAD.top  - PAD.bottom
-
+    if (!stints.length) return
+    
+    const maxLaps = Math.max(...stints.map(s => s.laps.length))
     const allDeltas = stints.flatMap(s => s.laps.map(l => l.delta_ms))
-    const maxLapInStint = Math.max(...stints.map(s => s.laps.length))
-    const yMin = Math.min(...allDeltas) - 100
-    const yMax = Math.max(...allDeltas, 500) + 200
+    const yMax = Math.max(...allDeltas, 1000)
+    
+    const barW = (W - PAD.left - PAD.right) / maxLaps - 6
+    const toY = (d: number) => H - PAD.bottom - (d / yMax) * (H - PAD.top - PAD.bottom)
 
-    degGeomRef.current = { stints, maxLapInStint, yMin, yMax, W, H }
-
-    const toX = (idx: number) => PAD.left + (idx / Math.max(maxLapInStint - 1, 1)) * cW
-    const toY = (delta: number) => PAD.top + cH - ((delta - yMin) / (yMax - yMin)) * cH
-
-    // Zero line (baseline)
-    const zy = toY(0)
-    ctx.beginPath(); ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 1.5
-    ctx.moveTo(PAD.left, zy); ctx.lineTo(PAD.left + cW, zy); ctx.stroke()
-    ctx.fillStyle = TEXT_DIM; ctx.font = '9px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-    ctx.fillText('BASE', PAD.left - 6, zy + 3)
-
-    // Grid
-    for (let i = 0; i <= 4; i++) {
-      const delta = yMin + (i / 4) * (yMax - yMin); const y = toY(delta)
-      if (Math.abs(delta) < 50) continue
-      ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
-      ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
-      ctx.fillText(`${delta >= 0 ? '+' : ''}${(delta / 1000).toFixed(2)}s`, PAD.left - 6, y + 3)
-    }
-
-    for (let i = 0; i < maxLapInStint; i += Math.max(1, Math.floor(maxLapInStint / 8))) {
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), toX(i), H - 12)
-    }
-    ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
-    ctx.fillText('LAP IN STINT', PAD.left + cW / 2, H - 2)
-
-    // Crosshair
-    if (degHovIdx !== null) {
-      ctx.beginPath(); ctx.strokeStyle = CROSSHAIR; ctx.lineWidth = 1
-      ctx.moveTo(toX(degHovIdx), PAD.top); ctx.lineTo(toX(degHovIdx), PAD.top + cH); ctx.stroke()
-    }
-
-    // Draw each stint
-    stints.forEach(stint => {
-      const colour = '#' + stint.team_colour
-      const pts    = stint.laps
-
-      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.lineJoin = 'round'
-      pts.forEach((l, i) => {
-        const x = toX(l.lap_in_stint); const y = toY(l.delta_ms)
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    stints.forEach((stint, si) => {
+      const col = '#' + stint.team_colour
+      ctx.globalAlpha = si === 0 ? 1 : 0.4
+      stint.laps.forEach((l, i) => {
+        const x = PAD.left + (i * (barW + 6))
+        const y = toY(l.delta_ms)
+        const h = H - PAD.bottom - y
+        
+        const grad = ctx.createLinearGradient(0, y, 0, H - PAD.bottom)
+        grad.addColorStop(0, col); grad.addColorStop(1, col + '44')
+        
+        ctx.fillStyle = grad
+        ctx.beginPath(); ctx.roundRect(x, y, barW, h > 0 ? h : 2, 4); ctx.fill()
+        
+        if (si === 0 && i === stint.laps.length - 1) {
+          ctx.fillStyle = col; ctx.font = 'bold 10px Inter'; ctx.textAlign = 'center'
+          ctx.fillText(`${(l.delta_ms/1000).toFixed(2)}s`, x + barW/2, y - 8)
+        }
       })
-      ctx.stroke()
-
-      // Dots
-      pts.forEach(l => {
-        const x = toX(l.lap_in_stint); const y = toY(l.delta_ms)
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2)
-        ctx.fillStyle = COMPOUND_COLOUR[activeDegCmp] ?? '#fff'; ctx.fill()
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2)
-        ctx.strokeStyle = colour + '88'; ctx.lineWidth = 1; ctx.stroke()
-      })
-
-      // Hover dot
-      if (degHovIdx !== null && pts[degHovIdx]) {
-        const l = pts[degHovIdx]
-        const hx = toX(l.lap_in_stint); const hy = toY(l.delta_ms)
-        ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.strokeStyle = colour + '55'; ctx.lineWidth = 2; ctx.stroke()
-        ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill()
-      }
-
-      // End label
-      if (pts.length) {
-        const last = pts[pts.length - 1]
-        ctx.fillStyle = colour; ctx.font = 'bold 10px JetBrains Mono, monospace'; ctx.textAlign = 'left'
-        ctx.fillText(stint.abbreviation, toX(last.lap_in_stint) + 8, toY(last.delta_ms) + 4)
-      }
     })
-  }, [tyreDeg, activeDegCmp, selected, degHovIdx])
+    ctx.globalAlpha = 1
 
-  // ── Deg mouse ─────────────────────────────────────────────────────────────
-
-  const handleDegMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const geom = degGeomRef.current
-    if (!geom) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const nx   = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD.left) / (rect.width - PAD.left - PAD.right)))
-    const idx  = Math.round(nx * (geom.maxLapInStint - 1))
-    setDegHovIdx(idx)
-
-    const entries = geom.stints
-      .filter(s => s.laps[idx])
-      .map(s => ({ abbr: s.abbreviation, colour: '#' + s.team_colour, delta_ms: s.laps[idx].delta_ms }))
-      .sort((a, b) => a.delta_ms - b.delta_ms)
-
-    if (entries.length) setDegTip({ x: e.clientX + 16, y: e.clientY - 20, entries })
-    else setDegTip(null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Axis
+    ctx.fillStyle = TEXT_DIM; ctx.font = '500 10px Inter'; ctx.textAlign = 'left'
+    ctx.fillText('LAP TIME DELTA', PAD.left, PAD.top - 10)
   }, [tyreDeg, activeDegCmp, selected])
-
-  // ── Sector delta helper ───────────────────────────────────────────────────
-
-  function sectorDelta(driver: SectorDriver, sector: 'best_s1' | 'best_s2' | 'best_s3') {
-    const early = driver.phases['early']?.[sector]
-    const late  = driver.phases['late']?.[sector]
-    if (!early || !late) return null
-    return late - early
-  }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const degCompounds = Object.keys(tyreDeg).sort()
+  if (loading) return <div style={{ textAlign: 'center', padding: '100px', color: TEXT_DIM, fontFamily: 'Inter' }}>Initializing Dashboard...</div>
 
   return (
-    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-      {/* Driver selector */}
-      <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>
-          FILTER DRIVERS (MAX 6)
+    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: '24px', fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* ── Dashboard Header ─────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+            <span style={{ 
+              background: '#13233D', color: '#fff', fontSize: '10px', padding: '4px 10px', 
+              borderRadius: '6px', fontWeight: 700, letterSpacing: '0.05em' 
+            }}>
+              {session?.session_type || 'FP'}
+            </span>
+            <span style={{ color: TEXT_DIM, fontSize: '13px', fontWeight: 500 }}>
+              {session?.gp_name || 'Circuit Analysis'}
+            </span>
+            <span style={{ color: TEXT_DIM }}>•</span>
+            <span style={{ color: TEXT_DIM, fontSize: '13px' }}>
+              {session?.date_start ? new Date(session.date_start).toLocaleDateString() : 'Active Session'}
+            </span>
+          </div>
+          <h1 style={{ fontSize: '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
+            GAP ANALYSIS
+          </h1>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {allDrivers.map(d => {
-            const isSel  = selected.includes(d.driver_number)
-            const colour = teamColour(d.team_colour, d.team_name)
-            return (
-              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
-                display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px',
-                borderRadius: '20px', cursor: 'pointer', transition: 'all 0.12s',
-                border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A',
-                background: isSel ? `${colour}18` : 'transparent',
-                color: isSel ? '#fff' : '#52525B',
-                fontSize: '12px', fontWeight: isSel ? 700 : 400, fontFamily: 'monospace',
-              }}>
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
-                {d.abbreviation}
-                {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
-              </button>
-            )
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #1A1A1A', flexWrap: 'wrap', alignItems: 'center' }}>
-          {Object.entries(COMPOUND_COLOUR).map(([c, col]) => (
-            <div key={c} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: col }} />
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{c}</span>
-            </div>
-          ))}
-          <button onClick={() => setShowOutliers(v => !v)} style={{
-            marginLeft: 'auto', padding: '3px 10px', borderRadius: '20px', cursor: 'pointer',
-            border: showOutliers ? '1.5px solid #2CF4C5' : '1.5px solid #2A2A2A',
-            background: showOutliers ? '#2CF4C518' : 'transparent',
-            color: showOutliers ? '#2CF4C5' : '#52525B',
-            fontSize: '10px', fontFamily: 'monospace',
-          }}>
-            {showOutliers ? 'Hide' : 'Show'} outliers
-          </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid #D9E3EF', background: '#fff', color: TEXT_DARK, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Export Data</button>
+          <button style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', background: '#E8002D', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(232,0,45,0.2)' }}>Overlay Session</button>
         </div>
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace' }}>Loading practice data...</div>}
+      {/* ── Driver Filter ────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#FFFFFF', padding: '12px 16px', borderRadius: '16px', border: '1px solid #D9E3EF', alignItems: 'center' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: TEXT_DIM, marginRight: '10px' }}>DRIVERS</span>
+        {allDrivers.map(d => {
+          const isSel = selected.includes(d.driver_number)
+          const color = teamColour(d.team_colour, d.team_name)
+          return (
+            <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{
+              padding: '6px 14px', borderRadius: '10px', cursor: 'pointer', border: 'none',
+              background: isSel ? `${color}15` : 'transparent', color: isSel ? color : TEXT_DIM,
+              fontSize: '13px', fontWeight: 700, transition: '0.2s', display: 'flex', alignItems: 'center', gap: '6px'
+            }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color }} />
+              {d.abbreviation}
+            </button>
+          )
+        })}
+      </div>
 
-      {!loading && (
-        <>
-          {/* ── GAP TO SESSION BEST SCATTER ───────────────────── */}
-          <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>GAP TO SESSION BEST</span>
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>every lap · 0 = fastest lap of session · ring = team · dot = compound</span>
-            </div>
-            <canvas
-              ref={scatterRef} height={300}
-              style={{ display: 'block', width: '100%', cursor: 'crosshair' }}
-              onMouseMove={handleScatterMove}
-              onMouseLeave={() => setScatterTip(null)}
-            />
-          </div>
-
-          {scatterTip && (
-            <Tooltip x={scatterTip.x} y={scatterTip.y}>
-              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginBottom: '6px' }}>LAP {scatterTip.lap.lap_number}</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: '#' + scatterTip.lap.team_colour, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: '11px', color: '#' + scatterTip.lap.team_colour, fontFamily: 'monospace', fontWeight: 700 }}>{scatterTip.lap.abbreviation}</div>
-                  <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>{formatLapTime(scatterTip.lap.lap_time_ms)}</div>
-                  <div style={{ fontSize: '11px', fontFamily: 'monospace', color: scatterTip.gapMs < 200 ? '#2CF4C5' : '#E8002D', fontWeight: 600 }}>
-                    {scatterTip.gapMs < 10 ? '🏆 SESSION BEST' : `+${(scatterTip.gapMs / 1000).toFixed(3)}s`}
-                  </div>
-                  {scatterTip.lap.compound && (
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[scatterTip.lap.compound] ?? '#666', marginTop: '2px' }}>
-                      ● {scatterTip.lap.compound}{scatterTip.lap.tyre_life_laps != null ? ` · ${scatterTip.lap.tyre_life_laps}L` : ''}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Tooltip>
-          )}
-
-          {/* ── COMPOUND DELTA TABLE ──────────────────────────── */}
-          {compoundDelta.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>COMPOUND DELTA</span>
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>best lap per compound · gap to session fastest on that tyre</span>
-              </div>
-
-              {(() => {
-                const allCompounds = Array.from(new Set(compoundDelta.flatMap(d => Object.keys(d.compounds)))).sort((a, b) => {
-                  const order = ['SOFT', 'MEDIUM', 'HARD', 'INTER', 'WET']
-                  return order.indexOf(a) - order.indexOf(b)
-                })
-                const visibleDrivers = compoundDelta.filter(d =>
-                  !selected.length || selected.includes(d.driver_number)
-                )
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {/* Header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: `32px 36px 1fr ${allCompounds.map(() => '90px').join(' ')}`, gap: '8px', padding: '4px 8px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace' }}>POS</span>
-                      <span></span>
-                      <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace' }}>DRIVER</span>
-                      {allCompounds.map(c => (
-                        <span key={c} style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[c] ?? '#666', textAlign: 'right' }}>
-                          ● {c.slice(0, 1)}
-                        </span>
-                      ))}
-                    </div>
-
-                    {visibleDrivers.map((driver, i) => {
-                      const colour = '#' + driver.team_colour
-                      return (
-                        <div key={driver.driver_number} style={{
-                          display: 'grid',
-                          gridTemplateColumns: `32px 36px 1fr ${allCompounds.map(() => '90px').join(' ')}`,
-                          gap: '8px', padding: '8px 8px',
-                          background: i % 2 === 0 ? '#0D0D0D' : 'transparent',
-                          borderRadius: '6px', alignItems: 'center',
-                        }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#3F3F46' }}>
-                            {String(i + 1).padStart(2, '0')}
-                          </span>
-                          <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour }} />
-                          <div>
-                            <div style={{ fontSize: '12px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{driver.abbreviation}</div>
-                            <div style={{ fontSize: '9px', color: '#52525B', fontFamily: 'monospace' }}>{driver.team_name.split(' ')[0]}</div>
-                          </div>
-                          {allCompounds.map(c => {
-                            const data    = driver.compounds[c]
-                            const compCol = COMPOUND_COLOUR[c] ?? '#666'
-                            const isZero  = data && data.gap_to_best_ms < 10
-                            return (
-                              <div key={c} style={{ textAlign: 'right' }}>
-                                {data ? (
-                                  <>
-                                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: isZero ? compCol : '#A1A1AA', fontWeight: isZero ? 700 : 400 }}>
-                                      {isZero ? '🏆' : `+${(data.gap_to_best_ms / 1000).toFixed(3)}s`}
-                                    </div>
-                                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>
-                                      {formatLapTime(data.best_ms)}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#2A2A2A', fontFamily: 'monospace' }}>—</span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-
-          {/* ── TYRE DEGRADATION COMPARISON ───────────────────── */}
-          {degCompounds.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 0' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>TYRE DEGRADATION</span>
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>delta from stint base · 0 = no deg · positive = slower</span>
-              </div>
-
-              {/* Compound tabs */}
-              <div style={{ display: 'flex', gap: '6px', padding: '8px 16px' }}>
-                {degCompounds.map(c => {
-                  const col    = COMPOUND_COLOUR[c] ?? '#666'
-                  const active = activeDegCmp === c
-                  return (
-                    <button key={c} onClick={() => setActiveDegCmp(c)} style={{
-                      padding: '4px 12px', borderRadius: '20px', cursor: 'pointer',
-                      border: active ? `1.5px solid ${col}` : '1.5px solid #2A2A2A',
-                      background: active ? col + '18' : 'transparent',
-                      color: active ? col : '#52525B',
-                      fontSize: '11px', fontFamily: 'monospace', fontWeight: active ? 700 : 400,
-                    }}>
-                      ● {c}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <canvas
-                ref={degRef} height={220}
-                style={{ display: 'block', width: '100%', cursor: 'crosshair' }}
-                onMouseMove={handleDegMove}
-                onMouseLeave={() => { setDegHovIdx(null); setDegTip(null) }}
-              />
-
-              {/* No data message */}
-              {(tyreDeg[activeDegCmp] ?? []).filter(s => !selected.length || selected.includes(s.driver_number)).length === 0 && (
-                <div style={{ padding: '24px', textAlign: 'center', fontSize: '11px', fontFamily: 'monospace', color: '#3F3F46' }}>
-                  No {activeDegCmp} stints for selected drivers (≥4 consecutive laps required)
-                </div>
-              )}
-            </div>
-          )}
-
-          {degTip && (
-            <Tooltip x={degTip.x} y={degTip.y}>
-              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', marginBottom: '6px' }}>
-                ● {activeDegCmp}
-              </div>
-              {degTip.entries.map(e => (
-                <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                  <div style={{ width: '3px', height: '22px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                    <div style={{ fontSize: '12px', fontFamily: 'monospace', fontWeight: 700, color: e.delta_ms > 300 ? '#E8002D' : e.delta_ms < -50 ? '#2CF4C5' : '#fff' }}>
-                      {e.delta_ms >= 0 ? '+' : ''}{(e.delta_ms / 1000).toFixed(3)}s
-                    </div>
-                  </div>
+      {/* ── Main Dashboard Grid ──────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '24px' }}>
+        
+        {/* Left Col: Gap Analysis Chart */}
+        <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px', position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: TEXT_DARK }}>Gap to Session Best</h3>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              {selected.map((dn, i) => (
+                <div key={dn} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#' + allDrivers.find(d => d.driver_number === dn)?.team_colour }} />
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: TEXT_DIM }}>{allDrivers.find(d => d.driver_number === dn)?.abbreviation} {i === 0 ? '(TARGET)' : '(REF)'}</span>
                 </div>
               ))}
+            </div>
+          </div>
+          <canvas ref={scatterRef} style={{ display: 'block', width: '100%', height: '400px' }} onMouseMove={handleScatterMove} onMouseLeave={() => setScatterTip(null)} />
+          {scatterTip && (
+            <Tooltip x={scatterTip.x} y={scatterTip.y}>
+              <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>LAP {scatterTip.lap.lap_number}</div>
+              <div style={{ fontSize: '16px', fontWeight: 900, color: TEXT_DARK }}>{formatLapTime(scatterTip.lap.lap_time_ms)}</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: scatterTip.gapMs < 10 ? '#10B981' : '#E8002D' }}>
+                {scatterTip.gapMs < 10 ? 'SESSION BEST' : `+${(scatterTip.gapMs/1000).toFixed(3)}s`}
+              </div>
             </Tooltip>
           )}
+        </div>
 
-          {/* ── COMPOUND STRATEGY REVEAL ──────────────────────── */}
-          {compounds.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>COMPOUND STRATEGY REVEAL</span>
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>laps per compound per team reveals planned race strategy</span>
-              </div>
-              {(() => {
-                const allCompounds = Array.from(new Set(compounds.flatMap(t => Object.keys(t.compounds)))).sort((a, b) => {
-                  const order = ['SOFT', 'MEDIUM', 'HARD', 'INTER', 'WET']
-                  return order.indexOf(a) - order.indexOf(b)
-                })
-                const maxLaps = Math.max(...compounds.flatMap(t => Object.values(t.compounds).map(c => c.laps)))
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: `140px repeat(${allCompounds.length}, 1fr)`, gap: '8px', padding: '0 4px', marginBottom: '2px' }}>
-                      <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace' }}>TEAM</span>
-                      {allCompounds.map(c => (
-                        <span key={c} style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[c] ?? '#666', textAlign: 'center' }}>
-                          ● {c.slice(0,1)}
-                        </span>
-                      ))}
+        {/* Right Col: Performance Matrix */}
+        <PerformanceMatrix
+          bestLap={selectedStats?.bestLap || '—'}
+          theoBest={selectedStats?.theoBest || '—'}
+          topSpeed={324} // Placeholder: usually in stats
+          s1Best={selectedStats?.s1 || '—'}
+          s2Best={selectedStats?.s2 || '—'}
+          s3Best={selectedStats?.s3 || '—'}
+          accentColor={selected.length ? teamColour(allDrivers.find(d => d.driver_number === selected[0])?.team_colour, '') : '#E8002D'}
+        />
+      </div>
+
+      {/* ── Sub Grid ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px' }}>
+        <SectorCard label="SECTOR 1" time={selectedStats?.s1 || '—'} color="#10B981" delta={-150} />
+        <SectorCard label="SECTOR 2" time={selectedStats?.s2 || '—'} color="#F59E0B" delta={40} />
+        <SectorCard label="SECTOR 3" time={selectedStats?.s3 || '—'} color="#6E56CF" delta={210} />
+      </div>
+
+      {/* ── Bottom Grid ──────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
+        
+        {/* Strategy Analysis */}
+        <div style={{ background: '#13233D', border: '1px solid #1A2E4B', borderRadius: '24px', padding: '24px', color: '#fff', boxShadow: '0 8px 32px rgba(19,35,61,0.2)' }}>
+          <h3 style={{ margin: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 800, color: '#D9E3EF' }}>Compound Strategy Analysis</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {compounds.slice(0, 4).map(team => {
+              const mainCmp = Object.keys(team.compounds).sort((a,b) => team.compounds[b].laps - team.compounds[a].laps)[0]
+              const data = team.compounds[mainCmp]
+              return (
+                <div key={team.team_name} style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px' }}>
+                  <div style={{ width: '4px', height: '32px', borderRadius: '2px', background: '#' + team.team_colour }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700 }}>{team.team_name.split(' ')[0]} ({mainCmp})</span>
+                      <span style={{ fontSize: '11px', color: '#7D8BA2' }}>{data?.laps || 0} Laps • Best {formatLapTime(data?.best_ms)}</span>
                     </div>
-                    {compounds.map(team => {
-                      const colour = '#' + team.team_colour
-                      return (
-                        <div key={team.team_name} style={{ display: 'grid', gridTemplateColumns: `140px repeat(${allCompounds.length}, 1fr)`, gap: '8px', alignItems: 'center', padding: '7px 4px', background: '#0D0D0D', borderRadius: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                            <div style={{ width: '3px', height: '16px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {team.team_name.split(' ')[0]}
-                            </span>
-                          </div>
-                          {allCompounds.map(c => {
-                            const data    = team.compounds[c]
-                            const compCol = COMPOUND_COLOUR[c] ?? '#555'
-                            const barW    = data ? (data.laps / maxLaps) * 100 : 0
-                            return (
-                              <div key={c} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <div style={{ height: '10px', background: '#1A1A1A', borderRadius: '3px', overflow: 'hidden' }}>
-                                  {data && <div style={{ width: `${barW}%`, height: '100%', background: compCol + '88', borderRadius: '3px' }} />}
-                                </div>
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: data ? compCol : '#2A2A2A', textAlign: 'center' }}>
-                                  {data ? `${data.laps}L` : '—'}
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
+                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min((data?.laps || 0) * 4, 100)}%`, height: '100%', background: '#' + team.team_colour }} />
+                    </div>
                   </div>
-                )
-              })()}
-            </div>
-          )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
 
-          {/* ── SECTOR PROGRESSION ────────────────────────────── */}
-          {sectors.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>SECTOR PROGRESSION</span>
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>early → mid → late · negative = improving setup</span>
-              </div>
-              {(() => {
-                const visible = sectors.filter(d => selected.includes(d.driver_number))
-                if (!visible.length) return (
-                  <div style={{ fontSize: '11px', color: '#3F3F46', fontFamily: 'monospace', textAlign: 'center', padding: '16px' }}>
-                    Select drivers above to see sector progression
-                  </div>
-                )
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {visible.map(driver => {
-                      const colour = teamColour(driver.team_colour, driver.team_name)
-                      const phases = ['early', 'middle', 'late'] as const
-                      return (
-                        <div key={driver.driver_number} style={{ padding: '10px 12px', background: '#0D0D0D', borderRadius: '8px', border: '1px solid #1A1A1A' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                            <div style={{ width: '3px', height: '16px', borderRadius: '2px', background: colour }} />
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{driver.abbreviation}</span>
-                            <span style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace' }}>{driver.team_name}</span>
-                            {(() => {
-                              const deltas = (['best_s1', 'best_s2', 'best_s3'] as const).map(s => sectorDelta(driver, s)).filter(d => d !== null) as number[]
-                              const total  = deltas.reduce((a, b) => a + b, 0)
-                              if (!deltas.length) return null
-                              return (
-                                <span style={{ marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, color: total < 0 ? '#2CF4C5' : total > 0 ? '#E8002D' : '#71717A' }}>
-                                  {total < 0 ? `▲ ${(Math.abs(total)/1000).toFixed(3)}s faster` : total > 0 ? `▼ ${(total/1000).toFixed(3)}s slower` : '→ no change'}
-                                </span>
-                              )
-                            })()}
-                          </div>
-                          {(['best_s1', 'best_s2', 'best_s3'] as const).map((sector, si) => {
-                            const sColour  = ['#E8002D', '#FFD700', '#B347FF'][si]
-                            const phaseMs  = phases.map(p => driver.phases[p]?.[sector] ?? null)
-                            const validMs  = phaseMs.filter(t => t !== null) as number[]
-                            const minMs    = validMs.length ? Math.min(...validMs) : 0
-                            const maxMs    = validMs.length ? Math.max(...validMs) : 1
-                            const delta    = sectorDelta(driver, sector)
-                            return (
-                              <div key={sector} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: si < 2 ? '6px' : 0 }}>
-                                <span style={{ width: '20px', fontSize: '9px', fontFamily: 'monospace', color: sColour, fontWeight: 700, flexShrink: 0 }}>S{si+1}</span>
-                                <div style={{ display: 'flex', gap: '3px', flex: 1 }}>
-                                  {phases.map((phase, pi) => {
-                                    const t      = driver.phases[phase]?.[sector] ?? null
-                                    const isBest = t !== null && t === minMs
-                                    const barH   = t !== null && maxMs > minMs ? 4 + ((maxMs - t) / (maxMs - minMs)) * 8 : 4
-                                    return (
-                                      <div key={phase} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                                        <div style={{ width: '100%', height: '14px', display: 'flex', alignItems: 'flex-end' }}>
-                                          <div style={{ width: '100%', height: `${barH}px`, background: isBest ? sColour : sColour + '33', borderRadius: '2px' }} />
-                                        </div>
-                                        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: t !== null ? (isBest ? '#fff' : '#52525B') : '#2A2A2A' }}>
-                                          {t !== null ? (t/1000).toFixed(2) : '—'}
-                                        </span>
-                                        {pi === 0 && <span style={{ fontSize: '7px', color: '#3F3F46', fontFamily: 'monospace' }}>Early</span>}
-                                        {pi === 2 && <span style={{ fontSize: '7px', color: '#3F3F46', fontFamily: 'monospace' }}>Late</span>}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                                {delta !== null && (
-                                  <span style={{ width: '56px', fontSize: '9px', fontFamily: 'monospace', textAlign: 'right', flexShrink: 0, fontWeight: 700, color: delta < 0 ? '#2CF4C5' : delta > 0 ? '#E8002D' : '#71717A' }}>
-                                    {delta < 0 ? `−${(Math.abs(delta)/1000).toFixed(3)}` : `+${(delta/1000).toFixed(3)}`}
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-        </>
-      )}
+        {/* Tyre Degradation Chart */}
+        <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
+             <div style={{ display: 'flex', gap: '8px' }}>
+                {Object.keys(tyreDeg).map(c => (
+                  <button key={c} onClick={() => setActiveDegCmp(c)} style={{
+                    padding: '4px 12px', borderRadius: '20px', border: '1px solid #D9E3EF',
+                    background: activeDegCmp === c ? '#13233D' : '#fff', color: activeDegCmp === c ? '#fff' : TEXT_DIM,
+                    fontSize: '11px', fontWeight: 700, cursor: 'pointer'
+                  }}>{c}</button>
+                ))}
+             </div>
+          </div>
+          <canvas ref={degRef} style={{ display: 'block', width: '100%', height: '240px' }} />
+        </div>
+      </div>
+
     </div>
   )
 }
