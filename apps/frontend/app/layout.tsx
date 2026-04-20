@@ -13,8 +13,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isDashboard = pathname?.startsWith('/dashboard')
 
   return (
-    <html lang="en">
-      <body style={{ background: '#F8FAFC', color: '#0F172A', minHeight: '100vh' }}>
+    <html lang="en" suppressHydrationWarning>
+      <body style={{ background: '#F8FAFC', color: '#0F172A', minHeight: '100vh' }} suppressHydrationWarning>
         <TopBar />
         {/* 
           Landing page manages its own spacing (hero bleeds to top of viewport).

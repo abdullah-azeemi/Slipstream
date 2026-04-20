@@ -628,6 +628,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [tooltipData, setTooltipData] = useState<{ dist: number; values: any[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [sessionType, setSessionType] = useState<string | null>(null)
+  const [sessionName, setSessionName] = useState<string>('')
   const [sectorTimes, setSectorTimes] = useState<Map<number, DriverSectorTimes>>(new Map())
   const [telLapNumbers, setTelLapNumbers] = useState<Map<number, number>>(new Map())
   const [qualiSegments, setQualiSegments] = useState<QualiSegmentsData | null>(null)
@@ -649,7 +650,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   // Session + drivers
   useEffect(() => {
-    api.sessions.get(sessionKey).then(s => setSessionType(s.session_type ?? null)).catch(() => { })
+    api.sessions.get(sessionKey).then(s => {
+      setSessionType(s.session_type ?? null)
+      setSessionName(s.session_name || s.gp_name || 'Session')
+    }).catch(() => { })
     api.drivers.list(sessionKey).then(d => {
       setDrivers(d)
       if (d.length >= 2) setSelected([d[0].driver_number, d[1].driver_number])
@@ -948,7 +952,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         </div>
 
         {/* Race mode */}
-        {isRaceSession(sessionType) && <RaceAnalysis sessionKey={sessionKey} drivers={driverList} />}
+        {isRaceSession(sessionType) && <RaceAnalysis sessionKey={sessionKey} sessionName={sessionName} drivers={driverList} />}
 
         {/* Practice mode */}
         {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} drivers={driverList} />}
