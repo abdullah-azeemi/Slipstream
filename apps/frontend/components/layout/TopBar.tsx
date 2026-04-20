@@ -10,7 +10,6 @@ export default function TopBar() {
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Live Telemetry', href: '/telemetry' },
     { name: 'Standings', href: '/standings' },
     { name: 'Season Calendar', href: '/schedule' },
     { name: 'Archive', href: '/sessions' },

@@ -7,7 +7,6 @@ import { Home, Flag, Activity, Zap, BarChart2 } from 'lucide-react'
 const NAV = [
   { href: '/',            label: 'Home',        icon: Home },
   { href: '/sessions',    label: 'Sessions',    icon: Flag },
-  { href: '/telemetry',   label: 'Telemetry',   icon: Activity },
   { href: '/standings',   label: 'Standings',   icon: BarChart2 },
   { href: '/predictions', label: 'Predictions', icon: Zap },
 ]

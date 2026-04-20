@@ -141,14 +141,6 @@ export default function LandingPage() {
               Strip away the drag from your decision-making process with high-fidelity telemetry architecture.
             </p>
           </div>
-          <Link href="/telemetry" style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            fontFamily: 'Space Grotesk, sans-serif', fontSize: 11, fontWeight: 700,
-            color: '#E8002D', textDecoration: 'none', whiteSpace: 'nowrap',
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-          }}>
-            VIEW CAPABILITIES <ArrowRight size={14} />
-          </Link>
         </div>
 
         {/* Feature grid */}
