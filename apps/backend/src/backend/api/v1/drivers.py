@@ -98,12 +98,13 @@ def compare_drivers(session_key: int):
     if not results:
         return {"error": "No data found for given drivers"}, 404
 
-    # Add gap_to_fastest — delta vs the quickest driver in this comparison
-    best_lap = min(r["best_lap_ms"] for r in results if r["best_lap_ms"])
+    best_lap = min(float(r["best_lap_ms"]) for r in results if r["best_lap_ms"])
     for r in results:
-        r["gap_to_fastest_ms"] = (
-            round(r["best_lap_ms"] - best_lap, 3)
-            if r["best_lap_ms"] else None
-        )
+        if r["best_lap_ms"]:
+            r["gap_to_fastest_ms"] = round(float(r["best_lap_ms"]) - best_lap, 3)
+            r["theoretical_best_ms"] = float(r["theoretical_best_ms"]) if r.get("theoretical_best_ms") else None
+        else:
+            r["gap_to_fastest_ms"] = None
+
 
     return jsonify(results)

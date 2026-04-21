@@ -92,11 +92,11 @@ type DriverInfo = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const CHART_BG   = '#0A0A0A'
-const AXIS_COLOR = '#1E1E1E'
-const TEXT_DIM   = '#3F3F46'
-const TEXT_MID   = '#71717A'
-const CROSSHAIR  = 'rgba(255,255,255,0.10)'
+const CHART_BG   = '#FFFFFF'
+const AXIS_COLOR = '#DCE6F5'
+const TEXT_DIM   = '#7A8CA5'
+const TEXT_MID   = '#56657C'
+const CROSSHAIR  = 'rgba(20,35,60,0.16)'
 
 const COMPOUND_COLOUR: Record<string, string> = {
   SOFT: '#E8002D', MEDIUM: '#FFD700', HARD: '#FFFFFF',
@@ -111,6 +111,33 @@ const VERDICT_STYLE = {
 
 // All charts share identical left/right padding so x-axes align pixel-perfect
 const PAD = { top: 24, right: 110, bottom: 44, left: 72 }
+
+const SURFACE = 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)'
+const BORDER = 'rgba(204,218,236,0.95)'
+const TEXT_DARK = '#14233C'
+
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      background: SURFACE,
+      border: `1px solid ${BORDER}`,
+      borderRadius: '22px',
+      boxShadow: '0 16px 42px rgba(24,39,75,0.08)',
+      ...style,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '16px 18px 8px' }}>
+      <span style={{ fontSize: '14px', fontFamily: 'Inter, sans-serif', color: TEXT_DARK, fontWeight: 800 }}>{title}</span>
+      {subtitle && <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: TEXT_DIM }}>{subtitle}</span>}
+    </div>
+  )
+}
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
 
@@ -188,9 +215,11 @@ function TooltipCard({
 
 export default function RaceAnalysis({
   sessionKey,
+  sessionName,
   drivers: allDrivers,
 }: {
   sessionKey: number
+  sessionName: string
   drivers: DriverInfo[]
 }) {
   const [selected,    setSelected]    = useState<number[]>([])
@@ -565,221 +594,230 @@ export default function RaceAnalysis({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
       {/* Driver selector */}
-      <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-        <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>DRIVERS (MAX 4)</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+      <Card style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '11px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.14em', marginBottom: '8px' }}>RACE ANALYSIS</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '34px', lineHeight: 1, fontWeight: 900, color: TEXT_DARK, letterSpacing: '-0.04em' }}>Lap Evolution</span>
+              <span style={{ fontSize: '12px', color: '#CC3648', fontWeight: 700, letterSpacing: '0.08em' }}>SESSION COMPLETE</span>
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: TEXT_MID, fontWeight: 600 }}>
+              <span>{sessionName}</span>
+              <span style={{ color: '#CBD5E1' }}>•</span>
+              <span>{maxLap} laps</span>
+              <span style={{ color: '#CBD5E1' }}>•</span>
+              <span>Select up to 4 drivers</span>
+            </div>
+          </div>
+          <div style={{ minWidth: '280px', flex: '1 1 320px' }}>
+            <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.12em', marginBottom: '10px', textAlign: 'right' }}>DRIVERS (MAX 4)</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }}>
           {allDrivers.map(d => {
             const isSel  = selected.includes(d.driver_number)
             const colour = teamColour(d.team_colour, d.team_name)
             return (
-              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.12s', border: isSel ? `1.5px solid ${colour}` : '1.5px solid #2A2A2A', background: isSel ? `${colour}18` : 'transparent', color: isSel ? '#fff' : '#52525B', fontSize: '12px', fontWeight: isSel ? 700 : 400, fontFamily: 'monospace' }}>
+              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '999px', cursor: 'pointer', transition: 'all 0.12s', border: isSel ? `1.5px solid ${colour}` : `1px solid ${BORDER}`, background: isSel ? `${colour}12` : 'rgba(255,255,255,0.72)', color: isSel ? TEXT_DARK : TEXT_MID, fontSize: '12px', fontWeight: isSel ? 800 : 600, fontFamily: 'Inter, sans-serif', boxShadow: isSel ? `0 8px 24px ${colour}12` : 'none' }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
                 {d.abbreviation}
-                {isSel && <span style={{ color: colour, fontSize: '10px' }}>×</span>}
+                {isSel && <span style={{ color: colour, fontSize: '10px', fontWeight: 900 }}>×</span>}
               </button>
             )
           })}
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #1A1A1A', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '14px', marginTop: '14px', paddingTop: '14px', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap' }}>
           {Object.entries(COMPOUND_COLOUR).map(([c, col]) => (
-            <div key={c} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <div key={c} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: col }} />
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{c}</span>
+              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: TEXT_DIM }}>{c}</span>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
-      {loading && <div style={{ textAlign: 'center', padding: '48px', color: '#3F3F46', fontFamily: 'monospace' }}>Loading race data...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: TEXT_DIM, fontFamily: 'monospace' }}>Loading race data...</div>}
 
       {!loading && (
         <>
-
-        {/* ── LIVE LEADERBOARD ───────────────────────────────────── */}
-          {leaderboard.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>
-                  RACE ORDER
-                </span>
-                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: hovLap ? '#2CF4C5' : '#3F3F46' }}>
-                  {hovLap ? `LAP ${hovLap}` : `FINAL · LAP ${maxLap}`}
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                {leaderboard.map((d) => {
-                  const colour   = '#' + d.team_colour
-                  const isSel    = selected.includes(d.driver_number)
-                  const isLeader = d.position === 1
-                  return (
-                    <div key={d.driver_number} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px', borderRadius: '6px', background: isSel ? colour + '12' : 'transparent', border: isSel ? `1px solid ${colour}33` : '1px solid transparent' }}>
-                      {/* Position number */}
-                      <span style={{ width: '20px', fontSize: '11px', fontFamily: 'monospace', color: isLeader ? '#FFD700' : isSel ? '#fff' : '#52525B', fontWeight: isLeader || isSel ? 700 : 400, textAlign: 'right', flexShrink: 0 }}>
-                        {isLeader ? '①' : `${d.position}`}
-                      </span>
-                      {/* Team colour dot */}
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: colour, flexShrink: 0 }} />
-                      {/* Abbreviation */}
-                      <span style={{ width: '32px', fontSize: '11px', fontFamily: 'monospace', color: isSel ? colour : '#A1A1AA', fontWeight: isSel ? 700 : 400 }}>
-                        {d.abbreviation}
-                      </span>
-                      {/* Gap bar */}
-                      <div style={{ flex: 1, height: '3px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
-                        {d.gap !== null && d.gap > 0 && (
-                          <div style={{ width: `${Math.min(100, (d.gap / 60) * 100)}%`, height: '100%', background: isSel ? colour + 'AA' : colour + '33', borderRadius: '2px' }} />
-                        )}
-                      </div>
-                      {/* Gap value */}
-                      <span style={{ width: '64px', fontSize: '10px', fontFamily: 'monospace', color: isLeader ? '#FFD700' : isSel ? '#fff' : '#52525B', textAlign: 'right', fontWeight: isSel ? 700 : 400 }}>
-                        {isLeader ? 'LEADER' : d.gap !== null ? `+${d.gap.toFixed(1)}s` : '—'}
-                      </span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, 0.9fr)', gap: '18px', alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div ref={lapCardRef}>
+                <Card style={{ overflow: 'hidden', padding: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', padding: '18px 20px 8px', flexWrap: 'wrap' }}>
+                    <SectionTitle title="Lap Time Evolution" subtitle="Selected drivers · pit laps excluded · compound markers on traces" />
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ padding: '7px 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.86)', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 800, color: TEXT_DARK }}>LAPS 1–{Math.min(15, maxLap)}</div>
+                      <div style={{ padding: '7px 12px', borderRadius: '999px', background: '#EEF3FB', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 700, color: TEXT_DIM }}>FULL SESSION</div>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          {/* ── FASTEST LAP CARD ───────────────────────────────────── */}
-          {overallFastest && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>FASTEST LAP</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#0D0D0D', borderRadius: '10px', border: `1px solid #${ overallFastest.team_colour}33`, marginBottom: '10px' }}>
-                <div style={{ width: '4px', height: '56px', borderRadius: '2px', background: '#' + overallFastest.team_colour, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#' + overallFastest.team_colour, fontWeight: 700 }}>{overallFastest.abbreviation}</span>
-                    <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B' }}>{overallFastest.team_name}</span>
-                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#2CF4C5', background: '#2CF4C522', padding: '1px 6px', borderRadius: '4px', border: '1px solid #2CF4C544', marginLeft: 'auto' }}>🏆 FASTEST</span>
                   </div>
-                  <div style={{ fontSize: '26px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1 }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
-                  <div style={{ display: 'flex', gap: '14px', marginTop: '5px' }}>
-                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>LAP {overallFastest.lap_number}</span>
-                    {overallFastest.compound && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: COMPOUND_COLOUR[overallFastest.compound] ?? '#666' }}>● {overallFastest.compound}</span>}
-                    {overallFastest.tyre_life_laps !== null && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>{overallFastest.tyre_life_laps} lap{overallFastest.tyre_life_laps !== 1 ? 's' : ''} old</span>}
-                    {overallFastest.position_on_lap !== null && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#52525B' }}>P{overallFastest.position_on_lap} at the time</span>}
-                  </div>
-                </div>
+                  <canvas ref={lapRef} height={300} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                </Card>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {top5Fastest.slice(1).map((fl, i) => {
-                  const colour = '#' + fl.team_colour
-                  const compCol = COMPOUND_COLOUR[fl.compound ?? ''] ?? '#666'
-                  const barW = Math.max(10, 100 - (fl.gap_ms / (top5Fastest[top5Fastest.length - 1]?.gap_ms || 1)) * 80)
-                  return (
-                    <div key={fl.driver_number} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: '#0A0A0A', borderRadius: '6px' }}>
-                      <span style={{ width: '18px', fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46', textAlign: 'right' }}>P{i + 2}</span>
-                      <span style={{ width: '28px', fontSize: '10px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{fl.abbreviation}</span>
-                      <div style={{ flex: 1, height: '4px', background: '#1A1A1A', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ width: `${barW}%`, height: '100%', background: colour + '88', borderRadius: '2px' }} />
-                      </div>
-                      <span style={{ width: '68px', fontSize: '11px', fontFamily: 'monospace', color: '#A1A1AA', textAlign: 'right' }}>{formatLapTime(fl.lap_time_ms)}</span>
-                      <span style={{ width: '54px', fontSize: '9px', fontFamily: 'monospace', color: '#E8002D', textAlign: 'right' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</span>
-                      {fl.compound && <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol, width: '16px' }}>●</span>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          
-
-          {/* ── LAP TIME EVOLUTION ─────────────────────────────────── */}
-          <div ref={lapCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>LAP TIME EVOLUTION</span>
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>dots = tyre compound · pit laps excluded</span>
-            </div>
-            <canvas ref={lapRef} height={280} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-          </div>
-          {lapTip && (
-            <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
-              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              {lapTip.entries.map((entry: any) => {
-                const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
-                return (
-                  <div key={entry.abbr} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
-                    <div>
-                      <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
-                        {entry.abbr}{entry.position !== null && <span style={{ color: '#52525B', fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
-                      </div>
-                      {entry.lap_time_ms === null
-                        ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
-                        : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
-                      }
-                      {entry.compound && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
-                          {entry.tyre_changed && <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, padding: '1px 4px', borderRadius: '4px', background: compCol + '33', color: '#E8002D' }}>PIT</span>}
+              {lapTip && (
+                <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
+                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {lapTip.entries.map((entry: any) => {
+                    const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
+                    return (
+                      <div key={entry.abbr} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
+                        <div>
+                          <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
+                            {entry.abbr}{entry.position !== null && <span style={{ color: TEXT_DIM, fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
+                          </div>
+                          {entry.lap_time_ms === null
+                            ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
+                            : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
+                          }
+                          {entry.compound && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
+                              {entry.tyre_changed && <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, padding: '1px 4px', borderRadius: '4px', background: compCol + '33', color: '#E8002D' }}>PIT</span>}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    )
+                  })}
+                </TooltipCard>
+              )}
+
+              <div ref={gapCardRef}>
+                <Card style={{ overflow: 'hidden', padding: 0 }}>
+                  <div style={{ padding: '18px 20px 8px' }}>
+                    <SectionTitle title={`Gap to Leader${leaderboard[0] ? ` (${leaderboard[0].abbreviation})` : ''}`} subtitle="Seconds behind race leader · pit laps excluded · capped at 60s" />
+                  </div>
+                  <canvas ref={gapRef} height={220} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                </Card>
+              </div>
+              {gapTip && (
+                <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
+                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {gapTip.entries.map((e: any) => (
+                    <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
+                        <div style={{ fontSize: '14px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.1 }}>
+                          {e.gap_s === null ? '—' : e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </TooltipCard>
+              )}
+
+              <div ref={posCardRef}>
+                <Card style={{ overflow: 'hidden', padding: 0 }}>
+                  <div style={{ padding: '18px 20px 8px' }}>
+                    <SectionTitle title="Position Changes" subtitle="Full field · selected drivers highlighted" />
+                  </div>
+                  <canvas ref={posRef} height={250} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                </Card>
+              </div>
+              {posTip && (
+                <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
+                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {posTip.entries.map((e: any) => (
+                    <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
+                        <div style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </TooltipCard>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {overallFastest && (
+                <Card style={{ padding: '18px 20px' }}>
+                  <SectionTitle title="Fastest Lap" subtitle="Session benchmark" />
+                  <div style={{ marginTop: '14px', padding: '18px', borderRadius: '20px', background: 'linear-gradient(180deg, #16243D 0%, #101A2D 100%)', color: '#fff', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', fontFamily: 'monospace', letterSpacing: '0.08em', color: '#' + overallFastest.team_colour }}>{overallFastest.abbreviation}</div>
+                        <div style={{ fontSize: '40px', lineHeight: 1.02, fontWeight: 900, letterSpacing: '-0.05em', marginTop: '8px' }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
+                      </div>
+                      <div style={{ padding: '6px 10px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', fontSize: '11px', fontWeight: 700, color: '#B7C4DD' }}>LAP {overallFastest.lap_number}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '14px', marginTop: '14px', flexWrap: 'wrap', fontSize: '11px', color: '#B7C4DD' }}>
+                      <span>{overallFastest.team_name}</span>
+                      {overallFastest.compound && <span style={{ color: COMPOUND_COLOUR[overallFastest.compound] ?? '#B7C4DD' }}>● {overallFastest.compound}</span>}
+                      {overallFastest.position_on_lap !== null && <span>P{overallFastest.position_on_lap} at the time</span>}
                     </div>
                   </div>
-                )
-              })}
-            </TooltipCard>
-          )}
+                </Card>
+              )}
 
-          {/* ── GAP TO LEADER ──────────────────────────────────────── */}
-          <div ref={gapCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>GAP TO LEADER</span>
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>seconds behind race leader · pit laps excluded · capped 60s</span>
-            </div>
-            <canvas ref={gapRef} height={200} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-          </div>
-          {gapTip && (
-            <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
-              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              {gapTip.entries.map((e: any) => (
-                <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                    <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>
-                      {e.gap_s === null ? '—' : e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`}
-                    </div>
+              {top5Fastest.length > 0 && (
+                <Card style={{ padding: '18px 20px' }}>
+                  <SectionTitle title="Top 5 Laps" subtitle="Fastest non-pit laps in the session" />
+                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {top5Fastest.map((fl, i) => {
+                      const colour = '#' + fl.team_colour
+                      return (
+                        <div key={fl.driver_number + '-' + fl.lap_number} style={{ display: 'grid', gridTemplateColumns: '26px 44px 1fr auto', gap: '10px', alignItems: 'center', padding: '12px 14px', background: i === 0 ? '#FFF4F5' : '#F8FBFF', border: `1px solid ${i === 0 ? '#F3D2D8' : BORDER}`, borderRadius: '14px' }}>
+                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: TEXT_DIM }}>P{i + 1}</span>
+                          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: colour, fontWeight: 800 }}>{fl.abbreviation}</span>
+                          <div style={{ fontSize: '11px', color: TEXT_MID }}>
+                            Lap {fl.lap_number}
+                            {fl.compound ? <span style={{ marginLeft: '8px', color: COMPOUND_COLOUR[fl.compound] ?? TEXT_DIM }}>● {fl.compound}</span> : null}
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '18px', fontFamily: 'monospace', color: i === 0 ? '#CC3648' : TEXT_DARK, fontWeight: 800 }}>{formatLapTime(fl.lap_time_ms)}</div>
+                            {i > 0 && <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#CC3648' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</div>}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
-              ))}
-            </TooltipCard>
-          )}
+                </Card>
+              )}
 
-          {/* ── POSITION CHANGES ───────────────────────────────────── */}
-          <div ref={posCardRef} style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ padding: '10px 16px 4px' }}>
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em' }}>POSITION CHANGES</span>
-              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', marginLeft: '12px' }}>full field · selected drivers highlighted</span>
-            </div>
-            <canvas ref={posRef} height={240} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-          </div>
-          {posTip && (
-            <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
-              <div style={{ fontSize: '10px', color: '#52525B', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              {posTip.entries.map((e: any) => (
-                <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                    <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
+              {leaderboard.length > 0 && (
+                <Card style={{ padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
+                    <SectionTitle title="Race Order" subtitle={hovLap ? `Lap ${hovLap}` : `Final classification · lap ${maxLap}`} />
                   </div>
-                </div>
-              ))}
-            </TooltipCard>
-          )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {leaderboard.map((d) => {
+                      const colour = '#' + d.team_colour
+                      const isSel = selected.includes(d.driver_number)
+                      const isLeader = d.position === 1
+                      return (
+                        <div key={d.driver_number} style={{ display: 'grid', gridTemplateColumns: '24px 8px 36px 1fr auto', gap: '10px', alignItems: 'center', padding: '9px 10px', borderRadius: '12px', background: isSel ? `${colour}10` : '#FAFCFF', border: `1px solid ${isSel ? `${colour}30` : BORDER}` }}>
+                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700, textAlign: 'right' }}>{d.position}</span>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
+                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: isSel ? colour : TEXT_MID, fontWeight: 800 }}>{d.abbreviation}</span>
+                          <div style={{ height: '5px', background: '#E7EEF8', borderRadius: '999px', overflow: 'hidden' }}>
+                            {d.gap !== null && d.gap > 0 && <div style={{ width: `${Math.min(100, (d.gap / 60) * 100)}%`, height: '100%', background: colour, borderRadius: '999px' }} />}
+                          </div>
+                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700 }}>{isLeader ? 'LEADER' : d.gap !== null ? `+${d.gap.toFixed(1)}s` : '—'}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
 
           {/* ── PIT STOP ANALYSIS ──────────────────────────────────── */}
           {selectedUndercut.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>PIT STOP ANALYSIS — position before vs 3 laps after pit</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <Card style={{ padding: '18px 20px' }}>
+              <SectionTitle title="Pit Stop Analysis" subtitle="Position before pit versus three laps after rejoining" />
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {selectedUndercut.map((u, i) => {
                   const colour = teamColour(u.team_colour, u.team_name)
                   const vs = VERDICT_STYLE[u.verdict]
@@ -787,23 +825,23 @@ export default function RaceAnalysis({
                   const compOutCol = COMPOUND_COLOUR[u.compound_out ?? ''] ?? '#666'
                   const posGain = u.pos_gain ?? 0
                   return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#0D0D0D', borderRadius: '8px', border: '1px solid #1A1A1A' }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#F9FBFF', borderRadius: '14px', border: `1px solid ${BORDER}` }}>
                       <div style={{ width: '3px', height: '52px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                           <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{u.abbreviation}</span>
-                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>Pit lap {u.pit_lap}</span>
+                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: TEXT_DIM }}>Pit lap {u.pit_lap}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
                             <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compInCol }}>● {u.compound_in?.slice(0,1) ?? '?'}</span>
-                            <span style={{ fontSize: '9px', color: '#3F3F46' }}>→</span>
+                            <span style={{ fontSize: '9px', color: TEXT_DIM }}>→</span>
                             <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compOutCol }}>● {u.compound_out?.slice(0,1) ?? '?'}</span>
-                            {u.tyre_life_laps !== null && <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace' }}>({u.tyre_life_laps}L in)</span>}
+                            {u.tyre_life_laps !== null && <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'monospace' }}>({u.tyre_life_laps}L in)</span>}
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#A1A1AA' }}>P{u.pos_before ?? '?'}</span>
-                          <span style={{ fontSize: '10px', color: '#3F3F46' }}>→</span>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>P{u.pos_after ?? '?'}</span>
+                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: TEXT_MID }}>P{u.pos_before ?? '?'}</span>
+                          <span style={{ fontSize: '10px', color: TEXT_DIM }}>→</span>
+                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700 }}>P{u.pos_after ?? '?'}</span>
                           {u.pos_before !== null && u.pos_after !== null && (
                             <span style={{ fontSize: '11px', fontFamily: 'monospace', color: posGain > 0 ? '#2CF4C5' : posGain < 0 ? '#E8002D' : '#71717A', fontWeight: 700 }}>
                               {posGain > 0 ? `+${posGain}` : posGain < 0 ? `${posGain}` : '±0'}
@@ -818,40 +856,40 @@ export default function RaceAnalysis({
                   )
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* ── STINT PACE ─────────────────────────────────────────── */}
           {selectedStints.length > 0 && (
-            <div style={{ background: '#111111', border: '1px solid #2A2A2A', borderRadius: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#52525B', letterSpacing: '0.12em', marginBottom: '12px' }}>STINT PACE — clean laps only · deg = ms lost per lap</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <Card style={{ padding: '18px 20px' }}>
+              <SectionTitle title="Stint Pace" subtitle="Clean laps only · degradation shown as milliseconds lost per lap" />
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {selectedStints.map((s, i) => {
                   const colour     = teamColour(s.team_colour, s.team_name)
                   const degVal     = parseFloat(s.deg_ms_per_lap)
                   const degColour  = degVal > 100 ? '#E8002D' : degVal > 30 ? '#FFD700' : '#2CF4C5'
                   const compColour = COMPOUND_COLOUR[s.compound] ?? '#666666'
                   return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#0D0D0D', borderRadius: '8px', border: '1px solid #1A1A1A' }}>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#F9FBFF', borderRadius: '14px', border: `1px solid ${BORDER}` }}>
                       <div style={{ width: '3px', height: '44px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
                           <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{s.abbreviation}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#3F3F46' }}>Stint {s.stint}</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: TEXT_DIM }}>Stint {s.stint}</span>
                           <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: compColour + '22', color: compColour, fontFamily: 'monospace', fontWeight: 700 }}>{s.compound}</span>
-                          <span style={{ fontSize: '9px', color: '#3F3F46', fontFamily: 'monospace', marginLeft: 'auto' }}>L{s.start_lap}–{s.end_lap} · {s.clean_laps} laps</span>
+                          <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'monospace', marginLeft: 'auto' }}>L{s.start_lap}–{s.end_lap} · {s.clean_laps} laps</span>
                         </div>
                         <div style={{ display: 'flex', gap: '20px', alignItems: 'baseline' }}>
-                          <span style={{ fontSize: '15px', fontFamily: 'monospace', color: '#fff', fontWeight: 700 }}>{formatLapTime(parseFloat(s.avg_ms))}</span>
+                          <span style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700 }}>{formatLapTime(parseFloat(s.avg_ms))}</span>
                           <span style={{ fontSize: '10px', fontFamily: 'monospace', color: degColour }}>{degVal >= 0 ? '+' : ''}{degVal.toFixed(0)} ms/lap</span>
-                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46' }}>best {formatLapTime(s.best_ms)}</span>
+                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: TEXT_DIM }}>best {formatLapTime(s.best_ms)}</span>
                         </div>
                       </div>
                     </div>
                   )
                 })}
               </div>
-            </div>
+            </Card>
           )}
         </>
       )}

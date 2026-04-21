@@ -1,201 +1,468 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Activity, ChevronRight } from 'lucide-react'
+import { Activity, ChevronRight, Gauge, Network, Clock } from 'lucide-react'
 import type { Session } from '@/types/f1'
 
 type Props = {
   initialSessions: Session[]
 }
 
+const C = {
+  bg: '#080A0E',
+  surface: '#0D1117',
+  surfaceHover: '#131924',
+  border: '#1A2030',
+  borderMid: '#242D3E',
+  borderLight: '#2E3A52',
+  textDim: '#364155',
+  textMid: '#5A6A82',
+  textSub: '#8A9BB5',
+  textPrime: '#C8D8F0',
+  textBright: '#E8F0FF',
+  red: '#E8002D',
+  redHover: '#ff0a3b',
+  gold: '#FFD700',
+} as const
+
 export default function TelemetryLandingClient({ initialSessions }: Props) {
   const router = useRouter()
-  const [sessions] = useState<Session[]>(initialSessions)
   const [selectedYear, setSelectedYear] = useState<number | null>(initialSessions[0]?.year ?? null)
-  const [selectedGp, setSelectedGp] = useState<string>(initialSessions[0]?.gp_name ?? '')
 
   const years = useMemo(
-    () => Array.from(new Set(sessions.map(session => session.year))).sort((a, b) => b - a),
-    [sessions],
+    () => Array.from(new Set(initialSessions.map(s => s.year))).sort((a, b) => b - a),
+    [initialSessions],
   )
 
-  const gpOptions = useMemo(
-    () => Array.from(new Set(
-      sessions
-        .filter(session => selectedYear == null || session.year === selectedYear)
-        .map(session => session.gp_name),
-    )),
-    [sessions, selectedYear],
-  )
+  const gpsForYear = useMemo(() => {
+    if (!selectedYear) return []
+    return initialSessions
+      .filter(s => s.year === selectedYear)
+      .sort((a, b) => new Date(a.date_start ?? 0).getTime() - new Date(b.date_start ?? 0).getTime())
+  }, [initialSessions, selectedYear])
 
-  const activeGp = useMemo(
-    () => (selectedGp && gpOptions.includes(selectedGp) ? selectedGp : (gpOptions[0] ?? '')),
-    [gpOptions, selectedGp],
-  )
+  const recentSessions = useMemo(() => initialSessions.slice(0, 4), [initialSessions])
 
-  useEffect(() => {
-    if (!activeGp) return
-    if (selectedGp === activeGp) return
-    setSelectedGp(activeGp)
-  }, [activeGp, selectedGp])
-
-  const matchingSession = useMemo(
-    () => sessions.find(session => session.year === selectedYear && session.gp_name === activeGp) ?? null,
-    [activeGp, selectedYear, sessions],
-  )
-
-  const recentSessions = useMemo(() => sessions.slice(0, 6), [sessions])
-
-  const openTelemetry = (sessionKey: number) => {
+  const handleLaunch = (sessionKey: number) => {
     router.push(`/sessions/${sessionKey}/telemetry`)
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '960px', margin: '0 auto' }}>
-      <section className="panel fade-up" style={{ padding: '22px', overflow: 'visible' }}>
-        <div className="eyebrow" style={{ marginBottom: '10px' }}>Direct Access</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#E8002D18', border: '1px solid #E8002D33', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Activity size={18} style={{ color: '#E8002D' }} />
-          </div>
-          <h1 className="page-title" style={{ margin: 0 }}>Telemetry</h1>
-        </div>
-        <p className="page-subtitle" style={{ margin: 0 }}>
-          Pick a year and Grand Prix, then jump straight into qualifying speed traces without going through Sessions first.
-        </p>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '18px' }}>
-          <div className="panel-soft" style={{ padding: '14px', overflow: 'visible' }}>
-            <div className="eyebrow" style={{ marginBottom: '8px' }}>Year</div>
-            <select
-              value={selectedYear ?? ''}
-              onChange={e => setSelectedYear(Number(e.target.value))}
-              style={{
-                width: '100%',
-                background: 'rgba(7,17,27,0.72)',
-                border: '1px solid rgba(152, 181, 211, 0.16)',
-                borderRadius: '14px',
-                color: '#fff',
-                padding: '12px 14px',
-                fontSize: '14px',
-              }}
-            >
-              {years.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
-          </div>
+        .tl-root {
+          background: ${C.bg};
+          min-height: 100vh;
+          font-family: 'JetBrains Mono', monospace;
+          color: ${C.textPrime};
+          padding: 80px 24px;
+        }
 
-          <div className="panel-soft" style={{ padding: '14px', overflow: 'visible' }}>
-            <div className="eyebrow" style={{ marginBottom: '8px' }}>Grand Prix</div>
-            <select
-              value={activeGp}
-              onChange={e => setSelectedGp(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'rgba(7,17,27,0.72)',
-                border: '1px solid rgba(152, 181, 211, 0.16)',
-                borderRadius: '14px',
-                color: '#fff',
-                padding: '12px 14px',
-                fontSize: '14px',
-              }}
-            >
-              {gpOptions.map(gp => (
-                <option key={gp} value={gp}>{gp.replace(' Grand Prix', '')}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        .tl-container {
+          max-width: 1200px;
+          margin: 0 auto;
+        }
 
-        <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
-          <button
-            type="button"
-            disabled={!matchingSession}
-            onClick={() => matchingSession && openTelemetry(matchingSession.session_key)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '10px',
-              minWidth: '190px',
-              border: matchingSession ? '1px solid rgba(242, 200, 121, 0.28)' : '1px solid rgba(152, 181, 211, 0.1)',
-              borderRadius: '999px',
-              background: matchingSession
-                ? 'linear-gradient(180deg, rgba(23, 40, 58, 0.96) 0%, rgba(14, 25, 37, 0.96) 100%)'
-                : 'rgba(255,255,255,0.04)',
-              boxShadow: matchingSession ? '0 10px 24px rgba(0, 0, 0, 0.22)' : 'none',
-              color: matchingSession ? '#F4F7FB' : '#718397',
-              padding: '10px 14px',
-              fontWeight: 600,
-              fontSize: '12px',
-              fontFamily: 'JetBrains Mono, monospace',
-              cursor: matchingSession ? 'pointer' : 'not-allowed',
-            }}
-          >
-            <span>Open Telemetry</span>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '24px',
-              height: '24px',
-              borderRadius: '999px',
-              background: matchingSession ? 'rgba(242, 200, 121, 0.14)' : 'rgba(255,255,255,0.05)',
-              color: matchingSession ? '#f2c879' : '#5e7289',
-            }}>
-              <ChevronRight size={14} />
-            </span>
-          </button>
-          {matchingSession && (
-            <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px' }}>
-              <div className="eyebrow" style={{ marginBottom: '6px' }}>Session</div>
-              <div style={{ fontSize: '16px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, color: '#fff' }}>
-                {matchingSession.gp_name.replace(' Grand Prix', '')} {matchingSession.year} Q
+        /* Hero */
+        .tl-hero {
+          margin-bottom: 60px;
+        }
+
+        .tl-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+
+        .tl-eyebrow-line {
+          width: 24px;
+          height: 2px;
+          background: ${C.red};
+        }
+
+        .tl-eyebrow-text {
+          font-size: 11px;
+          letter-spacing: 0.24em;
+          color: ${C.textDim};
+          text-transform: uppercase;
+          font-weight: 600;
+        }
+
+        .tl-title {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 84px;
+          font-weight: 800;
+          color: ${C.textBright};
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          line-height: 0.9;
+          margin: 0 0 16px 0;
+        }
+
+        .tl-title em {
+          font-style: normal;
+          color: ${C.red};
+        }
+
+        .tl-subtitle {
+          font-size: 14px;
+          color: ${C.textMid};
+          max-width: 600px;
+          line-height: 1.6;
+          letter-spacing: 0.02em;
+        }
+
+        /* Stats Row */
+        .tl-stats-row {
+          display: flex;
+          gap: 32px;
+          margin-top: 48px;
+          padding-top: 32px;
+          border-top: 1px solid ${C.border};
+        }
+
+        .tl-stat-box {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .tl-stat-label {
+          font-size: 9px;
+          letter-spacing: 0.16em;
+          color: ${C.textDim};
+          text-transform: uppercase;
+        }
+
+        .tl-stat-value {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 32px;
+          font-weight: 700;
+          color: ${C.textPrime};
+          line-height: 1;
+        }
+
+        .tl-stat-value span {
+          font-size: 16px;
+          color: ${C.textMid};
+          margin-left: 4px;
+        }
+
+        /* Main Grid */
+        .tl-main-grid {
+          display: grid;
+          grid-template-columns: 3fr 1.2fr;
+          gap: 40px;
+        }
+
+        @media (max-width: 900px) {
+          .tl-main-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Selector Panel */
+        .tl-panel {
+          background: ${C.surface};
+          border: 1px solid ${C.border};
+          border-radius: 12px;
+          padding: 32px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .tl-panel-title {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 24px;
+          font-weight: 700;
+          color: ${C.textBright};
+          text-transform: uppercase;
+          margin-bottom: 24px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        /* Years */
+        .tl-year-bar {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 32px;
+          padding-bottom: 24px;
+          border-bottom: 1px solid ${C.border};
+        }
+
+        .tl-year-btn {
+          font-size: 16px;
+          font-family: 'Barlow Condensed', sans-serif;
+          font-weight: 700;
+          color: ${C.textMid};
+          padding: 8px 20px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: 1px solid transparent;
+          background: transparent;
+        }
+
+        .tl-year-btn:hover {
+          color: ${C.textPrime};
+          background: ${C.surfaceHover};
+        }
+
+        .tl-year-btn.active {
+          color: ${C.textBright};
+          background: ${C.border};
+          border-color: ${C.borderMid};
+        }
+
+        /* GPs */
+        .tl-gp-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap: 16px;
+        }
+
+        .tl-gp-btn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          background: ${C.bg};
+          border: 1px solid ${C.border};
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: left;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .tl-gp-btn:hover {
+          border-color: ${C.borderMid};
+          background: ${C.surfaceHover};
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        .tl-gp-indicator {
+          width: 3px;
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          background: ${C.red};
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+
+        .tl-gp-btn:hover .tl-gp-indicator {
+          opacity: 1;
+        }
+
+        .tl-gp-name {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 20px;
+          font-weight: 700;
+          color: ${C.textPrime};
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+
+        .tl-gp-meta {
+          font-size: 10px;
+          color: ${C.textDim};
+          letter-spacing: 0.1em;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .tl-gp-launch {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: ${C.border};
+          color: ${C.textMid};
+          transition: all 0.2s;
+        }
+
+        .tl-gp-btn:hover .tl-gp-launch {
+          background: ${C.red};
+          color: ${C.textBright};
+          transform: scale(1.1);
+        }
+
+        /* Recent */
+        .tl-recent {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .tl-recent-card {
+          padding: 20px;
+          background: ${C.surface};
+          border: 1px solid ${C.border};
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .tl-recent-card:hover {
+          border-color: ${C.borderMid};
+          background: ${C.surfaceHover};
+        }
+
+        .tl-recent-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
+
+        .tl-recent-tag {
+          font-size: 8px;
+          padding: 4px 8px;
+          background: ${C.red}15;
+          color: ${C.red};
+          border-radius: 4px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          font-weight: 600;
+        }
+
+        .tl-recent-title {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 24px;
+          font-weight: 700;
+          color: ${C.textBright};
+          text-transform: uppercase;
+          line-height: 1;
+        }
+      `}</style>
+
+      <div className="tl-root">
+        <div className="tl-container">
+
+          {/* Hero Section */}
+          <header className="tl-hero">
+            <div className="tl-eyebrow">
+              <div className="tl-eyebrow-line" />
+              <span className="tl-eyebrow-text">Data Architecture</span>
+            </div>
+
+            <h1 className="tl-title">
+              Telemetry <em>Engine</em>
+            </h1>
+
+            <p className="tl-subtitle">
+              High-fidelity velocity vectors, multispectral pedal application, and dynamic gear shift mapping. Access raw telemetry sequences mapped to the 0.001s for every qualifying session across the hybrid era.
+            </p>
+
+            <div className="tl-stats-row">
+              <div className="tl-stat-box">
+                <div className="tl-stat-label">Indexed Sessions</div>
+                <div className="tl-stat-value">{initialSessions.length}</div>
+              </div>
+              <div className="tl-stat-box">
+                <div className="tl-stat-label">Refresh Rate</div>
+                <div className="tl-stat-value">60<span>Hz</span></div>
+              </div>
+              <div className="tl-stat-box">
+                <div className="tl-stat-label">Latency</div>
+                <div className="tl-stat-value">&lt;20<span>ms</span></div>
               </div>
             </div>
-          )}
-        </div>
-      </section>
+          </header>
 
-      <section className="panel-soft fade-up-delay-1" style={{ padding: '16px' }}>
-        <div className="eyebrow" style={{ marginBottom: '10px' }}>Recent Telemetry Sessions</div>
-        <div style={{ display: 'grid', gap: '10px' }}>
-          {recentSessions.map(session => (
-            <button
-              key={session.session_key}
-              type="button"
-              onClick={() => openTelemetry(session.session_key)}
-              className="interactive-card"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '18px',
-                border: '1px solid rgba(152, 181, 211, 0.1)',
-                background: 'rgba(10,20,31,0.76)',
-                color: '#fff',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '18px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
-                  {session.gp_name.replace(' Grand Prix', '')}
-                </div>
-                <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#71717A' }}>
-                  {session.year} · Qualifying
-                </div>
+          {/* Main Layout */}
+          <div className="tl-main-grid">
+
+            {/* Left: Interactive Browser */}
+            <div className="tl-panel">
+              <h2 className="tl-panel-title">
+                <Activity size={24} style={{ color: C.red }} />
+                Session Explorer
+              </h2>
+
+              <div className="tl-year-bar">
+                {years.map(y => (
+                  <button
+                    key={y}
+                    className={`tl-year-btn ${selectedYear === y ? 'active' : ''}`}
+                    onClick={() => setSelectedYear(y)}
+                  >
+                    {y}
+                  </button>
+                ))}
               </div>
-              <ChevronRight size={16} style={{ color: '#9fb2c6' }} />
-            </button>
-          ))}
+
+              <div className="tl-gp-grid">
+                {gpsForYear.map(s => (
+                  <button
+                    key={s.session_key}
+                    className="tl-gp-btn"
+                    onClick={() => handleLaunch(s.session_key)}
+                  >
+                    <div className="tl-gp-indicator" />
+                    <div>
+                      <div className="tl-gp-name">{s.gp_name.replace(' Grand Prix', '')}</div>
+                      <div className="tl-gp-meta">
+                        <span>{s.year}</span>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: C.borderMid }} />
+                        <span>QUALIFYING</span>
+                      </div>
+                    </div>
+                    <div className="tl-gp-launch">
+                      <ChevronRight size={16} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: Shortcuts / Recent */}
+            <div>
+              <h2 className="tl-panel-title" style={{ fontSize: '18px', marginBottom: '20px' }}>
+                <Clock size={16} style={{ color: C.textMid }} />
+                Recent Snapshots
+              </h2>
+
+              <div className="tl-recent">
+                {recentSessions.map((s, i) => (
+                  <div key={s.session_key} className="tl-recent-card" onClick={() => handleLaunch(s.session_key)}>
+                    <div className="tl-recent-header">
+                      <div className="tl-recent-title">{s.gp_name.replace(' Grand Prix', '')}</div>
+                      {i === 0 && <span className="tl-recent-tag">LATEST</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ padding: '6px 10px', background: C.bg, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, border: `1px solid ${C.border}` }}>
+                        <Gauge size={12} style={{ color: C.textDim }} />
+                        <span style={{ fontSize: 9, color: C.textMid }}>QUALIFYING</span>
+                      </div>
+                      <div style={{ padding: '6px 10px', background: C.bg, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, border: `1px solid ${C.border}` }}>
+                        <Network size={12} style={{ color: C.textDim }} />
+                        <span style={{ fontSize: 9, color: C.textMid }}>{s.year}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </>
   )
 }

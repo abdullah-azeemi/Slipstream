@@ -101,6 +101,7 @@ export interface TelemetrySample {
   gear:         number | null   // 1–8
   drs:          number | null   // 0/8/10/12/14 — >8 means DRS open
   distance_m:   number | null   // metres into lap — used for spatial alignment
+  driver_number?: number        // added for multi-driver comparison
   x_pos:        number | null   // track map X coordinate
   y_pos:        number | null   // track map Y coordinate
   distance_pct?: number         // computed by API: 0–100

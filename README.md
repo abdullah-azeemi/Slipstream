@@ -164,7 +164,15 @@ make up
 
 Starts TimescaleDB, Redis, Kafka, and MLflow. Wait ~15 seconds for TimescaleDB to initialise.
 
-### 3. Start the backend
+### 3. Setup Database
+
+```bash
+make migrate
+```
+
+This creates the necessary tables in your database. **This is required on first run or after a `make reset`.**
+
+### 4. Start the backend
 
 ```bash
 make backend
@@ -172,7 +180,7 @@ make backend
 # Health check: curl http://localhost:8000/health
 ```
 
-### 4. Start the frontend
+### 5. Start the frontend
 
 ```bash
 cd apps/frontend
@@ -187,7 +195,15 @@ Or from the repo root:
 make frontend
 ```
 
-### 5. Ingest your first session
+### 6. Ingest initial data (Optional)
+
+To see the app in action immediately with sample data (2024 British GP):
+
+```bash
+make seed
+```
+
+Or ingest any specific session:
 
 ```bash
 # 2026 Australian GP — qualifying (includes telemetry for speed traces)
@@ -209,8 +225,7 @@ For `Q1/Q2/Q3` telemetry comparisons, `lap_times.quali_segment` must exist and b
 If you are upgrading an existing database, run the migration first:
 
 ```bash
-cd apps/backend
-UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head
+make migrate
 ```
 
 Then re-ingest the qualifying sessions you want to compare so both `lap_times` and `telemetry` are aligned to the stored segment metadata.
@@ -314,9 +329,10 @@ GET /api/v1/sessions/:key/analysis/fp-sectors
 Before publishing publicly, verify the quickstart on a clean machine:
 
 - `make up`
+- `make migrate`
+- `make seed`
 - `make backend`
 - `make frontend`
-- `make seed`
 
 That confirms infrastructure, ingestion, API routes, and the UI all work from the documented path.
 
@@ -326,7 +342,7 @@ When shipping qualifying telemetry changes to Railway/Vercel:
 
 1. Deploy backend code that matches the frontend segment logic.
 2. Run DB migrations before re-ingesting:
-   `cd apps/backend && UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head`
+   `make migrate`
 3. Re-ingest qualifying sessions that need `Q1/Q2/Q3` comparison so `lap_times.quali_segment` is populated.
 4. Verify segment data directly:
    `GET /api/v1/sessions/:key/analysis/quali-segments`

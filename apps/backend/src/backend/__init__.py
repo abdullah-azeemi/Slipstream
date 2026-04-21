@@ -95,8 +95,8 @@ def create_app() -> Flask:
         log.exception("unhandled_exception", error=str(e))
         return {"error": "Internal server error", "code": 500}, 500
 
-    if settings.auto_ingest_enabled and not settings.testing and not settings.debug:
+    if settings.auto_ingest_enabled and not settings.testing and not settings.debug and not app.debug:
         _start_auto_ingest_scheduler()
 
-    log.info("app.created", debug=settings.debug)
+    log.info("app.created", debug=settings.debug or app.debug)
     return app
