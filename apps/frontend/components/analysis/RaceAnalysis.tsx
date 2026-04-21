@@ -113,7 +113,6 @@ const VERDICT_STYLE = {
 const PAD = { top: 24, right: 110, bottom: 44, left: 72 }
 
 const SURFACE = 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)'
-const SURFACE_ALT = '#FFFFFF'
 const BORDER = 'rgba(204,218,236,0.95)'
 const TEXT_DARK = '#14233C'
 

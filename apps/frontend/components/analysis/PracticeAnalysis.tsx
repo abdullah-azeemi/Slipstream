@@ -68,12 +68,9 @@ type DriverInfo = {
 
 // ── Constants (Premium Dashboard Palette) ───────────────────────────────────
 
-const CHART_BG   = '#FFFFFF'
-const AXIS_COLOR = '#F0F4FA'
+const CHART_BG = '#FFFFFF'
 const TEXT_DIM   = '#7D8BA2'
-const TEXT_MID   = '#56657C'
 const TEXT_DARK  = '#13233D'
-const CROSSHAIR  = 'rgba(19,35,61,0.08)'
 
 const COMPOUND_COLOUR: Record<string, string> = {
   SOFT: '#E8002D', MEDIUM: '#FFD700', HARD: '#FFFFFF',
@@ -118,23 +115,18 @@ export default function PracticeAnalysis({
   session?: import('@/types/f1').Session | null
   drivers: DriverInfo[]
 }) {
-  const [selected,      setSelected]      = useState<number[]>([])
-  const [scatter,       setScatter]       = useState<ScatterLap[]>([])
+  const [selected, setSelected] = useState<number[]>([])
+  const [scatter, setScatter] = useState<ScatterLap[]>([])
   const [compoundDelta, setCompoundDelta] = useState<CompoundDeltaDriver[]>([])
-  const [tyreDeg,       setTyreDeg]       = useState<Record<string, DegStint[]>>({})
-  const [compounds,     setCompounds]     = useState<CompoundTeam[]>([])
-  const [sectors,       setSectors]       = useState<SectorDriver[]>([])
-  const [loading,       setLoading]       = useState(false)
-  const [showOutliers,  setShowOutliers]  = useState(false)
+  const [tyreDeg, setTyreDeg] = useState<Record<string, DegStint[]>>({})
+  const [compounds, setCompounds] = useState<CompoundTeam[]>([])
+  const [sectors, setSectors] = useState<SectorDriver[]>([])
+  const [loading, setLoading] = useState(false)
   const [activeDegCmp,  setActiveDegCmp]  = useState<string>('HARD')
-
-  // Hover
   const [scatterTip, setScatterTip] = useState<{ x: number; y: number; lap: ScatterLap; gapMs: number } | null>(null)
-  const [degHovIdx,  setDegHovIdx]  = useState<number | null>(null)
-  const [degTip,     setDegTip]     = useState<{ x: number; y: number; entries: { abbr: string; colour: string; delta_ms: number }[] } | null>(null)
 
-  const scatterRef   = useRef<HTMLCanvasElement | null>(null)
-  const degRef       = useRef<HTMLCanvasElement | null>(null)
+  const scatterRef = useRef<HTMLCanvasElement | null>(null)
+  const degRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const scatterGeomRef = useRef<{
@@ -142,18 +134,12 @@ export default function PracticeAnalysis({
     xMin: number; xMax: number; yMax: number; W: number; H: number
   } | null>(null)
 
-  const degGeomRef = useRef<{
-    stints: DegStint[]
-    maxLapInStint: number
-    yMin: number; yMax: number
-    W: number; H: number
-  } | null>(null)
-
   // ── Init ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (allDrivers.length >= 2)
+    if (allDrivers.length >= 2 && selected.length === 0)
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.length])
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
@@ -192,7 +178,7 @@ export default function PracticeAnalysis({
     const target = selected[0]
     const driverLaps = scatter.filter(l => l.driver_number === target && !l.is_outlier)
     if (!driverLaps.length) return null
-    
+
     const bestLap = Math.min(...driverLaps.map(l => l.lap_time_ms))
     const comparison = compoundDelta.find(d => d.driver_number === target)
     const sectorInfo = sectors.find(d => d.driver_number === target)
@@ -219,16 +205,16 @@ export default function PracticeAnalysis({
     const H = 400
     const ctx = clearCanvas(canvas, W, H)
     const cW = W - PAD.left - PAD.right
-    const cH = H - PAD.top  - PAD.bottom
+    const cH = H - PAD.top - PAD.bottom
 
     const cleanLaps = scatter.filter(l => !l.is_outlier && l.lap_time_ms)
     if (!cleanLaps.length) return
     const sessionBest = Math.min(...cleanLaps.map(l => l.lap_time_ms))
 
     const visible = scatter
-      .filter(l => selected.includes(l.driver_number) && (showOutliers || !l.is_outlier))
+      .filter(l => selected.includes(l.driver_number) && !l.is_outlier)
       .map(l => ({ ...l, gap_ms: l.lap_time_ms - sessionBest }))
-      .sort((a,b) => a.lap_number - b.lap_number)
+      .sort((a, b) => a.lap_number - b.lap_number)
 
     if (!visible.length) return
 
@@ -239,7 +225,7 @@ export default function PracticeAnalysis({
     scatterGeomRef.current = { laps: visible, xMin, xMax, yMax, W, H }
 
     const toX = (lap: number) => PAD.left + ((lap - xMin) / Math.max(xMax - xMin, 1)) * cW
-    const toY = (gap: number) => PAD.top  + (Math.min(gap, yMax) / yMax) * cH
+    const toY = (gap: number) => PAD.top + (Math.min(gap, yMax) / yMax) * cH
 
     // Grid lines (horizontal)
     const gridVals = [0, 500, 1000, 2000, 3000].filter(g => g <= yMax)
@@ -255,7 +241,7 @@ export default function PracticeAnalysis({
     selected.forEach((dn, i) => {
       const driverLaps = visible.filter(l => l.driver_number === dn)
       if (driverLaps.length < 2) return
-      
+
       const colour = '#' + driverLaps[0].team_colour
       ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = i === 0 ? 3 : 1.5
       if (i > 0) ctx.setLineDash([5, 5])
@@ -270,7 +256,7 @@ export default function PracticeAnalysis({
 
       // Area fill for target driver
       if (i === 0) {
-        ctx.lineTo(toX(driverLaps[driverLaps.length-1].lap_number), toY(0))
+        ctx.lineTo(toX(driverLaps[driverLaps.length - 1].lap_number), toY(0))
         ctx.lineTo(toX(driverLaps[0].lap_number), toY(0))
         ctx.closePath()
         const grad = ctx.createLinearGradient(0, toY(0), 0, toY(yMax))
@@ -284,7 +270,7 @@ export default function PracticeAnalysis({
       const x = toX(l.lap_number); const y = toY(l.gap_ms)
       const col = COMPOUND_COLOUR[l.compound ?? ''] ?? '#555'
       const active = selected[0] === l.driver_number
-      
+
       ctx.beginPath(); ctx.arc(x, y, active ? 5 : 4, 0, Math.PI * 2)
       ctx.fillStyle = col; ctx.fill()
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
@@ -295,23 +281,23 @@ export default function PracticeAnalysis({
       }
     })
 
-  }, [scatter, selected, showOutliers])
+  }, [scatter, selected])
 
   const handleScatterMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const geom = scatterGeomRef.current
     if (!geom) return
-    const rect  = e.currentTarget.getBoundingClientRect()
-    const mx    = e.clientX - rect.left; const my    = e.clientY - rect.top
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = e.clientX - rect.left; const my = e.clientY - rect.top
     let nearest: (typeof geom.laps)[0] | null = null; let nearDist = 15
     geom.laps.forEach(l => {
       const x = (PAD.left + ((l.lap_number - geom.xMin) / Math.max(geom.xMax - geom.xMin, 1)) * (rect.width - PAD.left - PAD.right))
-      const y = (PAD.top  + (Math.min(l.gap_ms, geom.yMax) / geom.yMax) * (rect.height - PAD.top - PAD.bottom))
+      const y = (PAD.top + (Math.min(l.gap_ms, geom.yMax) / geom.yMax) * (rect.height - PAD.top - PAD.bottom))
       const dist = Math.hypot(mx - x, my - y)
       if (dist < nearDist) { nearDist = dist; nearest = l }
     })
     if (nearest) setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: nearest, gapMs: nearest.gap_ms })
     else setScatterTip(null)
-  }, [selected])
+  }, [])
 
   // ── Draw: Tyre Regression (Thermal Decay Style) ───────────────────────────
 
@@ -323,11 +309,11 @@ export default function PracticeAnalysis({
     const H = 240
     const ctx = clearCanvas(canvas, W, H)
     if (!stints.length) return
-    
+
     const maxLaps = Math.max(...stints.map(s => s.laps.length))
     const allDeltas = stints.flatMap(s => s.laps.map(l => l.delta_ms))
     const yMax = Math.max(...allDeltas, 1000)
-    
+
     const barW = (W - PAD.left - PAD.right) / maxLaps - 6
     const toY = (d: number) => H - PAD.bottom - (d / yMax) * (H - PAD.top - PAD.bottom)
 
@@ -338,16 +324,16 @@ export default function PracticeAnalysis({
         const x = PAD.left + (i * (barW + 6))
         const y = toY(l.delta_ms)
         const h = H - PAD.bottom - y
-        
+
         const grad = ctx.createLinearGradient(0, y, 0, H - PAD.bottom)
         grad.addColorStop(0, col); grad.addColorStop(1, col + '44')
-        
+
         ctx.fillStyle = grad
         ctx.beginPath(); ctx.roundRect(x, y, barW, h > 0 ? h : 2, 4); ctx.fill()
-        
+
         if (si === 0 && i === stint.laps.length - 1) {
           ctx.fillStyle = col; ctx.font = 'bold 10px Inter'; ctx.textAlign = 'center'
-          ctx.fillText(`${(l.delta_ms/1000).toFixed(2)}s`, x + barW/2, y - 8)
+          ctx.fillText(`${(l.delta_ms / 1000).toFixed(2)}s`, x + barW / 2, y - 8)
         }
       })
     })
@@ -364,14 +350,14 @@ export default function PracticeAnalysis({
 
   return (
     <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: '24px', fontFamily: 'Inter, sans-serif' }}>
-      
+
       {/* ── Dashboard Header ─────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <span style={{ 
-              background: '#13233D', color: '#fff', fontSize: '10px', padding: '4px 10px', 
-              borderRadius: '6px', fontWeight: 700, letterSpacing: '0.05em' 
+            <span style={{
+              background: '#13233D', color: '#fff', fontSize: '10px', padding: '4px 10px',
+              borderRadius: '6px', fontWeight: 700, letterSpacing: '0.05em'
             }}>
               {session?.session_type || 'FP'}
             </span>
@@ -414,7 +400,7 @@ export default function PracticeAnalysis({
 
       {/* ── Main Dashboard Grid ──────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '24px' }}>
-        
+
         {/* Left Col: Gap Analysis Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -434,7 +420,7 @@ export default function PracticeAnalysis({
               <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>LAP {scatterTip.lap.lap_number}</div>
               <div style={{ fontSize: '16px', fontWeight: 900, color: TEXT_DARK }}>{formatLapTime(scatterTip.lap.lap_time_ms)}</div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: scatterTip.gapMs < 10 ? '#10B981' : '#E8002D' }}>
-                {scatterTip.gapMs < 10 ? 'SESSION BEST' : `+${(scatterTip.gapMs/1000).toFixed(3)}s`}
+                {scatterTip.gapMs < 10 ? 'SESSION BEST' : `+${(scatterTip.gapMs / 1000).toFixed(3)}s`}
               </div>
             </Tooltip>
           )}
@@ -461,13 +447,13 @@ export default function PracticeAnalysis({
 
       {/* ── Bottom Grid ──────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
-        
+
         {/* Strategy Analysis */}
         <div style={{ background: '#13233D', border: '1px solid #1A2E4B', borderRadius: '24px', padding: '24px', color: '#fff', boxShadow: '0 8px 32px rgba(19,35,61,0.2)' }}>
           <h3 style={{ margin: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 800, color: '#D9E3EF' }}>Compound Strategy Analysis</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {compounds.slice(0, 4).map(team => {
-              const mainCmp = Object.keys(team.compounds).sort((a,b) => team.compounds[b].laps - team.compounds[a].laps)[0]
+              const mainCmp = Object.keys(team.compounds).sort((a, b) => team.compounds[b].laps - team.compounds[a].laps)[0]
               const data = team.compounds[mainCmp]
               return (
                 <div key={team.team_name} style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px' }}>
@@ -490,16 +476,16 @@ export default function PracticeAnalysis({
         {/* Tyre Degradation Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
-             <div style={{ display: 'flex', gap: '8px' }}>
-                {Object.keys(tyreDeg).map(c => (
-                  <button key={c} onClick={() => setActiveDegCmp(c)} style={{
-                    padding: '4px 12px', borderRadius: '20px', border: '1px solid #D9E3EF',
-                    background: activeDegCmp === c ? '#13233D' : '#fff', color: activeDegCmp === c ? '#fff' : TEXT_DIM,
-                    fontSize: '11px', fontWeight: 700, cursor: 'pointer'
-                  }}>{c}</button>
-                ))}
-             </div>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {Object.keys(tyreDeg).map(c => (
+                <button key={c} onClick={() => setActiveDegCmp(c)} style={{
+                  padding: '4px 12px', borderRadius: '20px', border: '1px solid #D9E3EF',
+                  background: activeDegCmp === c ? '#13233D' : '#fff', color: activeDegCmp === c ? '#fff' : TEXT_DIM,
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer'
+                }}>{c}</button>
+              ))}
+            </div>
           </div>
           <canvas ref={degRef} style={{ display: 'block', width: '100%', height: '240px' }} />
         </div>

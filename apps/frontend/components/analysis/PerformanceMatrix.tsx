@@ -30,8 +30,7 @@ export default function PerformanceMatrix({
   topSpeed,
   s1Best,
   s2Best,
-  s3Best,
-  accentColor
+  s3Best
 }: PerformanceMatrixProps) {
   const formatTime = (t: string | number) => typeof t === 'number' ? (t / 1000).toFixed(3) : t
 

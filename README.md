@@ -342,7 +342,7 @@ When shipping qualifying telemetry changes to Railway/Vercel:
 
 1. Deploy backend code that matches the frontend segment logic.
 2. Run DB migrations before re-ingesting:
-   `cd apps/backend && UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head`
+   `make migrate`
 3. Re-ingest qualifying sessions that need `Q1/Q2/Q3` comparison so `lap_times.quali_segment` is populated.
 4. Verify segment data directly:
    `GET /api/v1/sessions/:key/analysis/quali-segments`

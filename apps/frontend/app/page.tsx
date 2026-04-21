@@ -1,5 +1,7 @@
+'use client'
+
 import Link from 'next/link'
-import { ArrowRight, Zap, BarChart2, Brain, Globe, ChevronRight, Activity, Play } from 'lucide-react'
+import { Zap, Brain, Globe, Activity } from 'lucide-react'
 
 export default function LandingPage() {
   return (
@@ -26,30 +28,10 @@ export default function LandingPage() {
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            backgroundImage: `url('https://images.unsplash.com/photo-1728116693268-125c5d6ad9e2?q=80&w=2129&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D')`,
+            backgroundImage: `url('/LandingPage2.gif')`,
             backgroundSize: 'cover',
-            backgroundPosition: 'center 40%',
+            backgroundPosition: 'center',
           }} />
-
-          {/* Play Button Overlay */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(15, 23, 42, 0.05)',
-          }}>
-            <div style={{
-              width: 56, height: 56,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.3)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid rgba(255, 255, 255, 0.4)',
-              cursor: 'pointer',
-              transition: 'transform 200ms ease',
-            }} className="play-btn">
-              <Play size={24} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 3 }} />
-            </div>
-          </div>
         </div>
 
         {/* Hero Text Content */}
@@ -80,7 +62,7 @@ export default function LandingPage() {
             margin: '0 auto 32px',
           }}>
             Unlock elite-level race analytics. From real-time telemetry to
-            predictive race strategy, dominate the grid with the world's most
+            predictive race strategy, dominate the grid with the world&apos;s most
             advanced motorsport data archive.
           </p>
         </div>
@@ -169,10 +151,10 @@ export default function LandingPage() {
                 }}>Telemetry</span>
               </div>
               <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6, maxWidth: 320, marginBottom: 24 }}>
-                Live data streams from over 300 sensors per vehicle, processed with sub-millisecond latency for instant technical insight.
+                Distributed data streaming via Apache Kafka. Processed with sub-millisecond latency for instant technical insight from over 300 sensors.
               </p>
               <div style={{ display: 'flex', gap: 8 }}>
-                {['REAL-TIME', '2.4GB/S'].map(t => (
+                {['KAFKA-DRIVEN', '2.4GB/S', 'DIST-ALIGNED'].map(t => (
                   <span key={t} style={{
                     fontFamily: 'Space Grotesk, sans-serif', fontSize: 10,
                     padding: '6px 12px', borderRadius: 4,
@@ -214,9 +196,8 @@ export default function LandingPage() {
               }}>Strategy</span>
             </div>
             <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6, marginBottom: 32 }}>
-              Monte Carlo simulations run in the cloud to provide optimal pit-stop windows and tyre compound selections.
+              Monte Carlo simulations running on TimescaleDB hypertables to provide optimal pit-stop windows and compound degradation models.
             </p>
-            {/* Strategy Chart UI Placeholder */}
             <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', gap: 6, height: 100 }}>
               {[40, 60, 100, 80, 50].map((h, i) => (
                 <div key={i} style={{ flex: 1, height: `${h}%`, background: h === 100 ? '#E8002D' : '#FEE2E7', borderRadius: 4 }} />
@@ -238,10 +219,10 @@ export default function LandingPage() {
               <span style={{
                 fontFamily: 'Space Grotesk, sans-serif', fontSize: 11,
                 fontWeight: 800, letterSpacing: '0.12em', color: '#E8002D', textTransform: 'uppercase',
-              }}>Predictions</span>
+              }}>AutoML Inference</span>
             </div>
             <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6 }}>
-              Neural networks trained on 70 years of historical race data to predict overtaking probability and engine fatigue.
+              Neural networks and FLAML ensembles trained on 70 years of race data to predict overtaking probability and engine fatigue with SHAP interpretability.
             </p>
           </div>
 
@@ -258,9 +239,9 @@ export default function LandingPage() {
               <h3 style={{
                 fontFamily: 'Inter, sans-serif', fontSize: 18, fontWeight: 800,
                 color: '#FFFFFF', marginBottom: 12, textTransform: 'uppercase',
-              }}>Global Sync</h3>
+              }}>Ingestion Pipeline</h3>
               <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#94A3B8', lineHeight: 1.6 }}>
-                Connect your factory floor directly to the pit wall with our proprietary low-orbit satellite uplink.
+                Automated data ingestion from FastF1, OpenF1, and Jolpica. Zero-config synchronization between the track and your local archive.
               </p>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -269,14 +250,14 @@ export default function LandingPage() {
                 fontSize: 56, color: '#10B981',
                 letterSpacing: '-0.04em', lineHeight: 1,
               }}>
-                99.99%
+                99.9%
               </div>
               <div style={{
                 fontFamily: 'Space Grotesk, sans-serif', fontSize: 10,
                 fontWeight: 700, color: '#10B981', opacity: 0.8,
                 letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: 8,
               }}>
-                Uptime Reliability
+                Ingestion Accuracy
               </div>
             </div>
           </div>
@@ -284,45 +265,36 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CTA SECTION ─────────────────────────────────────────────────── */}
-      <section style={{ padding: '140px 5vw', textAlign: 'center', background: '#FAFAFA', borderTop: '1px solid #F1F5F9' }}>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+      {/* ── COMMUNITY & CONTRIBUTION ─────────────────────────────────────────── */}
+      <section style={{ padding: '120px 5vw', textAlign: 'center', background: '#FFFFFF' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <h2 style={{
             fontFamily: 'Inter, sans-serif', fontWeight: 900,
-            fontSize: 'clamp(2.5rem, 5vw, 3.8rem)',
+            fontSize: 'clamp(2rem, 4vw, 3rem)',
             letterSpacing: '-0.05em', color: '#0F172A',
-            lineHeight: 1.0, marginBottom: 24,
+            lineHeight: 1.1, marginBottom: 24,
             textTransform: 'uppercase',
           }}>
-            READY TO SET<br />THE PACE?
+            Built by the community,<br />for the community.
           </h2>
           <p style={{
             fontFamily: 'Inter, sans-serif', fontSize: 18,
             color: '#64748B', lineHeight: 1.6, marginBottom: 48,
+            maxWidth: 600, margin: '0 auto 48px'
           }}>
-            Deployment takes less than a race weekend. Get your<br />team on the Slipstream grid today.
+            Slipstream is 100% open-source. Join 1,200+ engineers and F1 fans building the future of accessible motorsport analytics.
           </p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/sessions" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
+            <Link href="https://github.com/abdullah-azeemi/Slipstream" target="_blank" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 12,
               padding: '16px 36px',
-              background: '#E8002D', color: '#fff',
+              background: '#0F172A', color: '#fff',
               fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 800,
-              borderRadius: 8, textDecoration: 'none',
-              textTransform: 'uppercase', letterSpacing: '0.02em',
-              boxShadow: '0 12px 24px -6px rgba(232,0,45,0.4)',
-            }}>
-              Request Access
-            </Link>
-            <Link href="/predictions" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '16px 36px',
-              background: '#E0E7FF', color: '#4F46E5',
-              fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 800,
-              borderRadius: 8, textDecoration: 'none',
-              textTransform: 'uppercase', letterSpacing: '0.02em',
-            }}>
-              Book a Demo
+              borderRadius: 12, textDecoration: 'none',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+              transition: 'transform 0.2s ease',
+            }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+              <Globe size={18} /> Contribute on GitHub
             </Link>
           </div>
         </div>
@@ -347,12 +319,15 @@ export default function LandingPage() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['TELEMETRY', 'ARCHIVE', 'STANDINGS', 'TEAMS'].map(l => (
-            <Link key={l} href={`/${l.toLowerCase()}`} style={{
-              fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700,
-              color: '#CBD5E1', textDecoration: 'none', letterSpacing: '0.05em',
-            }}>{l}</Link>
-          ))}
+          {['TELEMETRY', 'ARCHIVE', 'PREDICTIONS', 'GITHUB'].map(l => {
+            const href = l === 'GITHUB' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${l.toLowerCase()}`
+            return (
+              <Link key={l} href={href} target={l === 'GITHUB' ? '_blank' : undefined} style={{
+                fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700,
+                color: '#94A3B8', textDecoration: 'none', letterSpacing: '0.05em',
+              }}>{l}</Link>
+            )
+          })}
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#CBD5E1', fontWeight: 500 }}>
           © 2026 SLIPSTREAM DATA SYSTEMS · APACHE 2.0

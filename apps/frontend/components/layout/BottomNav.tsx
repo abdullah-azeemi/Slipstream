@@ -2,12 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Flag, Activity, Zap, BarChart2 } from 'lucide-react'
+import { Home, Flag, Zap } from 'lucide-react'
 
 const NAV = [
-  { href: '/',            label: 'Home',        icon: Home },
-  { href: '/sessions',    label: 'Sessions',    icon: Flag },
-  { href: '/standings',   label: 'Standings',   icon: BarChart2 },
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/sessions', label: 'Sessions', icon: Flag },
   { href: '/predictions', label: 'Predictions', icon: Zap },
 ]
 

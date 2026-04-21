@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Image from 'next/image'
 import { UserCircle } from 'lucide-react'
 
 type DriverStanding = {
@@ -184,10 +185,12 @@ function DriverRow({ driver, imageUrl }: { driver: DriverStanding, imageUrl?: st
         position: 'relative'
       }}>
         {imageUrl && !imgError ? (
-          <img
+          <Image
             src={imageUrl}
             alt={driver.full_name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            fill
+            style={{ objectFit: 'cover' }}
+            unoptimized
             onError={() => setImgError(true)}
           />
         ) : (

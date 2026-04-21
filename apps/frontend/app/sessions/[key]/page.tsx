@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, formatGap, teamColour, sessionTypeLabel } from '@/lib/utils'
-import TyreChip from '@/components/ui/TyreChip'
 import Link from 'next/link'
 import { ArrowLeft, Database, Activity, GitBranch } from 'lucide-react'
 
@@ -26,34 +25,50 @@ type Session = {
 const SESSION_TYPE_ORDER = ['FP1', 'FP2', 'FP3', 'SQ', 'Q', 'S', 'R']
 
 const SESSION_META: Record<string, { label: string; color: string; desc: string }> = {
-  FP1: { label: 'Practice 1',   color: '#3671C6', desc: 'Installation & long runs' },
-  FP2: { label: 'Practice 2',   color: '#3671C6', desc: 'Race simulation day' },
-  FP3: { label: 'Practice 3',   color: '#3671C6', desc: 'Qualifying prep' },
-  SQ:  { label: 'Sprint Quali', color: '#FF8000', desc: 'Sprint qualifying' },
-  Q:   { label: 'Qualifying',   color: '#FFD700', desc: 'Grid positions' },
-  S:   { label: 'Sprint',       color: '#FF8000', desc: 'Sprint race' },
-  R:   { label: 'Race',         color: '#E8002D', desc: 'Grand Prix' },
+  FP1: { label: 'Practice 1', color: '#3671C6', desc: 'Installation & long runs' },
+  FP2: { label: 'Practice 2', color: '#3671C6', desc: 'Race simulation day' },
+  FP3: { label: 'Practice 3', color: '#3671C6', desc: 'Qualifying prep' },
+  SQ: { label: 'Sprint Quali', color: '#FF8000', desc: 'Sprint qualifying' },
+  Q: { label: 'Qualifying', color: '#FFD700', desc: 'Grid positions' },
+  S: { label: 'Sprint', color: '#FF8000', desc: 'Sprint race' },
+  R: { label: 'Race', color: '#E8002D', desc: 'Grand Prix' },
 }
+
+const C = {
+  bg: '#F5F7FB',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  border: '#E2E8F0',
+  textDim: '#64748B',
+  textMid: '#475569',
+  textSub: '#1E293B',
+  textBright: '#0F172A',
+  red: '#E8002D',
+  green: '#10B981',
+  gold: '#F59E0B',
+  purple: '#8B5CF6',
+  brake: '#EF4444',
+} as const
+
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SessionPage() {
-  const params     = useParams()
-  const keyStr     = Array.isArray(params.key) ? params.key[0] : (params.key ?? '')
+  const params = useParams()
+  const keyStr = Array.isArray(params.key) ? params.key[0] : (params.key ?? '')
   const sessionKey = parseInt(keyStr)
 
-  const [session,     setSession]     = useState<Session | null>(null)
-  const [siblings,    setSiblings]    = useState<Session[]>([])
+  const [session, setSession] = useState<Session | null>(null)
+  const [siblings, setSiblings] = useState<Session[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [raceData,    setRaceData]    = useState<any[]>([])
+  const [raceData, setRaceData] = useState<any[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [qualiLaps,   setQualiLaps]   = useState<any[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [dataLoading, setDataLoading] = useState(false)
+  const [qualiLaps, setQualiLaps] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Step 1: load current session
   useEffect(() => {
-     
+
     setLoading(true)
     fetch(`${BASE}/api/v1/sessions/${sessionKey}`)
       .then(r => r.json())
@@ -75,20 +90,20 @@ export default function SessionPage() {
           )
         setSiblings(sibs)
       })
-      .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => { })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_key])
 
   // Step 3: load leaderboard data
   useEffect(() => {
     if (!session?.session_type) return
-    const type  = session.session_type
-    const isR   = type === 'R' || type === 'S'
-    const isFP  = type.startsWith('FP')
+    const type = session.session_type
+    const isR = type === 'R' || type === 'S'
+    const isFP = type.startsWith('FP')
     if (isFP) return  // FP has no leaderboard
 
-     
-    setDataLoading(true)
+
+
     const url = isR
       ? `${BASE}/api/v1/sessions/${sessionKey}/race-results`
       : `${BASE}/api/v1/sessions/${sessionKey}/fastest`
@@ -97,11 +112,11 @@ export default function SessionPage() {
       .then(r => r.json())
       .then(d => {
         if (isR) setRaceData(Array.isArray(d) ? d : [])
-        else     setQualiLaps(Array.isArray(d) ? d : (d.laps ?? []))
+        else setQualiLaps(Array.isArray(d) ? d : (d.laps ?? []))
       })
-      .catch(() => {})
-      .finally(() => setDataLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => { })
+      .finally(() => { })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_key, session?.session_type])
 
   // ── Loading / error states ────────────────────────────────────────────────
@@ -124,312 +139,217 @@ export default function SessionPage() {
 
   // ── Derived values — all null-safe ────────────────────────────────────────
 
-  const type    = session.session_type ?? ''
-  const isRace  = type === 'R' || type === 'S'
-  const isFP    = type.startsWith('FP')
+  const type = session.session_type ?? ''
+  const isRace = type === 'R' || type === 'S'
+  const isFP = type.startsWith('FP')
   const isQuali = !isRace && !isFP
-  const meta    = SESSION_META[type] ?? { label: session.session_name ?? type, color: '#71717A', desc: '' }
+  const meta = SESSION_META[type] ?? { label: session.session_name ?? type, color: '#71717A', desc: '' }
 
   const hasData = isRace
     ? raceData.length > 0
     : isFP
-    ? true
-    : qualiLaps.length > 0
+      ? true
+      : qualiLaps.length > 0
+
+  // ── Layout Components ──────────────────────────────────────────────────
+
+  const ToolCard = ({ title, desc, icon: Icon, href, color, sub }: { title: string; desc: string; icon: React.ElementType; href: string; color: string; sub?: string }) => (
+    <Link href={href} style={{ textDecoration: 'none', flex: 1 }}>
+      <div style={{
+        background: '#fff', border: `1px solid ${C.border}`, borderRadius: 24, padding: '24px',
+        display: 'flex', flexDirection: 'column', gap: 16, transition: 'all 0.2s ease',
+        boxShadow: '0 4px 12px rgba(37,54,82,0.04)', cursor: 'pointer', height: '100%',
+        position: 'relative', overflow: 'hidden'
+      }}
+        onMouseEnter={e => {
+          e.currentTarget.style.borderColor = color;
+          e.currentTarget.style.boxShadow = `0 12px 32px ${color}15`;
+          e.currentTarget.style.transform = 'translateY(-2px)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.borderColor = C.border;
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,54,82,0.04)';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `${color}12`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={20} style={{ color }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color, fontFamily: 'Space Grotesk', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{sub}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: C.textBright, fontFamily: 'Inter', letterSpacing: '-0.02em', marginBottom: 6 }}>{title}</div>
+          <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.5 }}>{desc}</div>
+        </div>
+        <div style={{ position: 'absolute', right: 24, top: 24, fontSize: 18, color: '#D1D5DB' }}>→</div>
+      </div>
+    </Link>
+  )
+
+  const Panel = ({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) => (
+    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 24, overflow: 'hidden', boxShadow: '0 4px 12px rgba(37,54,82,0.04)' }}>
+      <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FAFB' }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.textBright, fontFamily: 'Space Grotesk', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{title}</span>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-      {/* Back */}
-      <Link href="/sessions" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#9fb2c6', fontSize: '13px', textDecoration: 'none', fontFamily: 'JetBrains Mono, monospace' }}>
-        <ArrowLeft size={14} /> All Sessions
-      </Link>
-
-      {/* GP name */}
-      <section className="panel" style={{ padding: '22px 22px 18px' }}>
-        <div className="eyebrow" style={{ marginBottom: '10px' }}>
-          {session.year} · Formula 1
-        </div>
-        <h1 className="page-title" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-          {session.gp_name}
-        </h1>
-        <p className="page-subtitle" style={{ marginTop: '8px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
-          {meta.label} · {meta.desc || session.session_name}
-        </p>
-
-        <div className="telemetry-chip-row" style={{ marginTop: '14px' }}>
-          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
-            <div className="eyebrow" style={{ marginBottom: '6px' }}>Session</div>
-            <div style={{ fontSize: '18px', color: meta.color, fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{type}</div>
-          </div>
-          <div className="panel-soft" style={{ padding: '10px 12px', borderRadius: '16px', minWidth: '140px' }}>
-            <div className="eyebrow" style={{ marginBottom: '6px' }}>Status</div>
-            <div style={{ fontSize: '18px', color: hasData ? '#2CF4C5' : '#9fb2c6', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
-              {hasData ? 'Ready' : 'Missing'}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Session switcher tabs ─────────────────────────────────────── */}
-      {siblings.length > 1 && (
-        <div className="panel-soft" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '12px', borderRadius: '20px' }}>
-          {siblings.map(sib => {
-            const isActive = sib.session_key === sessionKey
-            const sibMeta  = SESSION_META[sib.session_type] ?? { color: '#71717A', desc: '' }
-            return (
-              <Link
-                key={sib.session_key}
-                href={`/sessions/${sib.session_key}`}
-                style={{ textDecoration: 'none' }}
-              >
-                <div style={{
-                  display:       'flex',
-                  flexDirection: 'column',
-                  alignItems:    'center',
-                  padding:       '10px 16px',
-                  borderRadius:  '16px',
-                  cursor:        'pointer',
-                  transition:    'all 0.15s',
-                  border:        isActive ? `1.5px solid ${sibMeta.color}` : '1.5px solid rgba(152, 181, 211, 0.12)',
-                  background:    isActive ? `${sibMeta.color}18` : 'rgba(255,255,255,0.02)',
-                  minWidth:      '58px',
-                  textAlign:     'center',
-                }}>
-                  <span style={{
-                    fontSize: '15px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700,
-                    color: isActive ? sibMeta.color : '#71717A',
-                    letterSpacing: '0.02em',
+    <div style={{ background: 'linear-gradient(180deg, #F8F9FC 0%, #F1F4F9 100%)', minHeight: '100vh', paddingBottom: 60 }}>
+      {/* Global Header */}
+      <div style={{ background: '#fff', borderBottom: `1px solid ${C.border}`, marginBottom: 24 }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link href="/sessions" style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.textDim, fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
+            <ArrowLeft size={16} /> Sessions
+          </Link>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {siblings.map(sib => {
+              const isA = sib.session_key === sessionKey
+              const sColor = SESSION_META[sib.session_type]?.color ?? C.textDim
+              return (
+                <Link key={sib.session_key} href={`/sessions/${sib.session_key}`} style={{ textDecoration: 'none' }}>
+                  <div style={{
+                    padding: '8px 16px', borderRadius: 12, border: `1px solid ${isA ? sColor : C.border}`,
+                    background: isA ? `${sColor}12` : 'transparent', color: isA ? sColor : C.textMid,
+                    fontSize: 12, fontWeight: 800, fontFamily: 'Space Grotesk', transition: 'all 0.1s'
                   }}>
                     {sib.session_type}
-                  </span>
-                  <span style={{
-                    fontSize: '8px', fontFamily: 'monospace',
-                    color: isActive ? sibMeta.color + 'AA' : '#3F3F46',
-                    marginTop: '2px',
-                  }}>
-                    {sibMeta.desc}
-                  </span>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Current session label + data status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <div style={{ padding: '4px 12px', borderRadius: '20px', background: `${meta.color}18`, border: `1px solid ${meta.color}44` }}>
-          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: meta.color, fontWeight: 700 }}>
-            {meta.label.toUpperCase()}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '20px', background: hasData ? '#2CF4C518' : '#1A1A1A', border: `1px solid ${hasData ? '#2CF4C544' : '#2A2A2A'}` }}>
-          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: hasData ? '#2CF4C5' : '#3F3F46' }} />
-          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: hasData ? '#2CF4C5' : '#52525B' }}>
-            {hasData ? 'DATA LOADED' : 'NO DATA'}
-          </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </div>
 
-      {/* ── No data state ─────────────────────────────────────────────── */}
-      {!hasData && !isFP && (
-        <div className="panel-soft" style={{ borderRadius: '24px', padding: '32px', textAlign: 'center' }}>
-          <Database size={32} style={{ color: '#3F3F46', margin: '0 auto 12px' }} />
-          <div style={{ color: '#fff', fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>No data ingested yet</div>
-          <div style={{ color: '#52525B', fontSize: '13px', marginBottom: '16px' }}>
-            Run the ingestion script to load lap data for this session.
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 24px' }}>
+        {/* GP Identity */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: C.textDim, fontFamily: 'Space Grotesk', letterSpacing: '0.2em' }}>{session.year} SEASON</span>
+            <div style={{ height: 1, flex: 1, background: C.border }} />
           </div>
-          <code style={{
-            display: 'block', background: '#0D0D0D', border: '1px solid #2A2A2A',
-            color: '#A1A1AA', fontSize: '11px', padding: '12px 16px', borderRadius: '10px',
-            fontFamily: 'monospace', textAlign: 'left', maxWidth: '380px', margin: '0 auto',
-          }}>
-            uv run python -m ingestion.ingest_session \<br />
-            &nbsp;&nbsp;--year {session.year} \<br />
-            &nbsp;&nbsp;--gp &quot;{session.gp_name.replace(' Grand Prix', '')}&quot; \<br />
-            &nbsp;&nbsp;--session {type}
-          </code>
-        </div>
-      )}
-
-      {/* ── Race leaderboard ──────────────────────────────────────────── */}
-      {isRace && hasData && !dataLoading && (
-        <div className="panel-soft" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '12px 16px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
-            {['POS', 'DRIVER', 'LAPS / GAP'].map((h, i) => (
-              <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
-            ))}
-          </div>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {raceData.map((driver: any, i: number) => {
-            const colour   = teamColour(driver.team_colour, driver.team_name)
-            const isWinner = i === 0
-            return (
-              <div key={driver.driver_number} style={{
-                display: 'grid', gridTemplateColumns: '44px 1fr auto',
-                padding: '12px 16px', alignItems: 'center',
-                borderBottom: i < raceData.length - 1 ? '1px solid rgba(152, 181, 211, 0.06)' : 'none',
-                background: isWinner ? 'rgba(255,255,255,0.03)' : 'transparent',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <span style={{ fontSize: '13px', fontFamily: 'monospace', color: isWinner ? '#FFD700' : '#52525B', fontWeight: isWinner ? 700 : 400 }}>
-                    {i + 1}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff', fontFamily: 'monospace' }}>{driver.abbreviation}</span>
-                    {driver.compound && <TyreChip compound={driver.compound} />}
-                    {isWinner && (
-                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#FFD700', background: '#FFD70018', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FFD70033' }}>
-                        WINNER
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '11px', color: '#52525B' }}>{driver.team_name}</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#71717A' }}>{driver.total_laps} laps</div>
-                  <div style={{ fontSize: '11px', fontFamily: 'monospace', color: isWinner ? '#2CF4C5' : '#3F3F46', marginTop: '1px' }}>
-                    {isWinner ? '—' : driver.laps_down ? `+${driver.laps_down} lap${driver.laps_down > 1 ? 's' : ''}` : driver.gap_ms ? formatGap(driver.gap_ms) : '—'}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── Qualifying leaderboard ────────────────────────────────────── */}
-      {isQuali && hasData && !dataLoading && (
-        <div className="panel-soft" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', padding: '12px 16px', borderBottom: '1px solid rgba(152, 181, 211, 0.08)' }}>
-            {['POS', 'DRIVER', 'TIME / GAP'].map((h, i) => (
-              <span key={h} style={{ fontSize: '9px', fontFamily: 'monospace', color: '#3F3F46', letterSpacing: '0.12em', textAlign: i === 2 ? 'right' : 'left' }}>{h}</span>
-            ))}
-          </div>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {qualiLaps.map((lap: any, i: number) => {
-            const colour  = teamColour(lap.team_colour, lap.team_name)
-            const isFirst = i === 0
-            const gap     = isFirst ? null : lap.lap_time_ms - qualiLaps[0].lap_time_ms
-            return (
-              <div key={lap.driver_number} style={{
-                display: 'grid', gridTemplateColumns: '44px 1fr auto',
-                padding: '12px 16px', alignItems: 'center',
-                borderBottom: i < qualiLaps.length - 1 ? '1px solid rgba(152, 181, 211, 0.06)' : 'none',
-                background: isFirst ? 'rgba(255,255,255,0.03)' : 'transparent',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                  <span style={{ fontSize: '13px', fontFamily: 'monospace', color: isFirst ? '#FFD700' : '#52525B', fontWeight: isFirst ? 700 : 400 }}>
-                    {i + 1}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff', fontFamily: 'monospace' }}>{lap.abbreviation}</span>
-                    {lap.compound && <TyreChip compound={lap.compound} />}
-                    {isFirst && (
-                      <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#FFD700', background: '#FFD70018', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FFD70033' }}>
-                        POLE
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '11px', color: '#52525B' }}>{lap.team_name}</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '13px', fontFamily: 'monospace', color: isFirst ? '#fff' : '#A1A1AA', fontWeight: isFirst ? 700 : 400 }}>
-                    {formatLapTime(lap.lap_time_ms)}
-                  </div>
-                  <div style={{ fontSize: '11px', fontFamily: 'monospace', color: isFirst ? '#FFD700' : '#3F3F46', marginTop: '1px' }}>
-                    {isFirst ? 'POLE' : formatGap(gap)}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── FP info panel ─────────────────────────────────────────────── */}
-      {isFP && (
-        <div className="panel-soft" style={{ borderRadius: '24px', padding: '20px' }}>
-          <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#3671C6', fontWeight: 700, letterSpacing: '0.1em', marginBottom: '6px' }}>
-            {meta.label.toUpperCase()}
-          </div>
-          <div style={{ fontSize: '13px', color: '#A1A1AA', lineHeight: 1.6 }}>
-            {type === 'FP2'
-              ? 'Race simulation data · tyre degradation · compound strategy reveals'
-              : type === 'FP3'
-              ? 'Final qualifying prep · sector time improvements · low-fuel runs'
-              : 'Installation laps · initial setup · long run programmes'}
+          <h1 style={{ fontSize: 48, fontWeight: 950, color: C.textBright, fontFamily: 'Inter', letterSpacing: '-0.04em', lineHeight: 1, marginBottom: 8 }}>
+            {session.gp_name.replace(' Grand Prix', '')} <span style={{ color: C.textDim, fontWeight: 400 }}>GP</span>
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: `${meta.color}15`, padding: '6px 12px', borderRadius: 8, border: `1px solid ${meta.color}22` }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
+              <span style={{ fontSize: 11, fontWeight: 800, color: meta.color, fontFamily: 'Space Grotesk', letterSpacing: '0.05em' }}>{meta.label.toUpperCase()}</span>
+            </div>
+            <span style={{ fontSize: 13, color: C.textDim, fontWeight: 500 }}>{session.date_start ? new Date(session.date_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) : ''}</span>
           </div>
         </div>
-      )}
 
-      {/* ── Loading ───────────────────────────────────────────────────── */}
-      {dataLoading && (
-        <div className="panel-soft" style={{ textAlign: 'center', padding: '32px', color: '#5e7289', fontFamily: 'monospace', fontSize: '12px', borderRadius: '24px' }}>
-          Loading session data...
+        {/* Main Hub Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+
+          {/* Left Column: Actions & Insights */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {hasData ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                <ToolCard
+                  title={isQuali ? "Qualifying Telemetry" : isFP ? "Practice Analysis" : "Race Telemetry"}
+                  sub="PRO INSTRUMENTATION"
+                  desc="High-precision needle gauging, RPM distribution, and driver modulation comparison."
+                  icon={Activity}
+                  href={`/sessions/${sessionKey}/telemetry`}
+                  color={C.red}
+                />
+                {isRace && (
+                  <ToolCard
+                    title="Strategy Hub"
+                    sub="STINT EVOLUTION"
+                    desc="Compound performance, pit stop timing, and tyre degradation analysis."
+                    icon={GitBranch}
+                    href={`/sessions/${sessionKey}/strategy`}
+                    color={C.green}
+                  />
+                )}
+                {isRace && (
+                  <ToolCard
+                    title="Race Analysis"
+                    sub="BATTLE INSIGHTS"
+                    desc="Lap evolution, gap to leader, and overtake probability analysis."
+                    icon={GitBranch}
+                    href={`/sessions/${sessionKey}/telemetry`}
+                    color={C.purple}
+                  />
+                )}
+                {!isRace && (
+                  <ToolCard
+                    title="Sector Progression"
+                    sub="TRACK EVOLUTION"
+                    desc="Track development, sector bests, and theoretical lap optimization."
+                    icon={Database}
+                    href={`/sessions/${sessionKey}/telemetry`}
+                    color={C.gold}
+                  />
+                )}
+              </div>
+            ) : (
+              <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 24, padding: 40, textAlign: 'center' }}>
+                <Database size={40} style={{ color: C.textDim, marginBottom: 20 }} />
+                <h3 style={{ fontSize: 20, fontWeight: 800, color: C.textBright, marginBottom: 8 }}>Session Data Missing</h3>
+                <p style={{ color: C.textMid, fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+                  The ingestion pipeline has not been run for this session. Use the command below to load telemetry and results.
+                </p>
+                <code style={{ background: C.surfaceAlt, padding: '12px 20px', borderRadius: 12, border: `1px solid ${C.border}`, display: 'inline-block', fontSize: 12, color: C.textMid, fontFamily: 'JetBrains Mono' }}>
+                  uv run python -m ingestion.ingest_session --session {type}
+                </code>
+              </div>
+            )}
+
+            {/* FP Specific Content */}
+            {isFP && (
+              <Panel title="Practice Insights">
+                <div style={{ padding: 24 }}>
+                  <p style={{ fontSize: 14, color: C.textMid, lineHeight: 1.6 }}>
+                    {type === 'FP2' ? 'Focus on race simulation and high-fuel long runs. Tyre degradation data is critical for Sunday strategy.' : 'Initial setup validation and installation laps. Comparing aerodynamic balance across different wings.'}
+                  </p>
+                </div>
+              </Panel>
+            )}
+          </div>
+
+          {/* Right Column: Results Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <Panel title={isRace ? "Race Classification" : "Fastest Laps"}
+              right={<div style={{ fontSize: 9, fontWeight: 800, color: C.textDim }}>{hasData ? 'LIVE DATA' : 'NO DATA'}</div>}>
+              {!hasData ? (
+                <div style={{ padding: 32, textAlign: 'center', color: C.textDim, fontSize: 12 }}>Classification unavailable</div>
+              ) : (
+                <div style={{ maxHeight: 600, overflowY: 'auto' }}>
+                  {(isRace ? raceData : qualiLaps).map((d: { driver_number: number, abbreviation: string, team_colour: string, team_name: string, gap_ms: number, lap_time_ms: number, total_laps: number }, i: number) => {
+                    const colour = teamColour(d.team_colour, d.team_name)
+                    const gap = i === 0 ? null : (isRace ? (d.gap_ms) : (d.lap_time_ms - qualiLaps[0].lap_time_ms))
+                    return (
+                      <div key={d.driver_number} style={{ display: 'grid', gridTemplateColumns: '32px 1fr auto', padding: '12px 16px', alignItems: 'center', borderBottom: `1px solid ${C.border}50` }}>
+                        <span style={{ fontSize: 12, fontWeight: 900, color: i < 3 ? C.textBright : C.textDim, fontFamily: 'JetBrains Mono' }}>{i + 1}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 3, height: 16, borderRadius: 2, background: colour }} />
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: C.textBright }}>{d.abbreviation}</span>
+                            <span style={{ fontSize: 10, color: C.textDim }}>{d.team_name.split(' ')[0]}</span>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.textBright, fontFamily: 'JetBrains Mono' }}>
+                            {isRace ? (d.total_laps + ' L') : formatLapTime(d.lap_time_ms)}
+                          </div>
+                          {gap !== null && <div style={{ fontSize: 9, color: C.textDim, fontFamily: 'JetBrains Mono' }}>+{isRace ? (d.gap_ms / 1000).toFixed(1) : formatGap(gap)}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Panel>
+          </div>
+
         </div>
-      )}
-
-      {/* ── Analysis links ────────────────────────────────────────────── */}
-      {hasData && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <Link href={`/sessions/${sessionKey}/telemetry`} style={{ textDecoration: 'none' }}>
-            <div
-              className="panel-soft"
-              style={{ borderRadius: '20px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(242, 200, 121, 0.4)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(152, 181, 211, 0.1)')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: `${meta.color}18`, border: `1px solid ${meta.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Activity size={18} style={{ color: meta.color }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '2px' }}>
-                    {isFP ? 'Practice Analysis' : isRace ? 'Race Analysis' : 'Speed Traces'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#52525B' }}>
-                    {isFP
-                      ? 'Long runs · race sim · compound strategy · sector progression'
-                      : isRace
-                      ? 'Lap evolution · gap to leader · stint pace · undercut analysis'
-                      : 'Throttle · brake · speed delta · sector times · track map'}
-                  </div>
-                </div>
-              </div>
-                <span style={{ fontSize: '20px', color: '#5e7289', marginLeft: '8px' }}>→</span>
-              </div>
-            </Link>
-
-          {isRace && (
-            <Link href={`/sessions/${sessionKey}/strategy`} style={{ textDecoration: 'none' }}>
-              <div
-                className="panel-soft"
-                style={{ borderRadius: '20px', padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(44, 244, 197, 0.35)')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(152, 181, 211, 0.1)')}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#2CF4C518', border: '1px solid #2CF4C533', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <GitBranch size={18} style={{ color: '#2CF4C5' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '2px' }}>Tyre Strategy</div>
-                    <div style={{ fontSize: '11px', color: '#52525B' }}>Stint diagram · pit stop timing · compound choices</div>
-                  </div>
-                </div>
-                <span style={{ fontSize: '20px', color: '#5e7289', marginLeft: '8px' }}>→</span>
-              </div>
-            </Link>
-          )}
-        </div>
-      )}
+      </div>
     </div>
   )
 }
+

@@ -1,4 +1,5 @@
-import { MapPin, CalendarDays, Clock, Trophy } from 'lucide-react'
+import { MapPin, CalendarDays } from 'lucide-react'
+import Image from 'next/image'
 import React from 'react'
 
 export const revalidate = 60
@@ -7,28 +8,10 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ── Components ───────────────────────────────────────────────────────────────
 
-function CountdownUnit({ value, label }: { value: string | number, label: string }) {
-  return (
-    <div style={{
-      background: '#FFFFFF',
-      borderRadius: 12,
-      padding: '12px 16px',
-      minWidth: 80,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-    }}>
-      <span style={{ fontSize: 32, fontWeight: 900, color: '#0F172A', lineHeight: 1 }}>{value}</span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', marginTop: 4, letterSpacing: '0.05em' }}>{label}</span>
-    </div>
-  )
-}
 
-function HeroNextRace({ race, nextSession }: any) {
+
+function HeroNextRace({ race }: { race: { round: number, event_name: string, event_date: string, circuit: string, country: string } }) {
   if (!race) return null
-
-  const timeLeft = { days: '12', hours: '08', mins: '45' }
 
   return (
     <div style={{
@@ -41,10 +24,11 @@ function HeroNextRace({ race, nextSession }: any) {
       boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)'
     }}>
       {/* Background Image */}
-      <img
+      <Image
         src="https://images.unsplash.com/photo-1699138346491-d6f4c7e04b85?q=80&w=2232&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
         alt="F1 Car"
-        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }}
+        fill
+        style={{ objectFit: 'cover', opacity: 0.7 }}
       />
 
       {/* Gradient Overlay */}
@@ -92,7 +76,7 @@ function HeroNextRace({ race, nextSession }: any) {
   )
 }
 
-function RaceCard({ race, isNext }: { race: any, isNext?: boolean }) {
+function RaceCard({ race, isNext }: { race: { round: number, event_name: string, circuit: string, event_date: string, status: string, top_finishers?: string[] }, isNext?: boolean }) {
   const isPast = race.status === 'past'
 
   return (
@@ -179,7 +163,7 @@ export default async function SchedulePage() {
     <div style={{ padding: '20px 0', maxWidth: 1200, margin: '0 auto' }}>
 
       {nextRace && (
-        <HeroNextRace race={nextRace.race} nextSession={nextRace.next_session} />
+        <HeroNextRace race={nextRace.race} />
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
@@ -198,7 +182,7 @@ export default async function SchedulePage() {
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: 24
       }}>
-        {races.map((race: any) => (
+        {races.map((race: { round: number, event_name: string, circuit: string, event_date: string, status: string, top_finishers?: string[] }) => (
           <RaceCard
             key={race.round}
             race={race}

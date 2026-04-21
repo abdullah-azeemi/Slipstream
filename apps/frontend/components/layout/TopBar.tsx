@@ -3,14 +3,13 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bell, Settings, UserCircle } from 'lucide-react'
+
 
 export default function TopBar() {
   const pathname = usePathname()
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Standings', href: '/standings' },
     { name: 'Season Calendar', href: '/schedule' },
     { name: 'Archive', href: '/sessions' },
   ]
@@ -77,30 +76,6 @@ export default function TopBar() {
               </Link>
             )
           })}
-        </div>
-      </div>
-
-      {/* Right Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
-          <Bell size={18} />
-        </button>
-        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
-          <Settings size={18} />
-        </button>
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          overflow: 'hidden',
-          background: '#F1F5F9',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid #E2E8F0',
-          cursor: 'pointer'
-        }}>
-          <UserCircle size={24} color="#64748B" />
         </div>
       </div>
     </nav>

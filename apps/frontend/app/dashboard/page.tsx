@@ -1,19 +1,14 @@
 import React from 'react'
 import Image from 'next/image'
-import { api } from '@/lib/api'
-import { sessionTypeLabel, formatLapTime } from '@/lib/utils'
 import {
-  MapPin,
   Thermometer,
   Wind,
   Droplets,
   Sun,
-  Activity,
   Trophy,
   Clock,
   Zap,
-  Flag,
-  Bell
+  Flag
 } from 'lucide-react'
 import CountdownTimer from '@/components/schedule/CountdownTimer'
 import ChampionshipStandings from '@/components/home/ChampionshipStandings'
@@ -36,24 +31,14 @@ async function fetchStandings(year: number) {
   }
 }
 
-async function fetchResults(sessionKey: number | string) {
-  if (!sessionKey) return []
-  try {
-    const data = await fetch(`${BASE}/api/v1/sessions/${sessionKey}/race-results`, { next: { revalidate: 300 } }).then(r => r.json())
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
 async function fetchDriverImages() {
   try {
     const data = await fetch('https://api.openf1.org/v1/drivers?session_key=latest', { next: { revalidate: 3600 } }).then(r => r.json())
     if (!Array.isArray(data)) return { acronymMap: {}, numberMap: {} }
 
     const acronymMap: Record<string, string> = {}
-    const numberMap: Record<number, any> = {}
-    data.forEach((d: any) => {
+    const numberMap: Record<number, { full_name: string; headshot_url: string }> = {}
+    data.forEach((d: { name_acronym: string; headshot_url: string; driver_number: number; full_name: string }) => {
       if (d.name_acronym && d.headshot_url) acronymMap[d.name_acronym] = d.headshot_url
       if (d.driver_number) numberMap[d.driver_number] = d
     })
@@ -76,7 +61,7 @@ async function fetchDynamicFastestLap() {
     const laps = await fetch(`https://api.openf1.org/v1/laps?session_key=${lastRace.session_key}`).then(r => r.json())
     if (!Array.isArray(laps)) return { lap: null, gp: lastRace.circuit_short_name }
 
-    const bestLap = laps.reduce((min, lap) => {
+    const bestLap = laps.reduce((min: { lap_duration: number } | null, lap: { lap_duration: number }) => {
       if (lap.lap_duration && (!min || lap.lap_duration < min.lap_duration)) return lap
       return min
     }, null)
@@ -104,10 +89,16 @@ async function fetchSessionWeather(sessionKey: number | string | undefined) {
   } catch { return null }
 }
 
+function formatLapTime(ms: number) {
+  const mins = Math.floor(ms / 60000)
+  const secs = ((ms % 60000) / 1000).toFixed(3)
+  return `${mins}:${secs.padStart(6, '0')}`
+}
+
 // ── Dashboard Page ────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  const currentYear = new Date().getFullYear() // Default to 2026 as it's the current year
+  const currentYear = new Date().getFullYear()
 
   const [standings, nextRace, dData, dynamicFastest, lastSession] = await Promise.all([
     fetchStandings(currentYear),
@@ -125,23 +116,19 @@ export default async function DashboardPage() {
   const heroRace = nextRace?.race
   const heroSession = nextRace?.next_session
 
-  // Hero Image 
   const heroImage = "https://images.unsplash.com/photo-1748465579870-d31c8d5ca7da?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
 
   const champLeader = standings.drivers[0]
   const constructorLeader = standings.constructors[0]
 
-  // Format Event Date
   const eventDateRaw = heroRace?.event_date?.split(' ')[0]
   const formattedEventDate = eventDateRaw ? new Date(eventDateRaw).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Next Event Scheduled'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32, paddingBottom: 40 }}>
 
-      {/* ── TOP SECTION: HERO + TRACK CONDITIONS ────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'stretch' }}>
 
-        {/* Race Hero Card */}
         <div style={{
           position: 'relative',
           height: 400,
@@ -156,7 +143,6 @@ export default async function DashboardPage() {
             style={{ objectFit: 'cover' }}
             priority
           />
-          {/* Overlays */}
           <div style={{
             position: 'absolute', inset: 0,
             background: 'linear-gradient(220deg, rgba(15, 23, 42, 0) 20%, rgba(15, 23, 42, 0.8) 100%)'
@@ -201,7 +187,6 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Track Conditions Card */}
         <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 24, border: '1px solid #F1F5F9' }}>
           <h3 style={{ fontSize: 13, fontWeight: 900, color: '#0F172A', marginBottom: 24, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             SESSION CONDITIONS
@@ -216,7 +201,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ── STATS CARDS ROW ───────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
         <StatCard
           label="CHAMPIONSHIP LEADER" value={champLeader?.full_name ?? 'PENDING'} sub={champLeader?.team_name ?? '---'}
@@ -240,7 +224,6 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* ── STANDINGS SECTION ─────────────────────────────────────── */}
       <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 32, border: '1px solid #F1F5F9' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
@@ -266,7 +249,7 @@ export default async function DashboardPage() {
 
 // ── Shared Sub-components ─────────────────────────────────────────────────────
 
-function ConditionCard({ icon: Icon, label, value, color }: any) {
+function ConditionCard({ icon: Icon, label, value, color }: { icon: React.ElementType, label: string, value: string, color: string }) {
   return (
     <div style={{ background: '#F8FAFC', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Icon size={18} color={color} style={{ opacity: 0.8 }} />
@@ -278,7 +261,7 @@ function ConditionCard({ icon: Icon, label, value, color }: any) {
   )
 }
 
-function StatCard({ label, value, sub, subLabel, points, timer, icon: Icon, color }: any) {
+function StatCard({ label, value, sub, subLabel, points, timer, icon: Icon }: { label: string, value: string, sub: string, subLabel?: string, points?: number, timer?: string, icon: React.ElementType, color: string }) {
   return (
     <div style={{ background: '#FFFFFF', borderRadius: 20, padding: 24, border: '1px solid #F1F5F9', position: 'relative', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>

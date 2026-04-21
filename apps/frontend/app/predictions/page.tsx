@@ -108,7 +108,6 @@ export default function PredictionsPage() {
   // Fetch predictions when session changes
   useEffect(() => {
     if (!selectedKey) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setError(null)
     setData(null)
@@ -134,7 +133,6 @@ export default function PredictionsPage() {
   const maeLabel = data?.model?.cv_mae_mean != null
     ? `${data.model.cv_mae_mean}${data.model.cv_mae_std != null ? ` ± ${data.model.cv_mae_std}` : ''} pos`
     : 'n/a'
-  const leader = data?.predictions[0] ?? null
   const visiblePredictions = data ? (showAllGrid ? data.predictions : data.predictions.slice(0, 10)) : []
   const topFactors = useMemo(() => {
     if (!data?.predictions.length) return []

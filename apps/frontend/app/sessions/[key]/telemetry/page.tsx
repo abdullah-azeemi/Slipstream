@@ -6,13 +6,11 @@ import {
   getSegmentDriverNumbers,
   getSegmentEntries,
   getSegmentLapByDriver,
-  getSegmentSummary,
   reconcileSelectedDrivers,
   type QualiSegmentsData,
 } from '@/lib/telemetry-quali'
 import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
-import CornerAnalysis from '@/components/telemetry/CornerAnalysis'
 import RaceAnalysis from '@/components/analysis/RaceAnalysis'
 import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
 
@@ -74,7 +72,7 @@ async function fetchTelemetryCompare(
 // ── Interpolation ─────────────────────────────────────────────────────────────
 type Interp = {
   dist: number[]; speed: number[]; throttle: number[]
-  gear: number[]; rpm: number[]; brake: boolean[]; drs: number[]
+  gear: number[]; rpm: number[]; brake: number[]; drs: number[]
   x: number[]; y: number[]
 }
 
@@ -87,29 +85,32 @@ function interpolateSamples(samples: TelemetrySample[], points = 500): Interp {
   const maxD = sorted[sorted.length - 1].distance_m!
   const step = (maxD - minD) / (points - 1)
   const dist = Array.from({ length: points }, (_, i) => minD + i * step)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function lerp(field: keyof TelemetrySample, d: number): number {
+  const lerp = (field: keyof TelemetrySample, d: number): number => {
     const idx = sorted.findIndex(s => s.distance_m! >= d)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (idx <= 0) return (sorted[0]?.[field] as any) ?? 0
+    if (idx <= 0) {
+      const val = sorted[0]?.[field]
+      return typeof val === 'boolean' ? (val ? 100 : 0) : (val as number ?? 0)
+    }
     const a = sorted[idx - 1], b = sorted[idx]
     const t = (d - a.distance_m!) / ((b.distance_m! - a.distance_m!) || 1)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (((a[field] as any) ?? 0) * (1 - t) + ((b[field] as any) ?? 0) * t) as number
+    const vA = typeof a[field] === 'boolean' ? (a[field] ? 100 : 0) : (a[field] as number ?? 0)
+    const vB = typeof b[field] === 'boolean' ? (b[field] ? 100 : 0) : (b[field] as number ?? 0)
+    return vA * (1 - t) + vB * t
   }
+
   return {
     dist,
     speed: dist.map(d => lerp('speed_kmh', d)),
     throttle: dist.map(d => lerp('throttle_pct', d)),
     gear: dist.map(d => Math.round(lerp('gear', d))),
     rpm: dist.map(d => lerp('rpm', d)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    brake: dist.map(d => lerp('brake' as any, d) > 0.5),
+    brake: dist.map(d => {
+      const b = lerp('brake', d);
+      return b > 10 ? 100 : 0;
+    }),
     drs: dist.map(d => lerp('drs', d)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    x: dist.map(d => lerp('x_pos' as any, d)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    y: dist.map(d => lerp('y_pos' as any, d)),
+    x: dist.map(d => lerp('x_pos', d)),
+    y: dist.map(d => lerp('y_pos', d)),
   }
 }
 
@@ -130,17 +131,17 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, yMin: num
     ctx.beginPath(); ctx.strokeStyle = i === 0 ? C.borderMid : C.border; ctx.lineWidth = 1
     ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
     const val = yMin + (i / gridCount) * (yMax - yMin)
-    ctx.fillStyle = C.textDim; ctx.font = '500 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-    ctx.fillText(isRpm ? `${(val / 1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 8, y + 3.5)
+    ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+    ctx.fillText(isRpm ? `${(val / 1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 10, y + 4)
   }
   ctx.beginPath(); ctx.strokeStyle = C.borderMid; ctx.lineWidth = 1
   ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left, PAD.top + cH); ctx.stroke()
-  ctx.fillStyle = C.textDim; ctx.font = '500 8px "JetBrains Mono", monospace'; ctx.textAlign = 'center'
+  ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'center'
   for (let i = 0; i <= 4; i++) {
     const nx = i / 4; const x = PAD.left + nx * (cW)
-    ctx.fillText(`${(nx * 100).toFixed(0)}%`, x, PAD.top + cH + 22)
-    ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
-    ctx.moveTo(x, PAD.top + cH); ctx.lineTo(x, PAD.top + cH + 4); ctx.stroke()
+    ctx.fillText(`${(nx * 100).toFixed(0)}%`, x, PAD.top + cH + 24)
+    ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1.5
+    ctx.moveTo(x, PAD.top + cH); ctx.lineTo(x, PAD.top + cH + 6); ctx.stroke()
   }
 }
 
@@ -182,7 +183,7 @@ function drawLine(ctx: CanvasRenderingContext2D, vals: number[], colour: string,
   vals.forEach((v, i) => {
     const nx = i / (vals.length - 1); const ny = (v - yMin) / (yMax - yMin)
     const cx = PAD.left + nx * cW; const cy = PAD.top + cH - ny * cH
-    i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy)
+    if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy)
   })
   ctx.stroke(); if (dashed) ctx.setLineDash([])
 }
@@ -209,10 +210,11 @@ function drawDots(ctx: CanvasRenderingContext2D, nx: number, W: number, H: numbe
 }
 
 const CHARTS = [
-  { label: 'SPEED', unit: 'km/h', field: 'speed', yMin: 60, yMax: 360, height: 340, gridCount: 6, isRpm: false },
-  { label: 'PEDAL', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 160, gridCount: 4, isRpm: false },
-  { label: 'GEAR', unit: '1–8', field: 'gear', yMin: 1, yMax: 8, height: 72, gridCount: 4, isRpm: false },
-  { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 4000, yMax: 13000, height: 88, gridCount: 5, isRpm: true },
+  { label: 'SPEED', unit: 'km/h', field: 'speed', yMin: 60, yMax: 360, height: 420, gridCount: 6, isRpm: false },
+  { label: 'BRAKING', unit: '%', field: 'brake', yMin: 0, yMax: 100, height: 160, gridCount: 4, isRpm: false },
+  { label: 'THROTTLE', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 220, gridCount: 4, isRpm: false },
+  { label: 'GEAR', unit: '1–8', field: 'gear', yMin: 1, yMax: 8, height: 120, gridCount: 7, isRpm: false },
+  { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 4000, yMax: 13000, height: 140, gridCount: 5, isRpm: true },
 ]
 
 type DriverSectorTimes = { s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; lap_number: number }
@@ -252,25 +254,35 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
 
   useEffect(() => {
     const canvas = ref.current
-    if (!canvas || driverData.length < 2) return
+    if (!canvas || !driverData.length) return
     const W = canvas.parentElement?.clientWidth ?? 500
-    const H = 200
+    const H = 240
     canvas.width = W; canvas.height = H
 
     const ctx = canvas.getContext('2d')!
-    const sA = driverData[0].interp.speed, sB = driverData[1].interp.speed
-    const n = Math.min(sA.length, sB.length)
+    const speeds = driverData.map(d => d.interp.speed)
+    const n = Math.min(...speeds.map(s => s.length))
+    if (n < 2) return
 
-    // Build cumulative gap
+    // Build cumulative times for each driver
     const DIST_M = 5000, segLen = DIST_M / n
-    const cumA: number[] = [0], cumB: number[] = [0]
+    const cumTimes = driverData.map(() => [0])
     for (let i = 1; i < n; i++) {
-      cumA.push(cumA[i - 1] + segLen / Math.max(sA[i] / 3.6, 0.1))
-      cumB.push(cumB[i - 1] + segLen / Math.max(sB[i] / 3.6, 0.1))
+      driverData.forEach((_, dIdx) => {
+        const s = speeds[dIdx][i]
+        cumTimes[dIdx].push(cumTimes[dIdx][i - 1] + segLen / Math.max(s / 3.6, 0.1))
+      })
     }
-    const gapA = cumA.map((t, i) => t - Math.min(cumA[i], cumB[i]))
-    const gapB = cumB.map((t, i) => t - Math.min(cumA[i], cumB[i]))
-    const maxGap = Math.max(...gapA, ...gapB, 0.1)
+
+    // Calculate gap to leader at each point
+    const gaps = driverData.map((_, dIdx) => {
+      return cumTimes[dIdx].map((t, i) => {
+        const minT = Math.min(...cumTimes.map(ct => ct[i]))
+        return t - minT
+      })
+    })
+
+    const maxGap = Math.max(...gaps.flatMap(g => g), 0.1)
 
     const PL = 44, PR = 20, PT = 16, PB = 36
     const cW = W - PL - PR, cH = H - PT - PB
@@ -285,16 +297,16 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       const x = PL + (i / 3) * cW
       ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
       ctx.setLineDash([4, 4]); ctx.moveTo(x, PT); ctx.lineTo(x, PT + cH); ctx.stroke(); ctx.setLineDash([])
-      ctx.fillStyle = C.textDim; ctx.font = '500 8px "JetBrains Mono", monospace'
+      ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'
       ctx.textAlign = i === xLabels.length - 1 ? 'right' : i === 0 ? 'left' : 'center'
-      ctx.fillText(lbl, x + (i === 0 ? 2 : i === 3 ? -2 : 0), PT + cH + 20)
+      ctx.fillText(lbl, x + (i === 0 ? 2 : i === 3 ? -2 : 0), PT + cH + 24)
     })
 
     // Y-axis labels
     for (let i = 0; i <= 3; i++) {
       const v = (i / 3) * maxGap; const y = toY(v)
-      ctx.fillStyle = C.textDim; ctx.font = '500 8px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-      ctx.fillText(i === 0 ? '0.0s' : `+${v.toFixed(1)}s`, PL - 6, y + 3)
+      ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+      ctx.fillText(i === 0 ? '0.0s' : `+${v.toFixed(1)}s`, PL - 8, y + 4)
       if (i > 0) {
         ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
         ctx.moveTo(PL, y); ctx.lineTo(PL + cW, y); ctx.stroke()
@@ -306,11 +318,10 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
     ctx.moveTo(PL, PT + cH); ctx.lineTo(PL + cW, PT + cH); ctx.stroke()
 
     // Helper: smooth bezier through points
-    function drawSmoothLine(gaps: number[], colour: string, dashed: boolean) {
-      // Sample every Nth point for smoother bezier control
+    function drawSmoothLine(driverGaps: number[], colour: string, dIdx: number) {
       const step = Math.max(1, Math.floor(n / 80))
       const pts: [number, number][] = []
-      for (let i = 0; i < n; i += step) pts.push([toX(i), toY(gaps[i])])
+      for (let i = 0; i < n; i += step) pts.push([toX(i), toY(driverGaps[i])])
       if (pts.length < 2) return
 
       // Area fill
@@ -324,12 +335,13 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1])
       ctx.lineTo(PL + cW, PT + cH); ctx.lineTo(PL, PT + cH); ctx.closePath()
       const areaGrad = ctx.createLinearGradient(0, PT, 0, PT + cH)
-      areaGrad.addColorStop(0, colour + '22'); areaGrad.addColorStop(1, colour + '04')
+      areaGrad.addColorStop(0, colour + '18'); areaGrad.addColorStop(1, colour + '02')
       ctx.fillStyle = areaGrad; ctx.fill()
 
       // Smooth line
+      const dashed = dIdx % 2 !== 0
       if (dashed) ctx.setLineDash([6, 4])
-      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = dashed ? 2 : 4; ctx.lineJoin = 'round'
+      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = dashed ? 2 : 3.5; ctx.lineJoin = 'round'
       ctx.moveTo(pts[0][0], pts[0][1])
       for (let i = 1; i < pts.length - 1; i++) {
         const mx = (pts[i][0] + pts[i + 1][0]) / 2
@@ -342,12 +354,11 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       // End label
       const last = pts[pts.length - 1]
       ctx.font = 'bold 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-      ctx.fillStyle = colour; ctx.fillText(driverData[dashed ? 1 : 0].abbr, last[0] - 4, last[1] - 6)
+      ctx.fillStyle = colour; ctx.fillText(driverData[dIdx].abbr, last[0] - 4, last[1] - 6)
     }
 
-    drawSmoothLine(gapA, driverData[0].colour, false)
-    drawSmoothLine(gapB, driverData[1].colour, true)
-  }, [driverData.map(d => d.abbr).join(',')])
+    gaps.forEach((g, idx) => drawSmoothLine(g, driverData[idx].colour, idx))
+  }, [driverData])
 
   return (
     <Panel>
@@ -356,19 +367,19 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
         subtitle="Full lap interval · seconds"
         right={
           <div style={{ display: 'flex', gap: 14 }}>
-            {driverData.slice(0, 2).map((d, i) => (
+            {driverData.map((d, i) => (
               <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {i === 0
+                {i % 2 === 0
                   ? <div style={{ width: 16, height: 2.5, borderRadius: 2, background: d.colour }} />
                   : <svg width="16" height="2"><line x1="0" y1="1" x2="16" y2="1" stroke={d.colour} strokeWidth="2" strokeDasharray="4 3" /></svg>
                 }
-                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour }}>{d.abbr}</span>
+                <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour }}>{d.abbr}</span>
               </div>
             ))}
           </div>
         }
       />
-      <canvas ref={ref} height={200} style={{ display: 'block', width: '100%' }} />
+      <canvas ref={ref} height={240} style={{ display: 'block', width: '100%' }} />
     </Panel>
   )
 }
@@ -450,7 +461,7 @@ function PerformanceMatrix({
             return (
               <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${driverData.length}, 90px)`, gap: 4, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{row.label}</span>
-                {row.values.map(({ abbr, colour, v, fmt }) => {
+                {row.values.map(({ abbr, v, fmt }) => {
                   const isBest = v !== null && v === best
                   return (
                     <span key={abbr} style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
@@ -465,7 +476,7 @@ function PerformanceMatrix({
           {/* Theoretical row */}
           <div style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${driverData.length}, 90px)`, gap: 4, padding: '10px 0' }}>
             <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Theoretical</span>
-            {theoBest.map(({ abbr, colour, ms }) => {
+            {theoBest.map(({ abbr, ms }) => {
               const isBest = ms !== null && ms === Math.min(...theoBest.filter(t => t.ms !== null).map(t => t.ms!))
               return (
                 <span key={abbr} style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
@@ -629,7 +640,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [loading, setLoading] = useState(false)
   const [sessionType, setSessionType] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
-  const [session,     setSession]     = useState<import('@/types/f1').Session | null>(null)
+  const [session, setSession] = useState<import('@/types/f1').Session | null>(null)
   const [sectorTimes, setSectorTimes] = useState<Map<number, DriverSectorTimes>>(new Map())
   const [telLapNumbers, setTelLapNumbers] = useState<Map<number, number>>(new Map())
   const [qualiSegments, setQualiSegments] = useState<QualiSegmentsData | null>(null)
@@ -637,16 +648,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [activeSegment, setActiveSegment] = useState<'Q1' | 'Q2' | 'Q3'>('Q1')
   const [selectedSegment, setSelectedSegment] = useState<'Q1' | 'Q2' | 'Q3'>('Q3')
 
-  const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
+  const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null, null])
   const deltaRef = useRef<HTMLCanvasElement | null>(null)
-  const drsRef = useRef<HTMLCanvasElement | null>(null)
   const trackRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const segmentEntries = getSegmentEntries(qualiSegments, selectedSegment)
   const segmentDriverNumbers = getSegmentDriverNumbers(segmentEntries)
   const segmentLapByDriver = getSegmentLapByDriver(segmentEntries)
-  const segmentSummary = getSegmentSummary(selectedSegment, segmentEntries)
   const isQualifying = !isRaceSession(sessionType) && !isPracticeSession(sessionType)
 
   // Session + drivers
@@ -767,35 +776,39 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       drawGrid(ctx, W, cfg.height, cfg.yMin, cfg.yMax, cfg.gridCount, cfg.isRpm)
       if (cfg.field === 'speed') {
         drawSpeedGapFill(ctx, W, cfg.height, driverData, cfg.yMin, cfg.yMax)
-        driverData.forEach((d, i) => drawLine(ctx, d.interp.speed, d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 2.2, i > 0))
+        driverData.forEach((d, i) => drawLine(ctx, d.interp.speed, d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 2.2, i % 2 !== 0))
+      } else if (cfg.field === 'brake') {
+        driverData.forEach((d, i) => {
+          drawLine(ctx, d.interp.brake.map(b => b ? 1 : 0), d.colour, W, cfg.height, 0, 1, 1.8, i % 2 !== 0)
+        })
       } else if (cfg.field === 'throttle') {
         driverData.forEach((d, i) => {
-          drawLine(ctx, d.interp.throttle, d.colour, W, cfg.height, 0, 100, 1.8, i > 0)
-          drawLine(ctx, d.interp.brake.map(b => b ? 100 : 0), C.brake, W, cfg.height, 0, 100, 1.5, i > 0)
+          drawLine(ctx, d.interp.throttle, d.colour, W, cfg.height, 0, 100, 1.8, i % 2 !== 0)
         })
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        driverData.forEach((d, i) => drawLine(ctx, (d.interp as any)[cfg.field], d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 1.8, i > 0))
+        driverData.forEach((d, i) => drawLine(ctx, (d.interp as any)[cfg.field], d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 1.8, i % 2 !== 0))
       }
       if (tooltipNx !== null) { drawCrosshair(ctx, tooltipNx, W, cfg.height); drawDots(ctx, tooltipNx, W, cfg.height, driverData, cfg.field, cfg.yMin, cfg.yMax) }
     })
 
     // Delta
     if (deltaRef.current && driverData.length >= 2) {
-      const canvas = deltaRef.current; canvas.width = W; canvas.height = 96
+      const H_DELTA = 160
+      const canvas = deltaRef.current; canvas.width = W; canvas.height = H_DELTA
       const ctx = canvas.getContext('2d')!
       const a = driverData[0].interp.speed, b = driverData[1].interp.speed
       const n = Math.min(a.length, b.length)
       const deltas = Array.from({ length: n }, (_, i) => a[i] - b[i])
       const maxD = Math.max(...deltas.map(Math.abs), 15)
-      const { cW, cH } = chartCoords(W, 96)
+      const { cW, cH } = chartCoords(W, H_DELTA)
       const midY = PAD.top + cH / 2
-      ctx.fillStyle = C.surface; ctx.fillRect(0, 0, W, 96)
+      ctx.fillStyle = C.surface; ctx.fillRect(0, 0, W, H_DELTA)
       ctx.beginPath(); ctx.strokeStyle = C.borderMid; ctx.lineWidth = 1; ctx.moveTo(PAD.left, midY); ctx.lineTo(PAD.left + cW, midY); ctx.stroke()
       for (const m of [-1, -0.5, 0.5, 1]) {
         const y = midY - m * cH / 2
-        ctx.fillStyle = C.textDim; ctx.font = '500 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-        ctx.fillText((m * maxD).toFixed(0), PAD.left - 8, y + 3)
+        ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+        ctx.fillText((m * maxD).toFixed(0), PAD.left - 8, y + 4)
         if (m !== 0) { ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke() }
       }
       ctx.beginPath(); ctx.moveTo(PAD.left, midY)
@@ -805,7 +818,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       grad.addColorStop(0, driverData[0].colour + '22'); grad.addColorStop(0.5, 'rgba(0,0,0,0)'); grad.addColorStop(1, driverData[1].colour + '22')
       ctx.fillStyle = grad; ctx.fill()
       ctx.beginPath(); ctx.strokeStyle = C.borderMid; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
-      deltas.forEach((d, i) => { const cx = PAD.left + (i / (n - 1)) * cW; const cy = midY - (d / maxD) * (cH / 2); i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy) })
+      deltas.forEach((d, i) => {
+        const cx = PAD.left + (i / (n - 1)) * cW;
+        const cy = midY - (d / maxD) * (cH / 2);
+        if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+      })
       ctx.stroke()
       if (tooltipNx !== null) {
         const cx = PAD.left + tooltipNx * cW; const idx = Math.round(tooltipNx * (n - 1)); const d = deltas[idx] ?? 0; const cy = midY - (d / maxD) * (cH / 2)
@@ -818,29 +835,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       }
     }
 
-    // DRS
-    if (drsRef.current) {
-      const canvas = drsRef.current; const rowH = 18; const totalH = driverData.length * (rowH + 8) + PAD.top + PAD.bottom
-      canvas.width = W; canvas.height = totalH
-      const ctx = canvas.getContext('2d')!; ctx.fillStyle = C.surface; ctx.fillRect(0, 0, W, totalH)
-      const { cW } = chartCoords(W, totalH)
-      driverData.forEach(({ interp, colour, abbr }, di) => {
-        const y = PAD.top + di * (rowH + 8)
-        ctx.fillStyle = C.textMid; ctx.font = '600 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'; ctx.fillText(abbr, PAD.left - 8, y + rowH / 2 + 3)
-        ctx.fillStyle = C.border; ctx.beginPath(); ctx.roundRect?.(PAD.left, y, cW, rowH, 3); ctx.fill()
-        const nn = interp.drs.length; let inDrs = false, ds = 0
-        interp.drs.forEach((v, i) => {
-          const open = v > 8
-          if (open && !inDrs) { inDrs = true; ds = i }
-          if (!open && inDrs) {
-            inDrs = false; const x1 = PAD.left + (ds / (nn - 1)) * cW; const x2 = PAD.left + (i / (nn - 1)) * cW
-            ctx.fillStyle = C.green; ctx.beginPath(); ctx.roundRect?.(x1, y, x2 - x1, rowH, 2); ctx.fill()
-          }
-        })
-        if (inDrs) { const x1 = PAD.left + (ds / (nn - 1)) * cW; ctx.fillStyle = C.green; ctx.beginPath(); ctx.roundRect?.(x1, y, cW - (x1 - PAD.left), rowH, 2); ctx.fill() }
-        if (tooltipNx !== null) drawCrosshair(ctx, tooltipNx, W, totalH)
-      })
-    }
 
     // Track map
     const trackX = driverData[0]?.interp.x ?? []
@@ -865,7 +859,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       // Sectors
       sectorTrackColours.forEach((col, si) => {
         const s = Math.floor(si * n / 3); const e = Math.floor((si + 1) * n / 3)
-        ctx.beginPath(); for (let i = s; i <= e; i++) i === s ? ctx.moveTo(tx(xs[i]), ty(ys[i])) : ctx.lineTo(tx(xs[i]), ty(ys[i]))
+        ctx.beginPath();
+        for (let i = s; i <= e; i++) {
+          if (i === s) ctx.moveTo(tx(xs[i]), ty(ys[i]));
+          else ctx.lineTo(tx(xs[i]), ty(ys[i]));
+        }
         ctx.strokeStyle = col; ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.stroke()
       })
       // Center line
@@ -1068,48 +1066,132 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                 {/* Scrubber */}
                 <div style={{
                   position: 'sticky', top: 68, zIndex: 40,
-                  height: 48, background: 'rgba(248,251,254,0.92)', border: `1px solid ${C.borderMid}`,
-                  borderRadius: 14, display: 'flex', alignItems: 'center', padding: '0 18px',
-                  marginBottom: 16, boxShadow: '0 12px 28px rgba(37,54,82,0.08)', backdropFilter: 'blur(10px)',
+                  height: 140, background: 'rgba(255,255,255,0.98)', border: `1px solid ${C.borderMid}`,
+                  borderRadius: 24, display: 'flex', alignItems: 'center', padding: '0 28px',
+                  marginBottom: 20, boxShadow: '0 24px 64px rgba(37,54,82,0.18)', backdropFilter: 'blur(24px)',
                 }}>
                   {!tooltipData ? (
-                    <span style={{ fontSize: 10, color: C.textDim, flex: 1, textAlign: 'center', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.08em' }}>
-                      ← Move cursor over charts to inspect telemetry →
-                    </span>
+                    <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                        Instrumentation Cluster
+                      </span>
+                    </div>
                   ) : (
                     <>
-                      <span style={{ fontSize: 10, color: C.textMid, width: 80, fontFamily: 'JetBrains Mono, monospace' }}>{(tooltipData.dist / 1000).toFixed(3)} km</span>
-                      <div style={{ display: 'flex', flex: 1, justifyContent: 'flex-end', gap: 28 }}>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {tooltipData.values.map((v: any) => (
-                          <div key={v.abbr} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 5, height: 5, borderRadius: '50%', background: v.colour }} />
-                              <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textBright }}>{v.abbr}</span>
+                      {/* Left: Position */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 32, borderRight: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 10, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800 }}>POSITION</span>
+                        <span style={{ fontSize: 24, color: C.textBright, fontFamily: 'JetBrains Mono, monospace', fontWeight: 900 }}>{(tooltipData.dist / 1000).toFixed(3)}<span style={{ fontSize: 12, color: C.textDim, marginLeft: 2 }}>KM</span></span>
+                      </div>
+
+                      {/* Units */}
+                      <div style={{ display: 'flex', flex: 1, justifyContent: 'space-around' }}>
+                        {tooltipData.values.map((v: { abbr: string, rpm: number, colour: string }) => {
+                          const rpmBase = 6000, rpmMax = 12000
+                          const rpmPct = Math.max(0, Math.min(1, (v.rpm - rpmBase) / (rpmMax - rpmBase)))
+                          const needleDeg = -180 + rpmPct * 180
+                          return (
+                            <div key={v.abbr} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                              {/* Driver Info */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                                <span style={{ fontSize: 22, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 900, color: C.textBright }}>{v.abbr}</span>
+                                <div style={{ width: 20, height: 6, borderRadius: 3, background: v.colour, boxShadow: `0 4px 12px ${v.colour}50` }} />
+                              </div>
+
+                              {/* Gauge Unit */}
+                              <div style={{ position: 'relative', width: 160, height: 110, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                                <svg style={{ position: 'absolute', top: -15, width: 160, height: 160 }}>
+                                  {/* Performance Zones */}
+                                  <path d="M 25 80 A 55 55 0 0 1 66 35" fill="none" stroke={C.green} strokeWidth="12" opacity="0.08" />
+                                  <path d="M 66 35 A 55 55 0 0 1 107 35" fill="none" stroke={C.gold} strokeWidth="12" opacity="0.08" />
+                                  <path d="M 107 35 A 55 55 0 0 1 135 80" fill="none" stroke={C.red} strokeWidth="12" opacity="0.08" />
+
+                                  {/* Even Markers (6, 8, 10, 12) */}
+                                  {[6, 8, 10, 12].map((val, i) => {
+                                    const ang = 180 + (i / 3) * 180; const rad = ang * (Math.PI / 180)
+                                    const x1 = 80 + 52 * Math.cos(rad); const y1 = 80 + 52 * Math.sin(rad)
+                                    const x2 = 80 + 62 * Math.cos(rad); const y2 = 80 + 62 * Math.sin(rad)
+                                    const isRed = val >= 10
+                                    return (
+                                      <g key={val}>
+                                        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={isRed ? C.red : 'rgba(0,0,0,0.3)'} strokeWidth="2" />
+                                        <text x={80 + 74 * Math.cos(rad)} y={80 + 74 * Math.sin(rad)} fontSize="11" fontWeight="950" textAnchor={i < 1.5 ? 'start' : 'end'} fill={isRed ? C.red : C.textBright} fontFamily="Inter">{val}</text>
+                                      </g>
+                                    )
+                                  })}
+
+                                  {/* Sub-ticks */}
+                                  {Array.from({ length: 31 }).map((_, i) => {
+                                    const ang = 180 + (i / 30) * 180; const rad = ang * (Math.PI / 180)
+                                    const x1 = 80 + 56 * Math.cos(rad); const y1 = 80 + 56 * Math.sin(rad)
+                                    const x2 = 80 + 62 * Math.cos(rad); const y2 = 80 + 62 * Math.sin(rad)
+                                    return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(0,0,0,0.12)" strokeWidth="0.5" />
+                                  })}
+
+                                  {/* Label with Decorator */}
+                                  <text x="80" y="52" fontSize="6" fontWeight="900" textAnchor="middle" fill={C.textDim} fontFamily="Space Grotesk" letterSpacing="0.05em">-- RPM x1000 --</text>
+
+                                  {/* Needle */}
+                                  <g style={{ transform: `rotate(${needleDeg + 180}deg)`, transformOrigin: '80px 80px', transition: 'transform 0.08s cubic-bezier(0.1, 0.7, 0.1, 1)' }}>
+                                    <line x1="80" y1="80" x2="22" y2="80" stroke="#fff" strokeWidth="3" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.3))' }} />
+                                    <circle cx="80" cy="80" r="5" fill="#fff" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
+                                  </g>
+                                </svg>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, marginBottom: 12 }}>
+                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: -2 }}>
+                                    <span style={{ fontSize: 14, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.6 }}>{v.speed.toFixed(0)}</span>
+                                    <span style={{ fontSize: 7, fontWeight: 900, color: C.textDim, opacity: 0.4 }}>KPH</span>
+                                  </div>
+                                  <span style={{ fontSize: 24, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em' }}>{v.gear}</span>
+                                </div>
+                              </div>
+
+                              {/* Nano Banana Pedals */}
+                              <div style={{ display: 'flex', gap: 12, height: 95, alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 75, fontSize: 8, fontWeight: 900, color: C.textDim, opacity: 0.4, textAlign: 'right', width: 22, fontFamily: 'JetBrains Mono' }}>
+                                  <span>100</span>
+                                  <span>0</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 10, height: 75, alignItems: 'flex-end' }}>
+                                  {[
+                                    { label: 'THROTTLE', val: v.throttle, col: C.green },
+                                    { label: 'BRAKING', val: v.brake, col: C.brake, status: v.brake > 0 ? 'ON' : 'OFF' }
+                                  ].map(p => (
+                                    <div key={p.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                                      <div style={{ width: 14, height: 75, background: 'rgba(0,0,0,0.04)', borderRadius: 2, position: 'relative', overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                                        {/* Segmented Display */}
+                                        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column-reverse' }}>
+                                          {Array.from({ length: 8 }).map((_, i) => (
+                                            <div key={i} style={{
+                                              flex: 1,
+                                              background: (p.val > (i * 12.5)) ? p.col : 'transparent',
+                                              borderBottom: '1px solid rgba(255,255,255,0.4)',
+                                              opacity: p.val > (i * 12.5) ? 0.7 : 0,
+                                              transition: 'background 0.1s ease'
+                                            }} />
+                                          ))}
+                                        </div>
+                                        <div style={{ position: 'absolute', bottom: 0, width: '100%', height: `${p.val}%`, background: p.col, opacity: 0.15, transition: 'height 0.1s linear' }} />
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 45 }}>
+                                        <span style={{ fontSize: 6, fontWeight: 950, color: C.textDim, letterSpacing: '0.04em' }}>{p.label}</span>
+                                        {p.status && <span style={{ fontSize: 8, fontWeight: 950, color: p.val > 0 ? p.col : C.textDim, lineHeight: 1.2 }}>{p.status}</span>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                              </div>
                             </div>
-                            <span style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textBright }}>{v.speed.toFixed(0)}<span style={{ fontSize: 8, color: C.textDim, marginLeft: 2 }}>kph</span></span>
-                            <span style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textBright }}>G{v.gear}</span>
-                            <span style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: v.brake ? C.brake : C.textBright }}>{v.brake ? 'BRK' : `${v.throttle.toFixed(0)}%`}</span>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </>
                   )}
                 </div>
 
-                {/* Quali summary cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                  {(() => {
-                    const top = qualiSegments.segments['Q3']?.[0] || qualiSegments.segments['Q2']?.[0] || qualiSegments.segments['Q1']?.[0]
-                    return (
-                      <>
-                        <SectorCard label="SECTOR 1" time={top?.s1_ms || '—'} color={C.green} delta={-120} />
-                        <SectorCard label="SECTOR 2" time={top?.s2_ms || '—'} color={C.gold} delta={85} />
-                        <SectorCard label="SECTOR 3" time={top?.s3_ms || '—'} color={C.purple} delta={-40} />
-                      </>
-                    )
-                  })()}
-                </div>
+
 
                 {/* Quali leaderboards tabs */}
                 {qualiSegments?.segments && (
@@ -1203,6 +1285,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     <canvas ref={el => { chartRefs.current[0] = el }} height={CHARTS[0].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
 
+                  {/* Braking */}
+                  <Panel>
+                    <PanelHeader title="Braking" />
+                    <canvas ref={el => { chartRefs.current[1] = el }} height={CHARTS[1].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </Panel>
+
                   {/* Delta */}
                   {driverData.length >= 2 && (
                     <Panel>
@@ -1211,35 +1299,22 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     </Panel>
                   )}
 
-                  {/* Pedal + Gear */}
+                  {/* Throttle + Gear */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: 14 }}>
                     <Panel>
-                      <PanelHeader title="Pedal Application" subtitle="Throttle & Brake Input"
-                        right={
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <span style={{ fontSize: 8, padding: '2px 6px', background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMid }}>THR</span>
-                            <span style={{ fontSize: 8, padding: '2px 6px', background: `${C.brake}10`, border: `1px solid ${C.brake}30`, borderRadius: 4, color: C.brake }}>BRK</span>
-                          </div>
-                        }
-                      />
-                      <canvas ref={el => { chartRefs.current[1] = el }} height={CHARTS[1].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                      <PanelHeader title="Throttle Input" subtitle="0 – 100%" />
+                      <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                     </Panel>
                     <Panel>
                       <PanelHeader title="Gear Selection" subtitle="1 – 8" />
-                      <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                      <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                     </Panel>
                   </div>
 
                   {/* RPM */}
                   <Panel>
                     <PanelHeader title="Engine RPM" subtitle="4 000 – 13 000" />
-                    <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                  </Panel>
-
-                  {/* DRS */}
-                  <Panel>
-                    <PanelHeader title="DRS Activation" right={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} /><span style={{ fontSize: 9, color: C.textMid, fontFamily: 'Space Grotesk, sans-serif' }}>Open</span></div>} />
-                    <canvas ref={drsRef} height={60} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <canvas ref={el => { chartRefs.current[4] = el }} height={CHARTS[4].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
                 </div>
 
@@ -1259,12 +1334,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   />
                   <canvas ref={trackRef} height={300} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                 </Panel>
-
-                <CornerAnalysis
-                  sessionKey={sessionKey}
-                  drivers={selected}
-                  driverMap={Object.fromEntries(drivers.map(d => [d.driver_number, { abbreviation: d.abbreviation, team_colour: d.team_colour }]))}
-                />
               </>
             )}
           </>
