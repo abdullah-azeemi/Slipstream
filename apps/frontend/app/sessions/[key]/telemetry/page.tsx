@@ -700,8 +700,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         setTelLapNumbers(lapNumbers)
         const byDriver = new Map<number, TelemetrySample[]>()
         samples.forEach(s => {
-          if (!byDriver.has(s.driver_number)) byDriver.set(s.driver_number, [])
-          byDriver.get(s.driver_number)!.push(s)
+          if (s.driver_number != null) {
+            if (!byDriver.has(s.driver_number)) byDriver.set(s.driver_number, [])
+            byDriver.get(s.driver_number)!.push(s)
+          }
         })
         const interped = new Map<number, Interp>()
         byDriver.forEach((rows, dn) => interped.set(dn, interpolateSamples(rows)))
@@ -1086,7 +1088,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
                       {/* Units */}
                       <div style={{ display: 'flex', flex: 1, justifyContent: 'space-around' }}>
-                        {tooltipData.values.map((v: { abbr: string, rpm: number, colour: string }) => {
+                        {tooltipData.values.map((v: { abbr: string; rpm: number; colour: string; speed: number; gear: number; throttle: number; brake: number }) => {
                           const rpmBase = 6000, rpmMax = 12000
                           const rpmPct = Math.max(0, Math.min(1, (v.rpm - rpmBase) / (rpmMax - rpmBase)))
                           const needleDeg = -180 + rpmPct * 180

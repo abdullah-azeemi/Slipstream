@@ -69,8 +69,8 @@ type DriverInfo = {
 // ── Constants (Premium Dashboard Palette) ───────────────────────────────────
 
 const CHART_BG = '#FFFFFF'
-const TEXT_DIM   = '#7D8BA2'
-const TEXT_DARK  = '#13233D'
+const TEXT_DIM = '#7D8BA2'
+const TEXT_DARK = '#13233D'
 
 const COMPOUND_COLOUR: Record<string, string> = {
   SOFT: '#E8002D', MEDIUM: '#FFD700', HARD: '#FFFFFF',
@@ -122,7 +122,7 @@ export default function PracticeAnalysis({
   const [compounds, setCompounds] = useState<CompoundTeam[]>([])
   const [sectors, setSectors] = useState<SectorDriver[]>([])
   const [loading, setLoading] = useState(false)
-  const [activeDegCmp,  setActiveDegCmp]  = useState<string>('HARD')
+  const [activeDegCmp, setActiveDegCmp] = useState<string>('HARD')
   const [scatterTip, setScatterTip] = useState<{ x: number; y: number; lap: ScatterLap; gapMs: number } | null>(null)
 
   const scatterRef = useRef<HTMLCanvasElement | null>(null)
@@ -288,14 +288,17 @@ export default function PracticeAnalysis({
     if (!geom) return
     const rect = e.currentTarget.getBoundingClientRect()
     const mx = e.clientX - rect.left; const my = e.clientY - rect.top
-    let nearest: (typeof geom.laps)[0] | null = null; let nearDist = 15
+    let nearest: (ScatterLap & { gap_ms: number }) | null = null; let nearDist = 15
     geom.laps.forEach(l => {
       const x = (PAD.left + ((l.lap_number - geom.xMin) / Math.max(geom.xMax - geom.xMin, 1)) * (rect.width - PAD.left - PAD.right))
       const y = (PAD.top + (Math.min(l.gap_ms, geom.yMax) / geom.yMax) * (rect.height - PAD.top - PAD.bottom))
       const dist = Math.hypot(mx - x, my - y)
       if (dist < nearDist) { nearDist = dist; nearest = l }
     })
-    if (nearest) setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: nearest, gapMs: nearest.gap_ms })
+    if (nearest) {
+      const n = nearest as (ScatterLap & { gap_ms: number })
+      setScatterTip({ x: e.clientX + 16, y: e.clientY - 20, lap: n, gapMs: n.gap_ms })
+    }
     else setScatterTip(null)
   }, [])
 
