@@ -165,7 +165,7 @@ function DriverRow({ driver, imageUrl }: { driver: DriverStanding, imageUrl?: st
       border: '1px solid #F1F5F9',
       transition: 'transform 0.2s ease, box-shadow 0.2s ease',
       cursor: 'pointer',
-    }} className="standing-row">
+    }} className="standing-row standing-row-driver">
       {/* Position */}
       <span style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', fontFamily: 'Inter, sans-serif' }}>
         {String(driver.position).padStart(2, '0')}
@@ -205,7 +205,7 @@ function DriverRow({ driver, imageUrl }: { driver: DriverStanding, imageUrl?: st
       </div>
 
       {/* Team Info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="standing-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 3, height: 24, background: colour, borderRadius: 2 }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B' }}>{driver.team_name}</span>
       </div>
@@ -239,7 +239,7 @@ function ConstructorRow({ constructor }: { constructor: ConstructorStanding }) {
       borderRadius: 16,
       border: '1px solid #F1F5F9',
       cursor: 'pointer',
-    }} className="standing-row">
+    }} className="standing-row standing-row-constructor">
       <span style={{ fontSize: 18, fontWeight: 900, color: '#0F172A' }}>
         {String(constructor.position).padStart(2, '0')}
       </span>

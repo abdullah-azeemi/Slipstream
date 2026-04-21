@@ -252,9 +252,77 @@ main.landing {
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  main { padding-top: 64px; padding-bottom: 88px; }
+  main { padding-top: 60px; padding-bottom: 96px; }
   main.landing { padding-top: 0; padding-bottom: 0; }
-  .layout-wrapper { padding: 16px 16px 32px; }
+  .layout-wrapper { padding: 12px 12px 32px; }
   .page-title { font-size: 2rem; }
   .telemetry-top-grid { grid-template-columns: 1fr !important; }
+
+  /* Session hub: stack sidebar below the main card on mobile */
+  .session-hub-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .session-sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Sessions list: on mobile the inner 4-col grid becomes 2-col */
+  .sessions-grid-row {
+    grid-template-columns: 60px 1fr 36px !important;
+    gap: 12px !important;
+  }
+  /* Hide the stats box on very small screens */
+  .sessions-stats-box {
+    display: none !important;
+  }
+
+  /* RaceAnalysis: stack the main+sidebar layout vertically */
+  .race-analysis-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Schedule page */
+  .schedule-container { padding: 20px 16px !important; }
+  .schedule-hero { height: auto !important; min-height: 380px !important; border-radius: 24px !important; margin-bottom: 24px !important; }
+  .schedule-hero-content { padding: 32px 24px !important; }
+  .schedule-hero-meta { flex-direction: column !important; gap: 12px !important; margin-top: 16px !important; }
+  .schedule-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+  
+  .race-card { padding: 24px 20px !important; min-height: auto !important; }
+  .race-card-inner { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
+  .race-card-number { font-size: 72px !important; left: 8px !important; top: 16px !important; transform: none !important; opacity: 0.2; }
+  .race-card-content { padding-left: 0 !important; }
+  .race-card-finishers { flex-wrap: wrap !important; gap: 8px !important; }
+
+  /* Dashboard */
+  .dashboard-container { padding: 16px 12px 80px !important; }
+  .dashboard-top-grid { grid-template-columns: 1fr !important; }
+  .dashboard-hero-content { padding: 24px !important; }
+  .dashboard-stats-grid { grid-template-columns: 1fr !important; }
+
+  /* Championship Standings */
+  .standing-row-driver { grid-template-columns: 32px 48px 1fr 60px !important; padding: 12px 16px !important; gap: 8px !important; }
+  .standing-row-constructor { grid-template-columns: 32px 1fr 60px !important; padding: 12px 16px !important; gap: 8px !important; }
+  .standing-hide-mobile { display: none !important; }
+
+  /* Predictions */
+  .predictions-container { padding: 16px !important; }
+  .podium-grid { grid-template-columns: 1fr !important; }
+  .predictions-model-grid { grid-template-columns: 1fr !important; }
+  .predictions-header, .predictions-row { grid-template-columns: 32px 28px 1fr !important; }
+  .predictions-hide-mobile { display: none !important; }
+  
+  .predictions-page-header { flex-wrap: wrap !important; }
+  .predictions-dropdown-container { width: 100% !important; margin-top: 8px !important; }
+  .predictions-dropdown-button { width: 100% !important; justify-content: space-between !important; }
+  .predictions-dropdown-menu { width: 100% !important; right: auto !important; left: 0 !important; }
+}
+
+@media (max-width: 480px) {
+  /* TopBar: hide desktop nav text links on tiny screens, keep logo */
+  .topbar-nav-links {
+    display: none !important;
+  }
+  .layout-wrapper { padding: 8px 8px 24px; }
 }

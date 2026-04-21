@@ -84,7 +84,7 @@ export default function LandingPage() {
             gap: 40,
             flexWrap: 'wrap',
           }}>
-            {['FastF1', 'OpenF1', 'Jolpica', 'Zapoff Racing'].map(name => (
+            {['FastF1', 'OpenF1', 'Jolpica'].map(name => (
               <span key={name} style={{
                 fontFamily: 'Inter, sans-serif',
                 fontSize: 14, fontWeight: 600,
@@ -227,7 +227,7 @@ export default function LandingPage() {
           </div>
 
           {/* GLOBAL SYNC — 8 cols, dark */}
-          <div style={{
+          <div className="landing-global-sync" style={{
             gridColumn: 'span 8',
             background: '#0F172A',
             borderRadius: 24,
@@ -244,7 +244,7 @@ export default function LandingPage() {
                 Automated data ingestion from FastF1, OpenF1, and Jolpica. Zero-config synchronization between the track and your local archive.
               </p>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div className="landing-global-sync-right" style={{ textAlign: 'right' }}>
               <div style={{
                 fontFamily: 'Inter, sans-serif', fontWeight: 900,
                 fontSize: 56, color: '#10B981',
@@ -340,6 +340,17 @@ export default function LandingPage() {
         @media (max-width: 1024px) {
           [style*="span 8"], [style*="span 4"] {
             grid-column: span 12 !important;
+          }
+        }
+        @media (max-width: 768px) {
+          .landing-global-sync {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 32px;
+            padding: 32px 24px !important;
+          }
+          .landing-global-sync-right {
+            text-align: left !important;
           }
         }
       `}</style>

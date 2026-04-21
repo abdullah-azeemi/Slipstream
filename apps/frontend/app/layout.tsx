@@ -2,14 +2,11 @@
 
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
-import { usePathname } from 'next/navigation'
 import './globals.css'
 import BottomNav from '@/components/layout/BottomNav'
 import TopBar from '@/components/layout/TopBar'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const isDashboard = pathname?.startsWith('/dashboard')
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -21,10 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           We set paddingTop = 60px (nav height) on main so inner pages clear the nav.
           Landing page overrides this with a negative marginTop on its first section.
         */}
-        <main style={{ paddingTop: 60, paddingBottom: isDashboard ? 48 : 80, minHeight: '100vh' }}>
+        <main style={{ paddingTop: 60, paddingBottom: 80, minHeight: '100vh' }}>
           {children}
         </main>
-        {!isDashboard && <BottomNav />}
+        <BottomNav />
         <Analytics />
         <SpeedInsights />
       </body>

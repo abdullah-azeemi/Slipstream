@@ -125,9 +125,9 @@ export default async function DashboardPage() {
   const formattedEventDate = eventDateRaw ? new Date(eventDateRaw).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Next Event Scheduled'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 32, paddingBottom: 40 }}>
+    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: '24px 24px 40px', maxWidth: 1200, margin: '0 auto' }}>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'stretch' }}>
+      <div className="dashboard-top-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'stretch' }}>
 
         <div style={{
           position: 'relative',
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
             background: 'linear-gradient(220deg, rgba(15, 23, 42, 0) 20%, rgba(15, 23, 42, 0.8) 100%)'
           }} />
 
-          <div style={{ position: 'absolute', inset: 0, padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div className="dashboard-hero-content" style={{ position: 'absolute', inset: 0, padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{
               background: '#E8002D',
               color: '#FFFFFF',
@@ -161,10 +161,10 @@ export default async function DashboardPage() {
               letterSpacing: '0.05em'
             }}> NEXT RACE </div>
 
-            <h1 style={{
+            <h1 className="dashboard-hero-title" style={{
               fontFamily: 'Inter, sans-serif',
               fontWeight: 900,
-              fontSize: 48,
+              fontSize: 'clamp(2.5rem, 8vw, 3rem)',
               color: '#FFFFFF',
               letterSpacing: '-0.04em',
               lineHeight: 1,
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+      <div className="dashboard-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
         <StatCard
           label="CHAMPIONSHIP LEADER" value={champLeader?.full_name ?? 'PENDING'} sub={champLeader?.team_name ?? '---'}
           points={champLeader?.points} icon={Trophy} color="#E8002D"
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 32, border: '1px solid #F1F5F9' }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 24, padding: '24px 16px', border: '1px solid #F1F5F9', overflowX: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
             <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.03em', textTransform: 'uppercase' }}>

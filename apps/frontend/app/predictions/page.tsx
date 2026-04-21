@@ -142,7 +142,7 @@ export default function PredictionsPage() {
   }, [data])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '980px', margin: '0 auto', paddingBottom: '8px' }}>
+    <div className="predictions-container" style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '980px', margin: '0 auto', paddingBottom: '8px' }}>
 
       {/* Header */}
       <section className="fade-up" style={{
@@ -174,13 +174,13 @@ export default function PredictionsPage() {
           </div>
 
           {sessions.length > 0 && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 20 }}>
-              <button onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(204,218,236,0.92)', color: '#14233C', fontSize: '12px', padding: '11px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', position: 'relative', zIndex: 21, boxShadow: '0 8px 24px rgba(24,39,75,0.08)' }}>
+            <div className="predictions-dropdown-container" style={{ position: 'relative', flexShrink: 0, zIndex: 20 }}>
+              <button className="predictions-dropdown-button" onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(204,218,236,0.92)', color: '#14233C', fontSize: '12px', padding: '11px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', position: 'relative', zIndex: 21, boxShadow: '0 8px 24px rgba(24,39,75,0.08)' }}>
                 {selected ? `${selected.gp_name.replace(' Grand Prix', '')} ${selected.year} Q` : 'Select session'}
                 <ChevronDown size={12} style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
               </button>
               {dropOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(248,250,255,0.99)', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '18px', overflow: 'hidden', zIndex: 999, minWidth: '240px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 20px 48px rgba(24,39,75,0.18)' }}>
+                <div className="predictions-dropdown-menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(248,250,255,0.99)', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '18px', overflow: 'hidden', zIndex: 999, minWidth: '240px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 20px 48px rgba(24,39,75,0.18)' }}>
                   {sessions.map(s => (
                     <button key={s.session_key} onClick={() => { setSelectedKey(s.session_key); setDropOpen(false) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px', fontSize: '12px', cursor: 'pointer', background: selectedKey === s.session_key ? 'rgba(232,0,45,0.06)' : 'transparent', color: selectedKey === s.session_key ? '#14233C' : '#56657C', fontFamily: 'JetBrains Mono, monospace', border: 'none', borderBottom: '1px solid rgba(204,218,236,0.7)' }}>
                       {s.gp_name.replace(' Grand Prix', '')} {s.year}
@@ -271,7 +271,7 @@ export default function PredictionsPage() {
               </div>
             </div>
 
-            <div style={{
+            <div className="predictions-model-grid" style={{
               background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)',
               border: '1px solid rgba(204,218,236,0.95)',
               borderRadius: '22px',
