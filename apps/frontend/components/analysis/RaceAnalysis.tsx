@@ -644,7 +644,7 @@ export default function RaceAnalysis({
 
       {!loading && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, 0.9fr)', gap: '18px', alignItems: 'start' }}>
+          <div className="race-analysis-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, 0.9fr)', gap: '18px', alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div ref={lapCardRef}>
                 <Card style={{ overflow: 'hidden', padding: 0 }}>
@@ -660,7 +660,7 @@ export default function RaceAnalysis({
               </div>
               {lapTip && (
                 <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {lapTip.entries.map((entry: any) => {
                     const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
@@ -669,11 +669,11 @@ export default function RaceAnalysis({
                         <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
                         <div>
                           <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
-                            {entry.abbr}{entry.position !== null && <span style={{ color: TEXT_DIM, fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
+                            {entry.abbr}{entry.position !== null && <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
                           </div>
                           {entry.lap_time_ms === null
                             ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
-                            : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
+                            : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
                           }
                           {entry.compound && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -698,14 +698,14 @@ export default function RaceAnalysis({
               </div>
               {gapTip && (
                 <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {gapTip.entries.map((e: any) => (
                     <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
                       <div>
                         <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                        <div style={{ fontSize: '14px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.1 }}>
+                        <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>
                           {e.gap_s === null ? '—' : e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`}
                         </div>
                       </div>
@@ -724,14 +724,14 @@ export default function RaceAnalysis({
               </div>
               {posTip && (
                 <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {posTip.entries.map((e: any) => (
                     <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
                       <div>
                         <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                        <div style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
+                        <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
                       </div>
                     </div>
                   ))}

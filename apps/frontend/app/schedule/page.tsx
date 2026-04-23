@@ -14,7 +14,7 @@ function HeroNextRace({ race }: { race: { round: number, event_name: string, eve
   if (!race) return null
 
   return (
-    <div style={{
+    <div className="schedule-hero" style={{
       position: 'relative',
       height: 480,
       borderRadius: 40,
@@ -32,7 +32,7 @@ function HeroNextRace({ race }: { race: { round: number, event_name: string, eve
       />
 
       {/* Gradient Overlay */}
-      <div style={{
+      <div className="schedule-hero-content" style={{
         position: 'absolute',
         inset: 0,
         background: 'linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.4) 40%, transparent 100%)',
@@ -56,11 +56,11 @@ function HeroNextRace({ race }: { race: { round: number, event_name: string, eve
             NEXT UP • ROUND {String(race.round).padStart(2, '0')}
           </div>
 
-          <h1 style={{ fontSize: 48, fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.04em', lineHeight: 1.1 }}>
+          <h1 className="schedule-hero-title" style={{ fontSize: 'clamp(2.5rem, 6vw, 3rem)', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.04em', lineHeight: 1.1 }}>
             {race.event_name}
           </h1>
 
-          <div style={{ display: 'flex', gap: 32, marginTop: 32, color: '#CBD5E1' }}>
+          <div className="schedule-hero-meta" style={{ display: 'flex', gap: 32, marginTop: 32, color: '#CBD5E1' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <CalendarDays size={20} color="#E8002D" />
               <span style={{ fontSize: 16, fontWeight: 300 }}>{new Date(race.event_date).toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })}</span>
@@ -80,7 +80,7 @@ function RaceCard({ race, isNext }: { race: { round: number, event_name: string,
   const isPast = race.status === 'past'
 
   return (
-    <div style={{
+    <div className="race-card" style={{
       background: '#FFFFFF',
       borderRadius: 24,
       padding: '40px 32px',
@@ -96,7 +96,7 @@ function RaceCard({ race, isNext }: { race: { round: number, event_name: string,
       opacity: isPast ? 0.75 : 1,
       minHeight: 160
     }}>
-      <div style={{
+      <div className="race-card-number" style={{
         position: 'absolute',
         left: 16,
         top: '50%',
@@ -111,8 +111,8 @@ function RaceCard({ race, isNext }: { race: { round: number, event_name: string,
         {String(race.round).padStart(2, '0')}
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ flex: 1, paddingLeft: 130 }}>
+      <div className="race-card-inner" style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="race-card-content" style={{ flex: 1, paddingLeft: 130 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
             <h3 style={{ fontSize: 26, fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
               {race.event_name}
@@ -130,7 +130,7 @@ function RaceCard({ race, isNext }: { race: { round: number, event_name: string,
         )}
 
         {isPast && race.top_finishers && race.top_finishers.length > 0 && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="race-card-finishers" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {race.top_finishers.slice(0, 3).map((code: string, idx: number) => (
               <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <div style={{
@@ -160,7 +160,7 @@ export default async function SchedulePage() {
   const races = fullSchedule?.races ?? []
 
   return (
-    <div style={{ padding: '20px 0', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="schedule-container" style={{ padding: '20px 24px', maxWidth: 1200, margin: '0 auto' }}>
 
       {nextRace && (
         <HeroNextRace race={nextRace.race} />
@@ -177,7 +177,7 @@ export default async function SchedulePage() {
         </div>
       </div>
 
-      <div style={{
+      <div className="schedule-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: 24

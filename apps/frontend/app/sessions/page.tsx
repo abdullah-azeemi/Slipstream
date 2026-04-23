@@ -132,7 +132,7 @@ export default function SessionsPage() {
   const displayYear = year === 'all' ? allYears[0] ?? 'All' : year
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1080px', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1080px', margin: '0 auto', padding: '0 12px' }}>
       <section style={{
         padding: '22px',
         borderRadius: '28px',
@@ -284,7 +284,7 @@ export default function SessionsPage() {
                 boxShadow: '0 16px 40px rgba(24,39,75,0.08)',
               }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '84px 1.3fr 1fr 52px', gap: '18px', alignItems: 'center' }}>
+              <div className="sessions-grid-row" style={{ display: 'grid', gridTemplateColumns: '84px 1.3fr 1fr 52px', gap: '18px', alignItems: 'center' }}>
                 <div style={{
                   borderRadius: '18px',
                   background: '#F1F5FB',
@@ -353,7 +353,7 @@ export default function SessionsPage() {
                   </div>
                 </div>
 
-                <div style={{
+                <div className="sessions-stats-box" style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: '10px',

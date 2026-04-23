@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, formatGap, teamColour, sessionTypeLabel } from '@/lib/utils'
 import Link from 'next/link'
-import { ArrowLeft, Database, Activity, GitBranch } from 'lucide-react'
+import { ArrowLeft, Database, Activity } from 'lucide-react'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -198,11 +198,11 @@ export default function SessionPage() {
     <div style={{ background: 'linear-gradient(180deg, #F8F9FC 0%, #F1F4F9 100%)', minHeight: '100vh', paddingBottom: 60 }}>
       {/* Global Header */}
       <div style={{ background: '#fff', borderBottom: `1px solid ${C.border}`, marginBottom: 24 }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '16px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <Link href="/sessions" style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.textDim, fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
             <ArrowLeft size={16} /> Sessions
           </Link>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {siblings.map(sib => {
               const isA = sib.session_key === sessionKey
               const sColor = SESSION_META[sib.session_type]?.color ?? C.textDim
@@ -222,14 +222,14 @@ export default function SessionPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 16px' }}>
         {/* GP Identity */}
         <div style={{ marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: C.textDim, fontFamily: 'Space Grotesk', letterSpacing: '0.2em' }}>{session.year} SEASON</span>
             <div style={{ height: 1, flex: 1, background: C.border }} />
           </div>
-          <h1 style={{ fontSize: 48, fontWeight: 950, color: C.textBright, fontFamily: 'Inter', letterSpacing: '-0.04em', lineHeight: 1, marginBottom: 8 }}>
+          <h1 style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', fontWeight: 950, color: C.textBright, fontFamily: 'Inter', letterSpacing: '-0.04em', lineHeight: 1, marginBottom: 8 }}>
             {session.gp_name.replace(' Grand Prix', '')} <span style={{ color: C.textDim, fontWeight: 400 }}>GP</span>
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -241,13 +241,13 @@ export default function SessionPage() {
           </div>
         </div>
 
-        {/* Main Hub Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+        {/* Main Hub Grid: 2-col on desktop, 1-col on mobile via CSS class */}
+        <div className="session-hub-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
 
           {/* Left Column: Actions & Insights */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {hasData ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 480px)', gap: 20 }}>
                 <ToolCard
                   title={isQuali ? "Qualifying Telemetry" : isFP ? "Practice Analysis" : "Race Telemetry"}
                   sub="PRO INSTRUMENTATION"
@@ -256,36 +256,6 @@ export default function SessionPage() {
                   href={`/sessions/${sessionKey}/telemetry`}
                   color={C.red}
                 />
-                {isRace && (
-                  <ToolCard
-                    title="Strategy Hub"
-                    sub="STINT EVOLUTION"
-                    desc="Compound performance, pit stop timing, and tyre degradation analysis."
-                    icon={GitBranch}
-                    href={`/sessions/${sessionKey}/strategy`}
-                    color={C.green}
-                  />
-                )}
-                {isRace && (
-                  <ToolCard
-                    title="Race Analysis"
-                    sub="BATTLE INSIGHTS"
-                    desc="Lap evolution, gap to leader, and overtake probability analysis."
-                    icon={GitBranch}
-                    href={`/sessions/${sessionKey}/telemetry`}
-                    color={C.purple}
-                  />
-                )}
-                {!isRace && (
-                  <ToolCard
-                    title="Sector Progression"
-                    sub="TRACK EVOLUTION"
-                    desc="Track development, sector bests, and theoretical lap optimization."
-                    icon={Database}
-                    href={`/sessions/${sessionKey}/telemetry`}
-                    color={C.gold}
-                  />
-                )}
               </div>
             ) : (
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 24, padding: 40, textAlign: 'center' }}>
@@ -300,20 +270,11 @@ export default function SessionPage() {
               </div>
             )}
 
-            {/* FP Specific Content */}
-            {isFP && (
-              <Panel title="Practice Insights">
-                <div style={{ padding: 24 }}>
-                  <p style={{ fontSize: 14, color: C.textMid, lineHeight: 1.6 }}>
-                    {type === 'FP2' ? 'Focus on race simulation and high-fuel long runs. Tyre degradation data is critical for Sunday strategy.' : 'Initial setup validation and installation laps. Comparing aerodynamic balance across different wings.'}
-                  </p>
-                </div>
-              </Panel>
-            )}
+
           </div>
 
           {/* Right Column: Results Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }} className="session-sidebar">
             <Panel title={isRace ? "Race Classification" : "Fastest Laps"}
               right={<div style={{ fontSize: 9, fontWeight: 800, color: C.textDim }}>{hasData ? 'LIVE DATA' : 'NO DATA'}</div>}>
               {!hasData ? (

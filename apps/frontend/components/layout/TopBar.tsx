@@ -44,7 +44,7 @@ export default function TopBar() {
         </Link>
 
         {/* Desktop Nav */}
-        <div style={{ display: 'flex', gap: 32 }}>
+        <div className="topbar-nav-links" style={{ display: 'flex', gap: 32 }}>
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
