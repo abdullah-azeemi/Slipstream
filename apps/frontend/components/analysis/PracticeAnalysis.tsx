@@ -376,14 +376,10 @@ export default function PracticeAnalysis({
             GAP ANALYSIS
           </h1>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid #D9E3EF', background: '#fff', color: TEXT_DARK, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Export Data</button>
-          <button style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', background: '#E8002D', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(232,0,45,0.2)' }}>Overlay Session</button>
-        </div>
       </div>
 
       {/* ── Driver Filter ────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#FFFFFF', padding: '12px 16px', borderRadius: '16px', border: '1px solid #D9E3EF', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px', background: '#FFFFFF', padding: '12px 16px', borderRadius: '16px', border: '1px solid #D9E3EF', alignItems: 'center' }}>
         <span style={{ fontSize: '11px', fontWeight: 700, color: TEXT_DIM, marginRight: '10px' }}>DRIVERS</span>
         {allDrivers.map(d => {
           const isSel = selected.includes(d.driver_number)

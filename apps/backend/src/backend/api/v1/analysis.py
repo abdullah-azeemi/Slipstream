@@ -1551,3 +1551,354 @@ def quali_segments(session_key: int):
             "Q3_start_lap": q3_start,
         }
     })
+
+
+# ── Qualifying: braking + throttle analysis ───────────────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/driver-compare-stats")
+def driver_compare_stats(session_key: int):
+    """
+    Computes corner-by-corner braking and throttle statistics from raw telemetry.
+
+    ALGORITHM:
+    1. Load raw telemetry for each driver (not the interpolated 400-point version)
+    2. Find corners by detecting local speed minima (apex = slowest point)
+    3. Per corner, find:
+       - Brake point: last braking sample before apex
+       - Braking distance: metres from brake point to apex
+       - Decel rate: speed drop per metre of braking distance
+       - Throttle point: first throttle sample after apex
+       - Exit speed: speed 50m past throttle application
+    4. Compare drivers at matched corners (same corner index)
+    """
+    drivers_param = request.args.get("drivers", "")
+    if not drivers_param:
+        return {"error": "drivers param required e.g. ?drivers=63,12"}, 400
+
+    try:
+        driver_nums = [int(d.strip()) for d in drivers_param.split(",")]
+    except ValueError:
+        return {"error": "driver numbers must be integers"}, 400
+
+    with engine.connect() as conn:
+        # Load raw telemetry — ordered by distance so we can scan sequentially
+        rows = conn.execute(text("""
+            SELECT
+                t.driver_number,
+                d.abbreviation,
+                d.team_colour,
+                d.team_name,
+                t.distance_m,
+                t.speed_kmh,
+                t.brake,
+                t.throttle_pct,
+                t.x_pos,
+                t.y_pos,
+                t.gear
+            FROM telemetry t
+            JOIN drivers d
+                ON d.driver_number = t.driver_number
+                AND d.session_key  = t.session_key
+            WHERE t.session_key    = :sk
+              AND t.driver_number  = ANY(:dns)
+            ORDER BY t.driver_number, t.distance_m
+        """), {"sk": session_key, "dns": driver_nums}).mappings().all()
+
+    if not rows:
+        return jsonify({"error": "No telemetry found"}), 404
+
+    # Group samples by driver
+    from collections import defaultdict
+    by_driver: dict = defaultdict(list)
+    meta: dict = {}
+    for r in rows:
+        dn = r["driver_number"]
+        by_driver[dn].append({
+            "distance_m":   float(r["distance_m"]),
+            "speed_kmh":    float(r["speed_kmh"]),
+            "brake":        bool(r["brake"]),
+            "throttle_pct": float(r["throttle_pct"]),
+            "x_pos":        float(r["x_pos"]) if r["x_pos"] else 0.0,
+            "y_pos":        float(r["y_pos"]) if r["y_pos"] else 0.0,
+            "gear":         int(r["gear"]) if r["gear"] else 0,
+        })
+        if dn not in meta:
+            from backend.api.v1.strategy import _resolve
+            meta[dn] = {
+                "abbreviation": r["abbreviation"],
+                "team_colour":  _resolve(r["team_colour"], r["team_name"]),
+                "team_name":    r["team_name"],
+            }
+
+    # ── Corner detection ──────────────────────────────────────────────────────
+    # Find local speed minima across the lap.
+    # A local minimum at index i means: speed[i] < speed[i-window] AND speed[i] < speed[i+window]
+    # window=15 means we look 15 samples (~45m) either side — filters out micro-wobbles
+    # min_speed=80 filters out slow-zone anomalies and start/finish
+
+    def find_corners(samples: list, window: int = 25, min_speed: float = 80.0,
+                      min_sep_m: float = 150.0) -> list:
+        """
+        Returns list of apex indices — each one is a corner.
+
+        WHY window=25: at ~3m per sample, 25 samples = 75m either side of apex.
+        Increased from 15 to reduce false positives in tight chicane sequences.
+        A proper F1 corner is always the unique minimum within a 150m window.
+
+        WHY min_sep_m=150: After finding all candidates, any two corners within
+        150m of each other must be the same physical corner detected twice.
+        150m = enough room for a short straight + braking zone between real corners.
+        The Melbourne chicane (T9-11) has apices ~60m apart — those get merged.
+        We keep the SLOWER candidate (true geometric apex).
+        """
+        # Step 1: find all local minima with the larger window
+        candidates = []
+        n = len(samples)
+        for i in range(window, n - window):
+            spd = samples[i]["speed_kmh"]
+            if spd < min_speed:
+                continue
+            window_speeds = [samples[j]["speed_kmh"] for j in range(i - window, i + window + 1)]
+            if spd == min(window_speeds):
+                candidates.append(i)
+
+        if not candidates:
+            return []
+
+        # Step 2: deduplicate — merge corners within min_sep_m, keep slowest
+        cleaned = [candidates[0]]
+        for idx in candidates[1:]:
+            prev_idx  = cleaned[-1]
+            prev_dist = samples[prev_idx]["distance_m"]
+            curr_dist = samples[idx]["distance_m"]
+
+            if curr_dist - prev_dist < min_sep_m:
+                # Same corner — keep the slower apex (true geometric minimum)
+                if samples[idx]["speed_kmh"] < samples[prev_idx]["speed_kmh"]:
+                    cleaned[-1] = idx
+                # else discard current
+            else:
+                cleaned.append(idx)
+
+        return cleaned
+
+    # ── Per-corner stats ──────────────────────────────────────────────────────
+
+    def analyse_corner(samples: list, apex_idx: int) -> dict | None:
+        """
+        Given the full sample list and the apex index, compute braking and
+        throttle stats for this corner.
+
+        BRAKING:
+        - Scan backwards from apex to find last brake=True sample
+        - If no braking found within 200m = corner doesn't need braking (chicane exit etc)
+        - Braking distance = distance(apex) - distance(brake_start)
+        - Decel rate = speed_drop / braking_distance  [km/h per metre]
+
+        THROTTLE:
+        - Scan forwards from apex to find first throttle > 10% sample
+        - Exit speed = speed 50m after throttle application point
+        - Throttle aggression = average throttle slope over next 30 samples
+        """
+        apex     = samples[apex_idx]
+        apex_dist = apex["distance_m"]
+
+        # ── Braking: scan back from apex ─────────────────────────────────────
+        brake_start_idx  = None
+        brake_start_dist = None
+        brake_start_spd  = None
+
+        MAX_BRAKING_DIST_M = 150.0  # Physics cap: no F1 car brakes from >150m
+
+        for j in range(apex_idx - 1, max(0, apex_idx - 120), -1):
+            s = samples[j]
+            # Physics cap: if we're more than 150m before apex, stop.
+            # Anything beyond 150m belongs to the PREVIOUS corner's approach.
+            # This prevents adjacent corner braking zones bleeding into each other.
+            if apex_dist - s["distance_m"] > MAX_BRAKING_DIST_M:
+                break
+            if s["brake"]:
+                brake_start_idx  = j
+                brake_start_dist = s["distance_m"]
+                brake_start_spd  = s["speed_kmh"]
+            elif brake_start_idx is not None:
+                break
+
+        if brake_start_idx is None:
+            return None
+
+        braking_dist = apex_dist - brake_start_dist
+        speed_drop   = brake_start_spd - apex["speed_kmh"]
+        # Minimum speed drop of 3 kmh — filters pure noise (road bumps)
+        # but keeps light-braking fast corners and trail-braking entries.
+        # WHY 3 not 5: a driver lifting slightly into a 200kmh corner may only
+        # drop 4-5kmh but that's still a real cornering event worth analysing.
+        if speed_drop < 3.0:
+            return None
+
+        decel_rate = speed_drop / braking_dist if braking_dist > 0 else 0.0
+
+        # ── Throttle: scan forward from apex ─────────────────────────────────
+        throttle_idx  = None
+        throttle_dist = None
+
+        for j in range(apex_idx + 1, min(len(samples), apex_idx + 120)):
+            s = samples[j]
+            if s["distance_m"] - apex_dist > 300:
+                break
+            if s["throttle_pct"] > 10.0:
+                throttle_idx  = j
+                throttle_dist = s["distance_m"]
+                break
+
+        # Exit speed: speed ~50m after throttle application
+        # WHY fallback to last sample: if throttle point is near end of lap data
+        # (e.g. final corner before S/F line), there may not be 50m of data left.
+        # In that case use the last available sample — still valid exit speed.
+        exit_speed = None
+        if throttle_idx is not None:
+            for j in range(throttle_idx, min(len(samples), throttle_idx + 30)):
+                if samples[j]["distance_m"] - throttle_dist > 50:
+                    exit_speed = samples[j]["speed_kmh"]
+                    break
+            # Fallback: use last sample within 100m if 50m target not reached
+            if exit_speed is None:
+                for j in range(min(len(samples) - 1, throttle_idx + 35), throttle_idx, -1):
+                    if samples[j]["distance_m"] - throttle_dist <= 100:
+                        candidate = samples[j]["speed_kmh"]
+                        # Validate: exit speed must be higher than apex speed
+                        # If it's not, the driver is still slowing — wrong point
+                        if candidate > apex["speed_kmh"]:
+                            exit_speed = candidate
+                        break
+
+        # Throttle aggression: slope of throttle trace over 20 samples post-application
+        throttle_aggression = None
+        if throttle_idx is not None:
+            end_idx = min(len(samples) - 1, throttle_idx + 20)
+            if end_idx > throttle_idx:
+                delta_throttle = samples[end_idx]["throttle_pct"] - samples[throttle_idx]["throttle_pct"]
+                delta_dist     = samples[end_idx]["distance_m"]   - samples[throttle_idx]["distance_m"]
+                throttle_aggression = delta_throttle / delta_dist if delta_dist > 0 else 0.0
+
+        return {
+            "apex_dist_m":         round(apex_dist, 1),
+            "apex_speed_kmh":      round(apex["speed_kmh"], 1),
+            "apex_x":              round(apex["x_pos"], 1),
+            "apex_y":              round(apex["y_pos"], 1),
+            "brake_point_dist_m":  round(brake_start_dist, 1),
+            "braking_dist_m":      round(braking_dist, 1),
+            "braking_speed_kmh":   round(brake_start_spd, 1),
+            "decel_rate":          round(decel_rate, 3),   # km/h per metre
+            "throttle_dist_m":     round(throttle_dist, 1) if throttle_dist else None,
+            "throttle_gap_m":      round(throttle_dist - apex_dist, 1) if throttle_dist else None,
+            "exit_speed_kmh":      round(exit_speed, 1) if exit_speed else None,
+            "throttle_aggression": round(throttle_aggression, 3) if throttle_aggression else None,
+        }
+
+    # ── Run analysis per driver ───────────────────────────────────────────────
+
+    driver_results = {}
+    all_corner_sets = {}
+
+    for dn, samples in by_driver.items():
+        apex_indices = find_corners(samples)
+        corners = []
+        for idx in apex_indices:
+            stats = analyse_corner(samples, idx)
+            if stats:
+                corners.append(stats)
+        all_corner_sets[dn] = corners
+        driver_results[dn] = {
+            **meta[dn],
+            "corners": corners,
+            "summary": {
+                "avg_braking_dist_m":      round(sum(c["braking_dist_m"] for c in corners) / len(corners), 1) if corners else 0,
+                "avg_decel_rate":          round(sum(c["decel_rate"] for c in corners) / len(corners), 3) if corners else 0,
+                "avg_apex_speed_kmh":      round(sum(c["apex_speed_kmh"] for c in corners) / len(corners), 1) if corners else 0,
+                "avg_throttle_gap_m":      round(sum(c["throttle_gap_m"] for c in corners if c["throttle_gap_m"]) / max(1, sum(1 for c in corners if c["throttle_gap_m"])), 1),
+                "avg_exit_speed_kmh":      round(sum(c["exit_speed_kmh"] for c in corners if c["exit_speed_kmh"]) / max(1, sum(1 for c in corners if c["exit_speed_kmh"])), 1),
+                "total_corners_detected":  len(corners),
+            }
+        }
+
+    # ── Match corners across drivers ─────────────────────────────────────────
+    # Drivers won't have identical corner indices since they took slightly different
+    # lines. Match by proximity: corners within 80m of each other = same corner.
+    # This gives us a per-corner comparison table.
+
+    def match_corners(sets: dict, tolerance_m: float = 80.0) -> list:
+        """
+        Match corners across drivers by distance proximity.
+        Take driver 0's corners as reference, find closest corner from each
+        other driver within tolerance_m.
+        """
+        driver_keys = list(sets.keys())
+        if len(driver_keys) < 2:
+            return []
+
+        ref_corners = sets[driver_keys[0]]
+        matched = []
+
+        for i, ref_c in enumerate(ref_corners):
+            ref_dist = ref_c["apex_dist_m"]
+            match = {
+                "corner_number": i + 1,
+                "apex_dist_m":   ref_dist,
+                "apex_x":        ref_c["apex_x"],
+                "apex_y":        ref_c["apex_y"],
+                "drivers":       {driver_keys[0]: ref_c}
+            }
+
+            for other_dn in driver_keys[1:]:
+                best = None
+                best_diff = tolerance_m
+                for c in sets[other_dn]:
+                    diff = abs(c["apex_dist_m"] - ref_dist)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best = c
+                # Only accept match if apex speeds are within 30kmh
+                # Same corner = similar minimum speed. Different speeds = different corner.
+                if best and abs(best["apex_speed_kmh"] - ref_c["apex_speed_kmh"]) <= 30:
+                    match["drivers"][other_dn] = best
+
+            # Only include corner if ALL drivers have a match
+            if len(match["drivers"]) == len(driver_keys):
+                matched.append(match)
+
+        return matched
+
+    matched_corners = match_corners(all_corner_sets, tolerance_m=120.0)
+
+    # ── Compute deltas at each matched corner ─────────────────────────────────
+    # Delta = driver_B_value - driver_A_value
+    # Positive brake point delta = driver B brakes LATER (more aggressive / confidence)
+    # Positive throttle delta = driver B applies throttle EARLIER (better exit)
+    # Positive exit speed delta = driver B exits faster
+
+    driver_keys = list(by_driver.keys())
+    for corner in matched_corners:
+        if len(driver_keys) >= 2:
+            a = corner["drivers"].get(driver_keys[0])
+            b = corner["drivers"].get(driver_keys[1])
+            if a and b:
+                corner["delta"] = {
+                    # Positive = B brakes later (more confidence into corner)
+                    "brake_point_m":   round(b["brake_point_dist_m"] - a["brake_point_dist_m"], 1),
+                    # Positive = B has shorter braking distance (more efficient)
+                    "braking_dist_m":  round(a["braking_dist_m"] - b["braking_dist_m"], 1),
+                    # Positive = B decelerates faster (trail braking ability)
+                    "decel_rate":      round(b["decel_rate"] - a["decel_rate"], 3),
+                    # Positive = B applies throttle earlier (better exit)
+                    "throttle_gap_m":  round((a["throttle_gap_m"] or 0) - (b["throttle_gap_m"] or 0), 1),
+                    # Positive = B has higher exit speed
+                    "exit_speed_kmh":  round((b["exit_speed_kmh"] or 0) - (a["exit_speed_kmh"] or 0), 1),
+                }
+
+    return jsonify({
+        "session_key":     session_key,
+        "driver_keys":     driver_keys,
+        "drivers":         driver_results,
+        "matched_corners": matched_corners,
+    })

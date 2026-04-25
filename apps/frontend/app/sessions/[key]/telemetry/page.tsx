@@ -13,6 +13,7 @@ import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
 import RaceAnalysis from '@/components/analysis/RaceAnalysis'
 import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
+import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -214,7 +215,7 @@ const CHARTS = [
   { label: 'BRAKING', unit: '%', field: 'brake', yMin: 0, yMax: 100, height: 160, gridCount: 4, isRpm: false },
   { label: 'THROTTLE', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 220, gridCount: 4, isRpm: false },
   { label: 'GEAR', unit: '1–8', field: 'gear', yMin: 1, yMax: 8, height: 120, gridCount: 7, isRpm: false },
-  { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 4000, yMax: 13000, height: 140, gridCount: 5, isRpm: true },
+  { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 6000, yMax: 13000, height: 140, gridCount: 5, isRpm: true },
 ]
 
 type DriverSectorTimes = { s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; lap_number: number }
@@ -248,6 +249,25 @@ function PanelHeader({ title, subtitle, right }: { title: string; subtitle?: str
   )
 }
 
+function hashSeed(input: string) {
+  let hash = 0
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0
+  }
+  return Math.abs(hash)
+}
+
+function seededShuffle<T>(items: T[], seed: number) {
+  const arr = [...items]
+  let state = seed || 1
+  for (let i = arr.length - 1; i > 0; i--) {
+    state = (state * 1664525 + 1013904223) >>> 0
+    const j = state % (i + 1)
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
 // ── Smooth bezier gap chart ───────────────────────────────────────────────────
 function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
@@ -274,13 +294,19 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       })
     }
 
-    // Calculate gap to leader at each point
     const gaps = driverData.map((_, dIdx) => {
       return cumTimes[dIdx].map((t, i) => {
         const minT = Math.min(...cumTimes.map(ct => ct[i]))
         return t - minT
       })
     })
+    const chartSeries = gaps.map((gap, idx) => ({
+      idx,
+      abbr: driverData[idx].abbr,
+      colour: driverData[idx].colour,
+      gap,
+      finalGap: gap[gap.length - 1] ?? 0,
+    })).sort((a, b) => a.finalGap - b.finalGap)
 
     const maxGap = Math.max(...gaps.flatMap(g => g), 0.1)
 
@@ -303,37 +329,40 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
     })
 
     // Y-axis labels
-    for (let i = 0; i <= 3; i++) {
-      const v = (i / 3) * maxGap; const y = toY(v)
+    const ticks = [0, maxGap / 3, (maxGap * 2) / 3, maxGap]
+    ticks.forEach(v => {
+      const y = toY(v)
       ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-      ctx.fillText(i === 0 ? '0.0s' : `+${v.toFixed(1)}s`, PL - 8, y + 4)
-      if (i > 0) {
+      ctx.fillText(v === 0 ? '0.0s' : `+${v.toFixed(1)}s`, PL - 8, y + 4)
+      if (v > 0) {
         ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
         ctx.moveTo(PL, y); ctx.lineTo(PL + cW, y); ctx.stroke()
       }
-    }
+    })
 
-    // Zero baseline
+    // Fastest baseline
     ctx.beginPath(); ctx.strokeStyle = C.red; ctx.lineWidth = 1.5
     ctx.moveTo(PL, PT + cH); ctx.lineTo(PL + cW, PT + cH); ctx.stroke()
 
     // Helper: smooth bezier through points
-    function drawSmoothLine(driverGaps: number[], colour: string, dIdx: number) {
+    function drawSmoothLine(driverGaps: number[], colour: string, abbr: string, dIdx: number, isFastest: boolean) {
       const step = Math.max(1, Math.floor(n / 80))
       const pts: [number, number][] = []
       for (let i = 0; i < n; i += step) pts.push([toX(i), toY(driverGaps[i])])
       if (pts.length < 2) return
 
-      // Area fill
+      // Area fill above fastest line
       ctx.beginPath()
-      ctx.moveTo(pts[0][0], pts[0][1])
+      ctx.moveTo(pts[0][0], PT + cH)
+      ctx.lineTo(pts[0][0], pts[0][1])
       for (let i = 1; i < pts.length - 1; i++) {
         const mx = (pts[i][0] + pts[i + 1][0]) / 2
         const my = (pts[i][1] + pts[i + 1][1]) / 2
         ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my)
       }
       ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1])
-      ctx.lineTo(PL + cW, PT + cH); ctx.lineTo(PL, PT + cH); ctx.closePath()
+      ctx.lineTo(pts[pts.length - 1][0], PT + cH)
+      ctx.lineTo(pts[0][0], PT + cH); ctx.closePath()
       const areaGrad = ctx.createLinearGradient(0, PT, 0, PT + cH)
       areaGrad.addColorStop(0, colour + '18'); areaGrad.addColorStop(1, colour + '02')
       ctx.fillStyle = areaGrad; ctx.fill()
@@ -341,7 +370,7 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       // Smooth line
       const dashed = dIdx % 2 !== 0
       if (dashed) ctx.setLineDash([6, 4])
-      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = dashed ? 2 : 3.5; ctx.lineJoin = 'round'
+      ctx.beginPath(); ctx.strokeStyle = colour; ctx.lineWidth = isFastest ? 4 : (dashed ? 2 : 3.5); ctx.lineJoin = 'round'
       ctx.moveTo(pts[0][0], pts[0][1])
       for (let i = 1; i < pts.length - 1; i++) {
         const mx = (pts[i][0] + pts[i + 1][0]) / 2
@@ -354,17 +383,25 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
       // End label
       const last = pts[pts.length - 1]
       ctx.font = 'bold 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
-      ctx.fillStyle = colour; ctx.fillText(driverData[dIdx].abbr, last[0] - 4, last[1] - 6)
+      ctx.fillStyle = colour; ctx.fillText(abbr, last[0] - 4, last[1] - 6)
+      if (isFastest) {
+        ctx.font = '700 8px "Space Grotesk", sans-serif'
+        ctx.fillStyle = C.textDim
+        ctx.fillText('FASTEST', last[0] - 4, last[1] + 6)
+      }
     }
 
-    gaps.forEach((g, idx) => drawSmoothLine(g, driverData[idx].colour, idx))
+    chartSeries.forEach(series => {
+      const isFastest = series.finalGap <= 0.001
+      drawSmoothLine(series.gap, series.colour, series.abbr, series.idx, isFastest)
+    })
   }, [driverData])
 
   return (
     <Panel>
       <PanelHeader
-        title="Gap to Leader"
-        subtitle="Full lap interval · seconds"
+        title="Time Gap"
+        subtitle="X = distance · Y = time lost vs fastest selected driver"
         right={
           <div style={{ display: 'flex', gap: 14 }}>
             {driverData.map((d, i) => (
@@ -376,6 +413,9 @@ function GapToLeaderChart({ driverData }: { driverData: DriverRenderData[] }) {
                 <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour }}>{d.abbr}</span>
               </div>
             ))}
+            <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textDim, alignSelf: 'center' }}>
+              0.0s = fastest line
+            </span>
           </div>
         }
       />
@@ -442,13 +482,13 @@ function PerformanceMatrix({
     ? Math.abs(theoBest[0].ms - theoBest[1].ms) : null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
       {/* Matrix table */}
-      <Panel>
+      <Panel style={{ flex: 1 }}>
         <PanelHeader title="Performance Matrix" />
         <div style={{ padding: '12px 16px' }}>
           {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${driverData.length}, 90px)`, gap: 4, paddingBottom: 10, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, paddingBottom: 10, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
             <span style={{ fontSize: 9, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>METRIC</span>
             {driverData.map(d => (
               <span key={d.abbr} style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour, textAlign: 'right' }}>{d.abbr}</span>
@@ -459,7 +499,7 @@ function PerformanceMatrix({
             const valid = row.values.map(v => v.v).filter((v): v is number => v !== null)
             const best = valid.length ? (row.higherIsBetter ? Math.max(...valid) : Math.min(...valid)) : null
             return (
-              <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${driverData.length}, 90px)`, gap: 4, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{row.label}</span>
                 {row.values.map(({ abbr, v, fmt }) => {
                   const isBest = v !== null && v === best
@@ -474,7 +514,7 @@ function PerformanceMatrix({
           })}
 
           {/* Theoretical row */}
-          <div style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${driverData.length}, 90px)`, gap: 4, padding: '10px 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, padding: '10px 0' }}>
             <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Theoretical</span>
             {theoBest.map(({ abbr, ms }) => {
               const isBest = ms !== null && ms === Math.min(...theoBest.filter(t => t.ms !== null).map(t => t.ms!))
@@ -497,6 +537,7 @@ function PerformanceMatrix({
           boxShadow: '0 16px 34px rgba(19,35,61,0.16)',
           position: 'relative',
           overflow: 'hidden',
+          marginTop: 'auto',
         }}>
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 34%)' }} />
           <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>
@@ -523,6 +564,160 @@ function PerformanceMatrix({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function InsightCard({
+  driverData,
+  sectorTimes,
+  drivers,
+  telStats,
+}: {
+  driverData: DriverRenderData[]
+  sectorTimes: Map<number, DriverSectorTimes>
+  drivers: Driver[]
+  telStats: import('@/types/f1').DriverTelemetryStats[]
+}) {
+  if (!sectorTimes.size || driverData.length < 2) return null
+
+  const seed = hashSeed(driverData.map(d => d.abbr).join('|'))
+  const selectedDriverNumbers = driverData
+    .map(d => drivers.find(x => x.abbreviation === d.abbr)?.driver_number)
+    .filter((dn): dn is number => dn !== undefined)
+
+  const sectorRows = [
+    { key: 's1_ms' as const, label: 'Sector 1' },
+    { key: 's2_ms' as const, label: 'Sector 2' },
+    { key: 's3_ms' as const, label: 'Sector 3' },
+  ].map(({ key, label }) => {
+    const values = driverData.map(d => {
+      const dn = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
+      const ms = dn !== undefined ? (sectorTimes.get(dn)?.[key] ?? null) : null
+      return { abbr: d.abbr, colour: d.colour, ms }
+    })
+    const valid = values.filter(v => v.ms !== null)
+    const fastest = valid.length ? valid.reduce((best, cur) => (cur.ms! < best.ms! ? cur : best)) : null
+    const slowest = valid.length ? valid.reduce((worst, cur) => (cur.ms! > worst.ms! ? cur : worst)) : null
+    const delta = fastest && slowest && fastest.ms !== slowest.ms ? slowest.ms! - fastest.ms! : null
+    return { label, fastest, slowest, delta }
+  })
+
+  const biggestGap = [...sectorRows].filter(row => row.delta !== null).sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))[0] ?? null
+
+  const theoBest = driverData.map(d => {
+    const dn = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
+    const ms = dn !== undefined
+      ? ['s1_ms', 's2_ms', 's3_ms'].reduce((sum, key) => sum + (sectorTimes.get(dn)?.[key as keyof DriverSectorTimes] ?? 0), 0)
+      : null
+    return { abbr: d.abbr, colour: d.colour, ms: ms && ms > 0 ? ms : null }
+  }).filter(row => row.ms !== null)
+  const bestTheo = theoBest.sort((a, b) => a.ms! - b.ms!)[0] ?? null
+
+  const topSpeedRows = driverData.map(d => ({
+    abbr: d.abbr,
+    colour: d.colour,
+    speed: telStats.find(s => s.abbreviation === d.abbr)?.max_speed_kmh ?? null,
+  })).filter(row => row.speed !== null)
+  const topSpeedLeader = topSpeedRows.sort((a, b) => b.speed! - a.speed!)[0] ?? null
+
+  const yapping = seededShuffle([
+    bestTheo
+      ? `${bestTheo.abbr} is the cleanest all-round package at the moment. That does not always mean they are fastest in every single section, but it usually means they are wasting less time across the lap. When a driver is strong in the theory table, the lap is often built from very small advantages rather than one huge moment.`
+      : 'At the moment the cleanest lap time is not obvious from the numbers alone, which usually means the spread is being shared across several corners instead of one obvious weak point.',
+    biggestGap && biggestGap.fastest && biggestGap.slowest
+      ? `The biggest split shows up in ${biggestGap.label.toLowerCase()}, where ${biggestGap.fastest.abbr} has the edge over ${biggestGap.slowest.abbr}. That tells us the gap is probably being made by one driver arriving later or rotating the car earlier, not just by carrying more speed on the straight.`
+      : 'The sector picture is close enough that the conversation shifts away from raw pace and toward who is braking later, who is releasing more cleanly, and who is getting the car pointed sooner on exit.',
+    topSpeedLeader
+      ? `${topSpeedLeader.abbr} has the best top speed, which is a useful clue. If the speed trap is strong but the lap is still not leading, that usually means the car is losing time in the corners and recovering it only once the road opens up again.`
+      : 'Top speed is not standing out enough to dominate the story, so the interesting part is most likely happening between the braking point and the exit kerb.',
+    selectedDriverNumbers.length >= 3
+      ? `With ${selectedDriverNumbers.length} drivers selected, this is no longer about one simple fast or slow lap. The more useful read is consistency: who is repeating the same pattern, who is changing brake points from corner to corner, and who is carrying a smoother exit speed without overdriving the front tyres.`
+      : 'When only a couple of drivers are close together, the smallest improvement in brake release or exit traction can completely flip the order.',
+    'If the entry speed is similar, the driver with the cleaner exit usually wins the corner. That is why a lap can look tidy in the middle yet still lose time at the end. A strong exit keeps the next straight alive, improves the following braking zone, and compounds through the rest of the lap.',
+  ], seed).slice(0, 4)
+  const leadDriver = bestTheo ?? topSpeedLeader ?? driverData[0]
+
+  return (
+    <Panel
+      style={{
+        background: '#FFFFFF',
+        borderColor: C.border,
+        color: C.textBright,
+        minHeight: 460,
+        display: 'flex',
+      }}
+    >
+      <div style={{ padding: '16px 18px 18px', position: 'relative', overflow: 'hidden', width: '100%' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(248,249,252,0.90), rgba(255,255,255,0.96))', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: C.textDim }}>
+                LLM INSIGHT
+              </div>
+              <div style={{ fontSize: 16, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textBright, marginTop: 5, letterSpacing: '-0.02em' }}>
+                What is shaping the gap?
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+              <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textMid, background: '#F8FBFE', border: `1px solid ${C.border}`, borderRadius: 999, padding: '4px 8px' }}>
+                {driverData.length} drivers
+              </span>
+              {leadDriver && (
+                <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: leadDriver.colour, background: `${leadDriver.colour}10`, border: `1px solid ${leadDriver.colour}24`, borderRadius: 999, padding: '4px 8px' }}>
+                  Draft leader: {leadDriver.abbr}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{
+            background: '#F8FBFE',
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '12px 14px',
+            marginBottom: 12,
+          }}>
+            <div style={{ fontSize: 10, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim, marginBottom: 6 }}>
+              Summary
+            </div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.65, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>
+              {yapping[0]}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            {yapping.slice(1).map((item, idx) => (
+              <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: idx === 0 ? C.green : idx === 1 ? C.gold : C.purple, marginTop: 8, flex: '0 0 auto' }} />
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: C.textSub, fontFamily: 'Inter, sans-serif' }}>
+                  {item}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+            <MiniInsight label="Best sector gap" value={biggestGap?.delta !== null && biggestGap?.delta !== undefined ? `${(biggestGap.delta / 1000).toFixed(3)}s` : '—'} accent={C.gold} />
+            <MiniInsight label="Best theoretical" value={leadDriver?.abbr ?? '—'} accent={leadDriver?.colour ?? C.green} />
+            <MiniInsight label="Top speed" value={topSpeedLeader ? `${topSpeedLeader.speed?.toFixed(0)} km/h` : '—'} accent={topSpeedLeader?.colour ?? C.red} />
+          </div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+function MiniInsight({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: '#F8FBFE', padding: '9px 10px' }}>
+      <div style={{ fontSize: 8.5, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim, marginBottom: 5 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, color: accent }}>
+        {value}
+      </div>
     </div>
   )
 }
@@ -657,6 +852,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const segmentDriverNumbers = getSegmentDriverNumbers(segmentEntries)
   const segmentLapByDriver = getSegmentLapByDriver(segmentEntries)
   const isQualifying = !isRaceSession(sessionType) && !isPracticeSession(sessionType)
+  const selectedKey = selected.join(',')
 
   // Session + drivers
   useEffect(() => {
@@ -710,8 +906,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         setTelData(interped)
       })
       .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, selected.join(','), sessionType, selectedSegment, qualiSegments])
+  }, [sessionKey, selected, selectedKey, sessionType, selectedSegment, qualiSegments, isQualifying])
 
   // Sector times
   useEffect(() => {
@@ -730,8 +925,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       results.forEach(r => { if (r) map.set(r.driverNum, r.times) })
       setSectorTimes(map)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, selected.join(','), telLapNumbers])
+  }, [sessionKey, selected, selectedKey, telLapNumbers])
 
   // Quali segments
   useEffect(() => {
@@ -744,8 +938,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   useEffect(() => {
     if (!selected.length) return
     telemetryApi.stats(sessionKey, selected).then(setTelStats).catch(() => { })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, selected.join(',')])
+  }, [sessionKey, selected, selectedKey])
 
   const driverData: DriverRenderData[] = selected.map(dn => {
     const interp = telData.get(dn)
@@ -788,8 +981,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           drawLine(ctx, d.interp.throttle, d.colour, W, cfg.height, 0, 100, 1.8, i % 2 !== 0)
         })
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        driverData.forEach((d, i) => drawLine(ctx, (d.interp as any)[cfg.field], d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 1.8, i % 2 !== 0))
+        driverData.forEach((d, i) => {
+          const series = cfg.field === 'gear' ? d.interp.gear : d.interp.rpm
+          drawLine(ctx, series, d.colour, W, cfg.height, cfg.yMin, cfg.yMax, 1.8, i % 2 !== 0)
+        })
       }
       if (tooltipNx !== null) { drawCrosshair(ctx, tooltipNx, W, cfg.height); drawDots(ctx, tooltipNx, W, cfg.height, driverData, cfg.field, cfg.yMin, cfg.yMax) }
     })
@@ -1043,11 +1238,25 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
             {/* Sector hero cards + performance matrix */}
             {driverData.length >= 2 && sectorTimes.size > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(420px, 0.92fr)', gap: 18, marginBottom: 16, alignItems: 'start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} />
+                  <InsightCard
+                    driverData={driverData}
+                    sectorTimes={sectorTimes}
+                    drivers={drivers}
+                    telStats={telStats}
+                  />
                 </div>
-                <PerformanceMatrix driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} telStats={telStats} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <PerformanceMatrix driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} telStats={telStats} />
+                  <BrakingAnalysis
+                    sessionKey={sessionKey}
+                    drivers={selected}
+                    trackPath={driverData.length > 0 ? { x: driverData[0].interp.x, y: driverData[0].interp.y } : undefined}
+                    compact
+                  />
+                </div>
               </div>
             )}
 
@@ -1089,9 +1298,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       {/* Units */}
                       <div style={{ display: 'flex', flex: 1, justifyContent: 'space-around' }}>
                         {tooltipData.values.map((v: { abbr: string; rpm: number; colour: string; speed: number; gear: number; throttle: number; brake: number }) => {
-                          const rpmBase = 6000, rpmMax = 12000
+                          const rpmBase = 8000, rpmMax = 12000
                           const rpmPct = Math.max(0, Math.min(1, (v.rpm - rpmBase) / (rpmMax - rpmBase)))
                           const needleDeg = -180 + rpmPct * 180
+                          const mph = Math.round(v.speed * 0.621371)
                           return (
                             <div key={v.abbr} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                               {/* Driver Info */}
@@ -1108,8 +1318,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   <path d="M 66 35 A 55 55 0 0 1 107 35" fill="none" stroke={C.gold} strokeWidth="12" opacity="0.08" />
                                   <path d="M 107 35 A 55 55 0 0 1 135 80" fill="none" stroke={C.red} strokeWidth="12" opacity="0.08" />
 
-                                  {/* Even Markers (6, 8, 10, 12) */}
-                                  {[6, 8, 10, 12].map((val, i) => {
+                                  {/* Even Markers (8, 10, 12, 14) */}
+                                  {[8, 10, 12, 14].map((val, i) => {
                                     const ang = 180 + (i / 3) * 180; const rad = ang * (Math.PI / 180)
                                     const x1 = 80 + 52 * Math.cos(rad); const y1 = 80 + 52 * Math.sin(rad)
                                     const x2 = 80 + 62 * Math.cos(rad); const y2 = 80 + 62 * Math.sin(rad)
@@ -1140,16 +1350,18 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   </g>
                                 </svg>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, marginBottom: 12 }}>
-                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: -2 }}>
-                                    <span style={{ fontSize: 14, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.6 }}>{v.speed.toFixed(0)}</span>
-                                    <span style={{ fontSize: 7, fontWeight: 900, color: C.textDim, opacity: 0.4 }}>KPH</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, marginBottom: 0, marginTop: 18 }}>
+                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 0 }}>
+                                    <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.65 }}>
+                                      {v.speed.toFixed(0)} km/h / {mph} mph
+                                    </span>
                                   </div>
-                                  <span style={{ fontSize: 24, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em' }}>{v.gear}</span>
+                                  <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em', marginTop: 5 }}>
+                                    Gear: {v.gear}
+                                  </span>
                                 </div>
                               </div>
 
-                              {/* Nano Banana Pedals */}
                               <div style={{ display: 'flex', gap: 12, height: 95, alignItems: 'center' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 75, fontSize: 8, fontWeight: 900, color: C.textDim, opacity: 0.4, textAlign: 'right', width: 22, fontFamily: 'JetBrains Mono' }}>
                                   <span>100</span>
@@ -1162,7 +1374,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   ].map(p => (
                                     <div key={p.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
                                       <div style={{ width: 14, height: 75, background: 'rgba(0,0,0,0.04)', borderRadius: 2, position: 'relative', overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                                        {/* Segmented Display */}
+                            
                                         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column-reverse' }}>
                                           {Array.from({ length: 8 }).map((_, i) => (
                                             <div key={i} style={{
@@ -1301,21 +1513,21 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     </Panel>
                   )}
 
-                  {/* Throttle + Gear */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: 14 }}>
-                    <Panel>
-                      <PanelHeader title="Throttle Input" subtitle="0 – 100%" />
-                      <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    </Panel>
-                    <Panel>
-                      <PanelHeader title="Gear Selection" subtitle="1 – 8" />
-                      <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    </Panel>
-                  </div>
+                  {/* Throttle */}
+                  <Panel>
+                    <PanelHeader title="Throttle Input" subtitle="0 – 100%" />
+                    <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </Panel>
+
+                  {/* Gear */}
+                  <Panel>
+                    <PanelHeader title="Gear Selection" subtitle="1 – 8" />
+                    <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </Panel>
 
                   {/* RPM */}
                   <Panel>
-                    <PanelHeader title="Engine RPM" subtitle="4 000 – 13 000" />
+                    <PanelHeader title="Engine RPM" subtitle="6 000 – 13 000" />
                     <canvas ref={el => { chartRefs.current[4] = el }} height={CHARTS[4].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
                 </div>
