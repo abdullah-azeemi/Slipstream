@@ -14,6 +14,8 @@ import type { Driver, TelemetrySample } from '@/types/f1'
 import RaceAnalysis from '@/components/analysis/RaceAnalysis'
 import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
 import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
+import CornerInsights from '@/components/analysis/CornerInsights'
+import type { InsightsData } from '@/components/analysis/BrakingAnalysis'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -263,7 +265,7 @@ function seededShuffle<T>(items: T[], seed: number) {
   for (let i = arr.length - 1; i > 0; i--) {
     state = (state * 1664525 + 1013904223) >>> 0
     const j = state % (i + 1)
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
 }
@@ -842,6 +844,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [telStats, setTelStats] = useState<import('@/types/f1').DriverTelemetryStats[]>([])
   const [activeSegment, setActiveSegment] = useState<'Q1' | 'Q2' | 'Q3'>('Q1')
   const [selectedSegment, setSelectedSegment] = useState<'Q1' | 'Q2' | 'Q3'>('Q3')
+  const [cornerInsights, setCornerInsights] = useState<InsightsData | null>(null)
+  const [insightDriverColours, setInsightDriverColours] = useState<Record<string, string>>({})
 
   const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null, null])
   const deltaRef = useRef<HTMLCanvasElement | null>(null)
@@ -1238,15 +1242,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
             {/* Sector hero cards + performance matrix */}
             {driverData.length >= 2 && sectorTimes.size > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(420px, 0.92fr)', gap: 18, marginBottom: 16, alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr minmax(340px, 0.6fr)', gap: 18, marginBottom: 16, alignItems: 'start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} />
-                  <InsightCard
-                    driverData={driverData}
-                    sectorTimes={sectorTimes}
-                    drivers={drivers}
-                    telStats={telStats}
-                  />
+                  {cornerInsights && (
+                    <CornerInsights data={cornerInsights} driverColours={insightDriverColours} />
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <PerformanceMatrix driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} telStats={telStats} />
@@ -1255,6 +1256,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     drivers={selected}
                     trackPath={driverData.length > 0 ? { x: driverData[0].interp.x, y: driverData[0].interp.y } : undefined}
                     compact
+                    onInsightsLoad={(insights, colours) => {
+                      setCornerInsights(insights)
+                      setInsightDriverColours(colours)
+                    }}
                   />
                 </div>
               </div>
@@ -1353,7 +1358,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, marginBottom: 0, marginTop: 18 }}>
                                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 0 }}>
                                     <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.65 }}>
-                                      {v.speed.toFixed(0)} km/h / {mph} mph
+                                      {v.speed.toFixed(0)} kmh / {mph} mph
                                     </span>
                                   </div>
                                   <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em', marginTop: 5 }}>
@@ -1374,7 +1379,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   ].map(p => (
                                     <div key={p.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
                                       <div style={{ width: 14, height: 75, background: 'rgba(0,0,0,0.04)', borderRadius: 2, position: 'relative', overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                            
+
                                         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column-reverse' }}>
                                           {Array.from({ length: 8 }).map((_, i) => (
                                             <div key={i} style={{

@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { teamColour } from '@/lib/utils'
+import type { InsightsData } from './CornerInsights'
+
+export type { InsightsData }
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -51,6 +54,7 @@ type CompareStats = {
   driver_keys: string[]
   drivers: Record<string, DriverStats>
   matched_corners: MatchedCorner[]
+  insights?: InsightsData
 }
 
 type CornerCallout = {
@@ -67,11 +71,13 @@ export default function BrakingAnalysis({
   drivers,
   trackPath,
   compact = false,
+  onInsightsLoad,
 }: {
   sessionKey: number
   drivers: number[]
   trackPath?: { x: number[]; y: number[] }
   compact?: boolean
+  onInsightsLoad?: (insights: InsightsData | null, driverColours: Record<string, string>) => void
 }) {
   const [data, setData] = useState<CompareStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -99,7 +105,19 @@ export default function BrakingAnalysis({
         if (!res.ok) throw new Error('Failed to load braking analysis')
         return res.json()
       })
-      .then(setData)
+      .then((d: CompareStats) => {
+        setData(d)
+        if (onInsightsLoad && d.insights) {
+          const colours: Record<string, string> = {}
+          for (const dk of d.driver_keys) {
+            const dr = d.drivers[dk]
+            if (dr) colours[dr.abbreviation] = teamColour(dr.team_colour, dr.team_name)
+          }
+          onInsightsLoad(d.insights, colours)
+        } else if (onInsightsLoad) {
+          onInsightsLoad(null, {})
+        }
+      })
       .catch(err => {
         if (err?.name === 'AbortError') return
         setError(err?.message ?? 'Failed to load braking analysis')
@@ -107,6 +125,7 @@ export default function BrakingAnalysis({
       .finally(() => setLoading(false))
 
     return () => abort.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, drivers])
 
   useEffect(() => {
