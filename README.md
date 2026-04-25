@@ -21,6 +21,8 @@ Qualifying sessions also support segment-aware comparison:
 - compare each driver's best telemetry lap from that segment
 - drivers who did not reach the selected segment are disabled in the selector
 - the UI shows the actual lap number currently being rendered per driver
+- compare corner-entry and corner-exit behaviour with the braking analysis card
+- inspect a compact performance matrix, theoretical lap, and LLM-style insight summary alongside the sector cards
 
 ![Qualifying telemetry showing ANT vs RUS speed traces](.github/assets/qualifying-telemetry.png)
 
@@ -103,7 +105,8 @@ pitwall/
 │       └── components/
 │           ├── analysis/
 │           │   ├── RaceAnalysis.tsx
-│           │   └── PracticeAnalysis.tsx
+│           │   ├── PracticeAnalysis.tsx
+│           │   └── BrakingAnalysis.tsx
 │           └── telemetry/
 │               └── CornerAnalysis.tsx
 ├── packages/
