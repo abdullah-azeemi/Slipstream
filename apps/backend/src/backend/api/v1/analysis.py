@@ -1809,16 +1809,28 @@ def driver_compare_stats(session_key: int):
             if stats:
                 corners.append(stats)
         all_corner_sets[dn] = corners
+        def median(vals):
+            s = sorted(v for v in vals if v is not None)
+            if not s: return 0
+            mid = len(s) // 2
+            return s[mid] if len(s) % 2 else (s[mid-1] + s[mid]) / 2
+
+        # Use median not mean for decel_rate — one bad corner (very short braking
+        # distance causes division instability) can pull the mean wildly.
+        # Cap decel at 8.0 km/h/m — physical maximum for F1 under hard braking.
+        valid_decel = [min(c["decel_rate"], 8.0) for c in corners if c["decel_rate"] > 0]
+        valid_brake = [c["braking_dist_m"] for c in corners if c["braking_dist_m"] > 2]
+
         driver_results[dn] = {
             **meta[dn],
             "corners": corners,
             "summary": {
-                "avg_braking_dist_m":      round(sum(c["braking_dist_m"] for c in corners) / len(corners), 1) if corners else 0,
-                "avg_decel_rate":          round(sum(c["decel_rate"] for c in corners) / len(corners), 3) if corners else 0,
-                "avg_apex_speed_kmh":      round(sum(c["apex_speed_kmh"] for c in corners) / len(corners), 1) if corners else 0,
-                "avg_throttle_gap_m":      round(sum(c["throttle_gap_m"] for c in corners if c["throttle_gap_m"]) / max(1, sum(1 for c in corners if c["throttle_gap_m"])), 1),
-                "avg_exit_speed_kmh":      round(sum(c["exit_speed_kmh"] for c in corners if c["exit_speed_kmh"]) / max(1, sum(1 for c in corners if c["exit_speed_kmh"])), 1),
-                "total_corners_detected":  len(corners),
+                "avg_braking_dist_m":     round(median(valid_brake), 1) if valid_brake else 0,
+                "avg_decel_rate":         round(median(valid_decel), 3) if valid_decel else 0,
+                "avg_apex_speed_kmh":     round(sum(c["apex_speed_kmh"] for c in corners) / len(corners), 1) if corners else 0,
+                "avg_throttle_gap_m":     round(median([c["throttle_gap_m"] for c in corners if c["throttle_gap_m"]]), 1),
+                "avg_exit_speed_kmh":     round(median([c["exit_speed_kmh"] for c in corners if c["exit_speed_kmh"]]), 1),
+                "total_corners_detected": len(corners),
             }
         }
 
@@ -1827,45 +1839,87 @@ def driver_compare_stats(session_key: int):
     # lines. Match by proximity: corners within 80m of each other = same corner.
     # This gives us a per-corner comparison table.
 
-    def match_corners(sets: dict, tolerance_m: float = 80.0) -> list:
+    def match_corners(sets: dict, tolerance_m: float = 120.0) -> list:
         """
         Match corners across drivers by distance proximity.
-        Take driver 0's corners as reference, find closest corner from each
-        other driver within tolerance_m.
+
+        MAJORITY RULE: include a corner if >= 2 drivers (or 50%+) have it.
+        WHY: one driver may miss a corner detection due to a slightly different
+        line or speed profile. Requiring ALL drivers to detect it causes
+        cascading drops — one weak detection eliminates the corner for everyone.
+
+        Algorithm:
+        1. Collect all unique corner positions across ALL drivers
+        2. Cluster corners within tolerance_m — same physical corner
+        3. Keep clusters where >= min_drivers detected it
+        4. For each cluster, use the median apex position as canonical
         """
         driver_keys = list(sets.keys())
-        if len(driver_keys) < 2:
+        n_drivers   = len(driver_keys)
+        if n_drivers < 2:
             return []
 
-        ref_corners = sets[driver_keys[0]]
+        # Step 1: pool all corners from all drivers with their driver tag
+        all_corners = []
+        for dn in driver_keys:
+            for c in sets[dn]:
+                all_corners.append({"dn": dn, **c})
+
+        # Sort by distance
+        all_corners.sort(key=lambda c: c["apex_dist_m"])
+
+        # Step 2: cluster by proximity
+        # Walk through sorted corners; start a new cluster when gap > tolerance_m
+        clusters = []
+        for c in all_corners:
+            placed = False
+            for cluster in clusters:
+                centroid = sum(x["apex_dist_m"] for x in cluster) / len(cluster)
+                if abs(c["apex_dist_m"] - centroid) <= tolerance_m:
+                    # Speed validation: same corner = apex speed within 30kmh
+                    cluster_speed = sum(x["apex_speed_kmh"] for x in cluster) / len(cluster)
+                    if abs(c["apex_speed_kmh"] - cluster_speed) <= 30:
+                        cluster.append(c)
+                        placed = True
+                        break
+            if not placed:
+                clusters.append([c])
+
+        # Step 3: filter clusters — need >= 2 unique drivers
+        # (majority rule: at least 2 drivers must agree this corner exists)
+        min_drivers = min(2, n_drivers)
         matched = []
+        corner_num = 1
 
-        for i, ref_c in enumerate(ref_corners):
-            ref_dist = ref_c["apex_dist_m"]
-            match = {
-                "corner_number": i + 1,
-                "apex_dist_m":   ref_dist,
-                "apex_x":        ref_c["apex_x"],
-                "apex_y":        ref_c["apex_y"],
-                "drivers":       {driver_keys[0]: ref_c}
-            }
+        for cluster in sorted(clusters, key=lambda cl: sum(x["apex_dist_m"] for x in cl) / len(cl)):
+            # Which drivers are represented?
+            represented = set(c["dn"] for c in cluster)
+            if len(represented) < min_drivers:
+                continue
 
-            for other_dn in driver_keys[1:]:
-                best = None
-                best_diff = tolerance_m
-                for c in sets[other_dn]:
-                    diff = abs(c["apex_dist_m"] - ref_dist)
-                    if diff < best_diff:
-                        best_diff = diff
-                        best = c
-                # Only accept match if apex speeds are within 30kmh
-                # Same corner = similar minimum speed. Different speeds = different corner.
-                if best and abs(best["apex_speed_kmh"] - ref_c["apex_speed_kmh"]) <= 30:
-                    match["drivers"][other_dn] = best
+            # Canonical position = median apex of cluster
+            canon_dist = sorted(c["apex_dist_m"] for c in cluster)[len(cluster) // 2]
+            canon_x    = sorted(c["apex_x"] for c in cluster)[len(cluster) // 2]
+            canon_y    = sorted(c["apex_y"] for c in cluster)[len(cluster) // 2]
 
-            # Only include corner if ALL drivers have a match
-            if len(match["drivers"]) == len(driver_keys):
-                matched.append(match)
+            # Best corner per driver = closest to canonical position
+            driver_corners = {}
+            for dn in driver_keys:
+                candidates = [c for c in cluster if c["dn"] == dn]
+                if candidates:
+                    best = min(candidates, key=lambda c: abs(c["apex_dist_m"] - canon_dist))
+                    # Strip the "dn" tag before storing
+                    driver_corners[dn] = {k: v for k, v in best.items() if k != "dn"}
+
+            matched.append({
+                "corner_number": corner_num,
+                "apex_dist_m":   canon_dist,
+                "apex_x":        canon_x,
+                "apex_y":        canon_y,
+                "drivers":       driver_corners,
+                "drivers_present": list(represented),
+            })
+            corner_num += 1
 
         return matched
 
@@ -1879,26 +1933,279 @@ def driver_compare_stats(session_key: int):
 
     driver_keys = list(by_driver.keys())
     for corner in matched_corners:
-        if len(driver_keys) >= 2:
-            a = corner["drivers"].get(driver_keys[0])
-            b = corner["drivers"].get(driver_keys[1])
-            if a and b:
-                corner["delta"] = {
-                    # Positive = B brakes later (more confidence into corner)
-                    "brake_point_m":   round(b["brake_point_dist_m"] - a["brake_point_dist_m"], 1),
-                    # Positive = B has shorter braking distance (more efficient)
-                    "braking_dist_m":  round(a["braking_dist_m"] - b["braking_dist_m"], 1),
-                    # Positive = B decelerates faster (trail braking ability)
-                    "decel_rate":      round(b["decel_rate"] - a["decel_rate"], 3),
-                    # Positive = B applies throttle earlier (better exit)
-                    "throttle_gap_m":  round((a["throttle_gap_m"] or 0) - (b["throttle_gap_m"] or 0), 1),
-                    # Positive = B has higher exit speed
-                    "exit_speed_kmh":  round((b["exit_speed_kmh"] or 0) - (a["exit_speed_kmh"] or 0), 1),
-                }
+        # Compute pairwise deltas for first two drivers when both present
+        # For 3-4 driver comparisons, deltas are always relative to driver[0]
+        a_dn = driver_keys[0]
+        b_dn = driver_keys[1] if len(driver_keys) >= 2 else None
+        a = corner["drivers"].get(a_dn)
+        b = corner["drivers"].get(b_dn) if b_dn else None
+
+        if a and b:
+            corner["delta"] = {
+                "brake_point_m":  round(b["brake_point_dist_m"] - a["brake_point_dist_m"], 1),
+                "braking_dist_m": round(a["braking_dist_m"] - b["braking_dist_m"], 1),
+                "decel_rate":     round(b["decel_rate"] - a["decel_rate"], 3),
+                "throttle_gap_m": round((a["throttle_gap_m"] or 0) - (b["throttle_gap_m"] or 0), 1),
+                "exit_speed_kmh": round((b["exit_speed_kmh"] or 0) - (a["exit_speed_kmh"] or 0), 1),
+            }
+
+    # Generate insights from the computed corner data
+    insights = generate_insights(driver_keys, driver_results, matched_corners)
 
     return jsonify({
         "session_key":     session_key,
         "driver_keys":     driver_keys,
         "drivers":         driver_results,
         "matched_corners": matched_corners,
+        "insights":        insights,
     })
+
+# ── Insight engine — rules-based, pitwall-quality ─────────────────────────────
+
+def generate_insights(driver_keys: list, drivers: dict, matched_corners: list) -> dict:
+    """
+    Generate structured, number-grounded insights from corner analysis data.
+
+    Design philosophy:
+    - Every insight cites specific numbers — no vague claims
+    - Insights are tiered: CRITICAL (lap time impact) > NOTABLE > INFO
+    - Each insight maps to a real engineering concept pitwall engineers use
+    - No LLM required — rules derived from F1 engineering knowledge
+
+    Returns:
+        {
+          "headline": str,           # one-line summary of the comparison
+          "insights": [...],         # list of insight objects
+          "driver_profiles": {...},  # per-driver style characterisation
+          "key_corner": int,         # corner number with most lap time impact
+        }
+    """
+    if len(driver_keys) < 2 or not matched_corners:
+        return {}
+
+    d0_key = driver_keys[0]
+    d1_key = driver_keys[1]
+    d0 = drivers.get(d0_key, {})
+    d1 = drivers.get(d1_key, {})
+    if not d0 or not d1:
+        return {}
+
+    abbr0 = d0["abbreviation"]
+    abbr1 = d1["abbreviation"]
+    s0    = d0["summary"]
+    s1    = d1["summary"]
+
+    insights = []
+
+    # ── Insight 1: Braking commitment ────────────────────────────────────────
+    # "Who is braver under braking" — the most watched metric in F1 pitwall
+    # Pitwall engineers call this "brake point confidence"
+    # Measured by: average braking distance across all corners
+    # Shorter braking dist = later brake point = more confidence/risk
+    brake_delta = s0["avg_braking_dist_m"] - s1["avg_braking_dist_m"]
+    if abs(brake_delta) > 1.5:
+        braver = abbr0 if brake_delta < 0 else abbr1
+        later_m = abs(brake_delta)
+        insights.append({
+            "id":       "brake_commitment",
+            "tier":     "CRITICAL" if later_m > 4 else "NOTABLE",
+            "category": "BRAKING",
+            "title":    f"{braver} brakes later on average",
+            "detail":   f"{braver} has {later_m:.1f}m shorter average braking distance across "
+                        f"{len(matched_corners)} corners. Shorter braking distance signals "
+                        f"later brake application — a key indicator of corner entry confidence "
+                        f"and trail braking ability.",
+            "metric":   f"{s0['avg_braking_dist_m']}m vs {s1['avg_braking_dist_m']}m",
+            "drivers":  [abbr0, abbr1],
+            "winner":   braver,
+        })
+
+    # ── Insight 2: Deceleration efficiency ───────────────────────────────────
+    # decel_rate = km/h lost per metre of braking distance
+    # Higher rate = more efficient weight transfer and brake bias setup
+    # Engineers call this "brake efficiency" — you want max decel in min distance
+    decel_delta = s0["avg_decel_rate"] - s1["avg_decel_rate"]
+    if abs(decel_delta) > 0.05:
+        harder = abbr0 if decel_delta > 0 else abbr1
+        softer = abbr1 if decel_delta > 0 else abbr0
+        insights.append({
+            "id":       "decel_efficiency",
+            "tier":     "NOTABLE",
+            "category": "BRAKING",
+            "title":    f"{harder} generates higher deceleration force",
+            "detail":   f"{harder} averages {max(s0['avg_decel_rate'], s1['avg_decel_rate']):.2f} km/h/m "
+                        f"vs {softer}'s {min(s0['avg_decel_rate'], s1['avg_decel_rate']):.2f} km/h/m. "
+                        f"Higher deceleration rate indicates better brake bias calibration and "
+                        f"more aggressive trail braking — the car is being asked to do more work "
+                        f"over a shorter distance.",
+            "metric":   f"{s0['avg_decel_rate']:.3f} vs {s1['avg_decel_rate']:.3f} km/h/m",
+            "drivers":  [abbr0, abbr1],
+            "winner":   harder,
+        })
+
+    # ── Insight 3: Corner exit performance ───────────────────────────────────
+    # Exit speed is the single biggest driver of lap time on most circuits
+    # because it determines entry speed onto the following straight
+    # Engineers call this "traction performance" or "exit efficiency"
+    exit_delta = s0["avg_exit_speed_kmh"] - s1["avg_exit_speed_kmh"]
+    if abs(exit_delta) > 2:
+        faster_exit = abbr0 if exit_delta > 0 else abbr1
+        slower_exit = abbr1 if exit_delta > 0 else abbr0
+        insights.append({
+            "id":       "exit_speed",
+            "tier":     "CRITICAL" if abs(exit_delta) > 4 else "NOTABLE",
+            "category": "THROTTLE",
+            "title":    f"{faster_exit} generates higher corner exit speed",
+            "detail":   f"{faster_exit} averages {abs(exit_delta):.1f} km/h more at corner exit "
+                        f"({max(s0['avg_exit_speed_kmh'], s1['avg_exit_speed_kmh']):.1f} vs "
+                        f"{min(s0['avg_exit_speed_kmh'], s1['avg_exit_speed_kmh']):.1f} km/h). "
+                        f"Exit speed compounds across a lap — higher exit speed means higher "
+                        f"entry speed onto every straight, typically worth 0.05–0.15s per corner.",
+            "metric":   f"{s0['avg_exit_speed_kmh']} vs {s1['avg_exit_speed_kmh']} km/h",
+            "drivers":  [abbr0, abbr1],
+            "winner":   faster_exit,
+        })
+
+    # ── Insight 4: Throttle application point ────────────────────────────────
+    # throttle_gap_m = metres from apex to first throttle application
+    # Smaller gap = earlier throttle = more aggressive exit
+    # BUT: earlier throttle with lower exit speed = wheelspin or oversteer —
+    #      so this must be read alongside exit speed
+    tgap_delta = s0["avg_throttle_gap_m"] - s1["avg_throttle_gap_m"]
+    if abs(tgap_delta) > 1.5:
+        earlier = abbr0 if tgap_delta < 0 else abbr1
+        later_t = abbr1 if tgap_delta < 0 else abbr0
+        # Cross-reference with exit speed to detect wheelspin signature
+        earlier_better_exit = (
+            (earlier == abbr0 and exit_delta > 0) or
+            (earlier == abbr1 and exit_delta < 0)
+        )
+        if earlier_better_exit:
+            detail = (f"{earlier} applies throttle {abs(tgap_delta):.1f}m earlier from the apex "
+                      f"AND achieves higher exit speed — indicates clean traction and good "
+                      f"mechanical grip at corner exit. This is the ideal throttle signature.")
+            tier = "CRITICAL"
+        else:
+            detail = (f"{earlier} applies throttle {abs(tgap_delta):.1f}m earlier from the apex "
+                      f"but has lower exit speed than {later_t}. This pattern suggests "
+                      f"oversteer or wheelspin at exit — throttle is being applied before "
+                      f"the car is fully pointed at the exit.")
+            tier = "NOTABLE"
+
+        insights.append({
+            "id":       "throttle_application",
+            "tier":     tier,
+            "category": "THROTTLE",
+            "title":    f"{earlier} applies throttle earlier from apex",
+            "detail":   detail,
+            "metric":   f"{s0['avg_throttle_gap_m']}m vs {s1['avg_throttle_gap_m']}m from apex",
+            "drivers":  [abbr0, abbr1],
+            "winner":   earlier if earlier_better_exit else later_t,
+        })
+
+    # ── Insight 5: High-value corner identification ───────────────────────────
+    # Not all corners are equal. A corner feeding a long straight is worth
+    # much more than a corner into another corner.
+    # Proxy for straight length: distance to NEXT corner minus current apex.
+    # Longer gap = longer straight = exit speed matters more here.
+    if len(matched_corners) >= 2:
+        corner_values = []
+        for i, corner in enumerate(matched_corners):
+            if "delta" not in corner:
+                continue
+            # Straight length after this corner
+            if i + 1 < len(matched_corners):
+                raw_straight = matched_corners[i+1]["apex_dist_m"] - corner["apex_dist_m"]
+            else:
+                track_len    = matched_corners[-1]["apex_dist_m"] + 500
+                raw_straight = track_len - corner["apex_dist_m"]
+
+            # Cap at 900m — F1 longest straights are ~700-800m (Monza).
+            # Values above 900m mean we missed intermediate corners and the
+            # "straight" is actually several corners + straights combined.
+            # Using the raw inflated value would make that corner look far more
+            # important than it is — misleading the insight.
+            straight_len = min(raw_straight, 900)
+
+            exit_spd_delta = abs(corner["delta"].get("exit_speed_kmh", 0) or 0)
+            value = exit_spd_delta * straight_len
+            corner_values.append((corner["corner_number"], value, straight_len, corner["delta"]))
+
+        if corner_values:
+            key_corner = max(corner_values, key=lambda x: x[1])
+            cn, val, slen, delta = key_corner
+
+            if val > 0:
+                beneficiary = abbr1 if delta.get("exit_speed_kmh", 0) > 0 else abbr0
+                exit_adv    = abs(delta.get("exit_speed_kmh", 0))
+                insights.append({
+                    "id":       "high_value_corner",
+                    "tier":     "CRITICAL",
+                    "category": "STRATEGY",
+                    "title":    f"Corner {cn} has highest lap time impact",
+                    "detail":   (f"Corner {cn} feeds a {slen:.0f}m straight — the longest approach "
+                                 f"in this comparison. {beneficiary} exits {exit_adv:.1f} km/h faster here, "
+                                 f"which compounds across the entire straight. This single corner "
+                                 f"difference is likely worth {(exit_adv * slen / 3_600_000 * 3.6):.3f}s "
+                                 f"in raw time advantage per lap."),
+                    "metric":   f"Corner {cn} → {slen:.0f}m straight",
+                    "drivers":  [abbr0, abbr1],
+                    "winner":   beneficiary,
+                    "corner":   cn,
+                })
+
+    # ── Insight 6: Driving style characterisation ─────────────────────────────
+    # Synthesise all metrics into a style label
+    # Entry-focused driver: brakes later, potentially lower exit speed
+    # Exit-focused driver: earlier throttle, higher exit speed
+    # Balanced: neither strongly biased
+
+    def characterise(abbr, s, other_s):
+        entry_score = 0
+        exit_score  = 0
+
+        if s["avg_braking_dist_m"] < other_s["avg_braking_dist_m"]:
+            entry_score += 2   # brakes later = entry confidence
+        if s["avg_decel_rate"] > other_s["avg_decel_rate"]:
+            entry_score += 1   # harder braking = entry aggression
+        if s["avg_exit_speed_kmh"] > other_s["avg_exit_speed_kmh"]:
+            exit_score += 2    # faster exit = exit focus
+        if s["avg_throttle_gap_m"] < other_s["avg_throttle_gap_m"]:
+            exit_score += 1    # earlier throttle = exit aggression
+
+        if entry_score > exit_score + 1:
+            style = "ENTRY-FOCUSED"
+            desc  = "prioritises late braking and aggressive corner entry"
+        elif exit_score > entry_score + 1:
+            style = "EXIT-FOCUSED"
+            desc  = "prioritises early throttle application and corner exit speed"
+        else:
+            style = "BALANCED"
+            desc  = "shows no strong bias toward entry or exit — consistent through corners"
+
+        return {"style": style, "description": desc,
+                "entry_score": entry_score, "exit_score": exit_score}
+
+    driver_profiles = {
+        abbr0: characterise(abbr0, s0, s1),
+        abbr1: characterise(abbr1, s1, s0),
+    }
+
+    # ── Headline ──────────────────────────────────────────────────────────────
+    critical = [i for i in insights if i["tier"] == "CRITICAL"]
+    if critical:
+        headline = critical[0]["title"]
+    elif insights:
+        headline = insights[0]["title"]
+    else:
+        headline = f"{abbr0} and {abbr1} show similar corner profiles"
+
+    # Key corner for map highlight
+    key_c = next((i.get("corner") for i in insights if i.get("corner")), None)
+
+    return {
+        "headline":       headline,
+        "insights":       sorted(insights, key=lambda i: ["CRITICAL","NOTABLE","INFO"].index(i["tier"])),
+        "driver_profiles": driver_profiles,
+        "key_corner":     key_c,
+    }

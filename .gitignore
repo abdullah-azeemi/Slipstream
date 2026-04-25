@@ -1,37 +1,40 @@
-# ── Environment ───────────────────────────────────────
+# Environment ───────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# ── uv (will be REMOVED after uv init — lock file gets committed) ──
+# uv 
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 
-# ── FastF1 cache (can be hundreds of MBs) ─────────────
+# FastF1 cache 
 fastf1_cache/
 
-# ── ML artifacts ──────────────────────────────────────
+# ML artifacts ──────────────────────────────────────
 mlruns/
 ml_models/
 *.pkl
 *.joblib
 *.parquet
 
-# ── Logs / runtime artifacts ──────────────────────────
+# Logs / runtime artifacts
 *.log
 
-# ── Node / Next.js ────────────────────────────────────
+# Node / Next.js 
 node_modules/
 .next/
 .pnpm-store/
 
-# ── OS ────────────────────────────────────────────────
+# OS 
 .DS_Store
 Thumbs.db
 
-# ── IDE (share extensions.json but not personal settings) ──
+# IDE configurations
 .vscode/settings.json
 .idea/
+
+# Claude.md
+CLAUDE.md
