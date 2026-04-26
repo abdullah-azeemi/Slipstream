@@ -32,12 +32,21 @@ export default function LandingPage() {
           boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.12)',
           background: '#F1F5F9',
         }}>
-          <div style={{
-            position: 'absolute', inset: 0,
-            backgroundImage: `url('/LandingPage3.gif')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }} />
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          >
+            <source src="/LandingPage3.mp4" type="video/mp4" />
+          </video>
         </div>
 
         {/* Hero Text Content */}
