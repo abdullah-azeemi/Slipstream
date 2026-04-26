@@ -28,7 +28,7 @@ export default function LandingPage() {
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            backgroundImage: `url('/LandingPage2.gif')`,
+            backgroundImage: `url('/LandingPage3.gif')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }} />

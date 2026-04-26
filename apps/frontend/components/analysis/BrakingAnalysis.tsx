@@ -146,9 +146,9 @@ export default function BrakingAnalysis({
     const points = trackPath?.x.length && trackPath.x.length === trackPath.y.length && trackPath.x.length > 1
       ? trackPath.x.map((x, i) => ({ x, y: trackPath.y[i] }))
       : data.matched_corners
-          .slice()
-          .sort((a, b) => a.apex_dist_m - b.apex_dist_m)
-          .map(c => ({ x: c.apex_x, y: c.apex_y }))
+        .slice()
+        .sort((a, b) => a.apex_dist_m - b.apex_dist_m)
+        .map(c => ({ x: c.apex_x, y: c.apex_y }))
 
     if (points.length < 2) {
       setCallouts([])
@@ -193,14 +193,14 @@ export default function BrakingAnalysis({
       const side: 'left' | 'right' = x < W * 0.52 ? 'right' : 'left'
 
       ctx.beginPath()
-    ctx.font = '900 18px Inter, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.lineWidth = 3
-    ctx.strokeStyle = '#FFFFFF'
-    ctx.strokeText('•', x, y)
-    ctx.fillStyle = colour
-    ctx.fillText('•', x, y)
+      ctx.font = '900 18px Inter, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.lineWidth = 3
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.strokeText('•', x, y)
+      ctx.fillStyle = colour
+      ctx.fillText('•', x, y)
 
       const entries = Object.entries(corner.drivers)
         .map(([dn, stats]) => ({
@@ -278,8 +278,7 @@ export default function BrakingAnalysis({
 
   const corners = data.matched_corners
     .filter(c => c.delta)
-    .sort((a, b) => Math.abs(b.delta!.brake_point_m) - Math.abs(a.delta!.brake_point_m))
-    .slice(0, 5)
+    .sort((a, b) => a.apex_dist_m - b.apex_dist_m)
 
   const total = corners.length || 1
   const d0Wins = data.matched_corners.filter(c => (c.delta?.brake_point_m ?? 0) < 0).length
