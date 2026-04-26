@@ -5,22 +5,28 @@ import { Zap, Brain, Globe, Activity } from 'lucide-react'
 
 export default function LandingPage() {
   return (
-    <div style={{ background: '#FAFAFA', overflowX: 'hidden', width: '100%', paddingTop: 60 }}>
+    <div style={{ background: '#FAFAFA', overflowX: 'hidden', width: '100%', paddingTop: 16 }}>
 
-      {/* ── HERO SECTION ─────────────────────────────────────────────────── */}
+      {/*  HERO SECTION ─────────────────────────────────────────────────── */}
+      <style>{`
+        .hero-gif-card { aspect-ratio: 16 / 6.5; }
+        @media (max-width: 768px) {
+          .hero-gif-card { aspect-ratio: 10 / 12 !important; }
+        }
+      `}</style>
+
       <section style={{
         maxWidth: 1100,
-        margin: '8px auto 60px',
+        margin: '0 auto 32px',
         padding: '0 24px',
         textAlign: 'center',
       }}>
         {/* Video / Image Card */}
-        <div style={{
+        <div className="hero-gif-card" style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 840,
-          margin: '0 auto 28px',
-          aspectRatio: '16 / 6',
+          maxWidth: 1000,
+          margin: '0 auto 16px',
           borderRadius: 24,
           overflow: 'hidden',
           boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.12)',
@@ -35,16 +41,16 @@ export default function LandingPage() {
         </div>
 
         {/* Hero Text Content */}
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
           <h1 style={{
             fontFamily: 'Inter, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(2.2rem, 5.5vw, 4rem)',
+            fontSize: 'clamp(2.2rem, 5vw, 3.6rem)',
             lineHeight: 1.0,
             letterSpacing: '-0.05em',
             color: '#0F172A',
-            marginBottom: 20,
+            marginBottom: 8,
             textTransform: 'uppercase',
           }}>
             PRECISION IN <em style={{ fontStyle: 'italic', fontWeight: 700, color: '#0F172A' }}>EVERY</em>
@@ -54,15 +60,15 @@ export default function LandingPage() {
 
           <p style={{
             fontFamily: 'Inter, sans-serif',
-            fontSize: 17,
+            fontSize: 15,
             lineHeight: 1.6,
             color: '#64748B',
-            marginBottom: 32,
-            maxWidth: 540,
-            margin: '0 auto 32px',
+            marginBottom: 24,
+            maxWidth: 500,
+            margin: '0 auto 24px',
           }}>
             Unlock elite-level race analytics. From real-time telemetry to
-            predictive race strategy, dominate the grid with the world&apos;s most
+            predictive race strategy, dominate the grid with
             advanced motorsport data archive.
           </p>
         </div>
