@@ -269,7 +269,7 @@ export default function CornerInsights({
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${profileEntries.length}, 1fr)`,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
             gap: 12,
             padding: '14px 16px',
           }}>

@@ -11,7 +11,7 @@ export default function LandingPage() {
       <style>{`
         .hero-gif-card { aspect-ratio: 16 / 6.5; }
         @media (max-width: 768px) {
-          .hero-gif-card { aspect-ratio: 10 / 12 !important; }
+          .hero-gif-card { aspect-ratio: 6.25 / 7.5 !important; }
         }
       `}</style>
 
@@ -334,7 +334,7 @@ export default function LandingPage() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['TELEMETRY', 'ARCHIVE', 'PREDICTIONS', 'GITHUB'].map(l => {
+          {['TELEMETRY', 'SESSIONS', 'PREDICTIONS', 'GITHUB'].map(l => {
             const href = l === 'GITHUB' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${l.toLowerCase()}`
             return (
               <Link key={l} href={href} target={l === 'GITHUB' ? '_blank' : undefined} style={{

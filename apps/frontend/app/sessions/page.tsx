@@ -110,6 +110,14 @@ export default function SessionsPage() {
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>('ALL')
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useEffect(() => {
     fetch(`${BASE}/api/v1/sessions`)
@@ -129,10 +137,10 @@ export default function SessionsPage() {
     : filteredByYear.filter(s => s.session_type === sessionFilter || (sessionFilter === 'Q' && s.session_type === 'SQ'))
 
   const grouped = useMemo(() => groupSessions(filteredByType), [filteredByType])
-  const displayYear = year === 'all' ? allYears[0] ?? 'All' : year
+  const displayYear = year === 'all' ? 'Historical' : year
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1080px', margin: '0 auto', padding: '0 12px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1080px', margin: '0 auto', padding: isMobile ? '0 8px 32px' : '0 12px 48px' }}>
       <section style={{
         padding: '22px',
         borderRadius: '28px',
@@ -145,8 +153,8 @@ export default function SessionsPage() {
             <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: '10px' }}>
               Kinetic Precision
             </div>
-            <h1 style={{ margin: 0, color: '#14233C', fontSize: 'clamp(2rem, 4vw, 3.3rem)', lineHeight: 0.98, fontFamily: 'Inter, sans-serif', fontWeight: 800 }}>
-              {displayYear} Season Archive
+            <h1 style={{ margin: 0, color: '#14233C', fontSize: isMobile ? '2.2rem' : 'clamp(2rem, 4vw, 3.3rem)', lineHeight: 0.98, fontFamily: 'Inter, sans-serif', fontWeight: 800 }}>
+              {displayYear} {year === 'all' ? 'Archive' : 'Season'}
             </h1>
             <p style={{ margin: '10px 0 0', color: '#56657C', fontSize: '15px', lineHeight: 1.6, maxWidth: '640px', fontFamily: 'Inter, sans-serif' }}>
               Complete telemetry, session timelines, and weekend analytics for every Grand Prix in the current archive scope.
@@ -280,43 +288,45 @@ export default function SessionsPage() {
                 background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(243,247,252,0.98) 100%)',
                 border: '1px solid rgba(204,218,236,0.92)',
                 borderRadius: '24px',
-                padding: '18px',
+                padding: isMobile ? '14px' : '18px',
                 boxShadow: '0 16px 40px rgba(24,39,75,0.08)',
               }}
             >
-              <div className="sessions-grid-row" style={{ display: 'grid', gridTemplateColumns: '84px 1.3fr 1fr 52px', gap: '18px', alignItems: 'center' }}>
+              <div className="sessions-grid-row" style={{ display: 'grid', gridTemplateColumns: isMobile ? '64px 1fr 48px' : '84px 1.3fr 1fr 52px', gap: isMobile ? '12px' : '18px', alignItems: 'center' }}>
                 <div style={{
                   borderRadius: '18px',
                   background: '#F1F5FB',
                   border: '1px solid rgba(214,224,238,0.92)',
-                  padding: '14px 12px',
+                  padding: isMobile ? '10px 8px' : '14px 12px',
                   textAlign: 'center',
                 }}>
                   <div style={{ fontSize: '9px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Rnd</div>
-                  <div style={{ color: '#14233C', fontSize: '32px', lineHeight: 1, fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, marginTop: '4px' }}>
+                  <div style={{ color: '#14233C', fontSize: isMobile ? '24px' : '32px', lineHeight: 1, fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, marginTop: '4px' }}>
                     {String(group.round).padStart(2, '0')}
                   </div>
                 </div>
 
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '18px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 800 }}>
+                    <div style={{ fontSize: isMobile ? '16px' : '18px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 800 }}>
                       {group.gp_name}
                     </div>
-                    <div style={{
-                      padding: '4px 8px',
-                      borderRadius: '999px',
-                      background: '#EEF4FF',
-                      color: '#7A8CA5',
-                      fontSize: '9px',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                    }}>
-                      Completed
-                    </div>
+                    {!isMobile && (
+                      <div style={{
+                        padding: '4px 8px',
+                        borderRadius: '999px',
+                        background: '#EEF4FF',
+                        color: '#7A8CA5',
+                        fontSize: '9px',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                      }}>
+                        Completed
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: '14px', color: '#56657C', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
+                  <div style={{ fontSize: isMobile ? '13px' : '14px', color: '#56657C', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
                     {group.country ?? 'Grand Prix weekend'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '8px', color: '#7A8CA5', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
@@ -324,90 +334,72 @@ export default function SessionsPage() {
                       <Calendar size={11} />
                       {formatDateRange(group.startDate, group.endDate)}
                     </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <Layers3 size={11} />
-                      {group.sessions.length} sessions
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-                    {group.sessions.map(session => {
-                      const colour = SESSION_COLOUR[session.session_type] ?? '#94A3B8'
-                      return (
-                        <span
-                          key={session.session_key}
-                          style={{
-                            padding: '5px 9px',
-                            borderRadius: '10px',
-                            background: `${colour}14`,
-                            border: `1px solid ${colour}24`,
-                            color: colour,
-                            fontSize: '10px',
-                            fontFamily: 'JetBrains Mono, monospace',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {session.session_type}
-                        </span>
-                      )
-                    })}
+                    {!isMobile && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <Layers3 size={11} />
+                        {group.sessions.length} sessions
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="sessions-stats-box" style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '10px',
-                }}>
-                  <div style={{
-                    borderRadius: '18px',
-                    background: '#F5F8FD',
-                    border: '1px solid rgba(214,224,238,0.82)',
-                    padding: '12px 14px',
+                {!isMobile && (
+                  <div className="sessions-stats-box" style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '10px',
                   }}>
-                    <div style={{ fontSize: '8px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px' }}>
-                      {summary.leftLabel}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <div style={{ width: '4px', height: '20px', borderRadius: '999px', background: SESSION_COLOUR[summary.latest.session_type] ?? '#94A3B8' }} />
-                      <div>
-                        <div style={{ fontSize: '14px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
-                          {summary.leftValue}
+                    <div style={{
+                      borderRadius: '18px',
+                      background: '#F5F8FD',
+                      border: '1px solid rgba(214,224,238,0.82)',
+                      padding: '12px 14px',
+                    }}>
+                      <div style={{ fontSize: '8px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px' }}>
+                        {summary.leftLabel}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <div style={{ width: '4px', height: '20px', borderRadius: '999px', background: SESSION_COLOUR[summary.latest.session_type] ?? '#94A3B8' }} />
+                        <div>
+                          <div style={{ fontSize: '14px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
+                            {summary.leftValue}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
+                            {summary.latest.date_start ? new Date(summary.latest.date_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Loaded'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
-                          {summary.latest.date_start ? new Date(summary.latest.date_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Loaded'}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      borderRadius: '18px',
+                      background: '#F5F8FD',
+                      border: '1px solid rgba(214,224,238,0.82)',
+                      padding: '12px 14px',
+                    }}>
+                      <div style={{ fontSize: '8px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px' }}>
+                        {summary.rightLabel}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <div style={{ width: '4px', height: '20px', borderRadius: '999px', background: '#3671C6' }} />
+                        <div>
+                          <div style={{ fontSize: '14px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
+                            {summary.rightValue}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
+                            Archive ready
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  <div style={{
-                    borderRadius: '18px',
-                    background: '#F5F8FD',
-                    border: '1px solid rgba(214,224,238,0.82)',
-                    padding: '12px 14px',
-                  }}>
-                    <div style={{ fontSize: '8px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px' }}>
-                      {summary.rightLabel}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <div style={{ width: '4px', height: '20px', borderRadius: '999px', background: '#3671C6' }} />
-                      <div>
-                        <div style={{ fontSize: '14px', color: '#14233C', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
-                          {summary.rightValue}
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', marginTop: '2px' }}>
-                          Archive ready
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
 
                 <Link
                   href={`/sessions/${summary.latest.session_key}`}
                   style={{
-                    width: '52px',
-                    height: '52px',
+                    width: isMobile ? '42px' : '52px',
+                    height: isMobile ? '42px' : '52px',
                     borderRadius: '50%',
                     background: '#EDF4FF',
                     border: '1px solid rgba(204,218,236,0.95)',
@@ -419,11 +411,11 @@ export default function SessionsPage() {
                     boxShadow: '0 10px 24px rgba(24,39,75,0.08)',
                   }}
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={isMobile ? 16 : 18} />
                 </Link>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(204,218,236,0.78)' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(204,218,236,0.78)' }}>
                 {group.sessions.map(session => {
                   const colour = SESSION_COLOUR[session.session_type] ?? '#94A3B8'
                   const Icon = session.session_type === 'R' ? Flag : session.session_type === 'Q' || session.session_type === 'SQ' ? Radio : Clock3
@@ -437,8 +429,9 @@ export default function SessionsPage() {
                         background: '#fff',
                         border: '1px solid rgba(204,218,236,0.88)',
                         borderRadius: '14px',
-                        padding: '10px 12px',
-                        minWidth: '132px',
+                        padding: isMobile ? '8px 10px' : '10px 12px',
+                        minWidth: isMobile ? 'auto' : '132px',
+                        flex: isMobile ? '1 1 auto' : 'none',
                         boxShadow: '0 8px 20px rgba(24,39,75,0.04)',
                       }}
                     >
@@ -458,11 +451,13 @@ export default function SessionsPage() {
                         </div>
                         <div>
                           <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#14233C' }}>
-                            {sessionTypeLabel(session.session_type)}
+                            {isMobile ? session.session_type : sessionTypeLabel(session.session_type)}
                           </div>
-                          <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '2px' }}>
-                            {session.session_type}
-                          </div>
+                          {!isMobile && (
+                            <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '2px' }}>
+                              {session.session_type}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Link>

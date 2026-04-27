@@ -351,22 +351,22 @@ export default function BrakingAnalysis({
         </div>
 
         {!compact && (
-          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
             <Metric label="Avg brake point" value={`${d0.summary.avg_braking_dist_m.toFixed(1)} m / ${d1.summary.avg_braking_dist_m.toFixed(1)} m`} />
             <Metric label="Avg decel" value={`${d0.summary.avg_decel_rate.toFixed(2)} G / ${d1.summary.avg_decel_rate.toFixed(2)} G`} />
             <Metric label="Avg apex speed" value={`${d0.summary.avg_apex_speed_kmh.toFixed(1)} / ${d1.summary.avg_apex_speed_kmh.toFixed(1)} km/h`} />
           </div>
         )}
 
-        <div style={{ marginTop: 14, borderTop: '1px solid #D9E3EF', paddingTop: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', gap: 8, fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: '#7D8BA2', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ marginTop: 14, borderTop: '1px solid #D9E3EF', paddingTop: 12, overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', minWidth: compact ? 'auto' : 480, gap: 8, fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: '#7D8BA2', textTransform: 'uppercase', marginBottom: 8 }}>
             <div>Corner</div>
             <div>Driver</div>
             <div>Entry</div>
             <div>Exit</div>
             {!compact && <div>Faster</div>}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: compact ? 'auto' : 480 }}>
             {corners.map(corner => (
               <div key={corner.corner_number} style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', gap: 8, alignItems: 'center', fontSize: compact ? 10 : 11, fontFamily: 'JetBrains Mono, monospace', color: '#13233D' }}>
                 <div style={{ fontWeight: 700 }}>C{corner.corner_number}</div>

@@ -37,7 +37,7 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
         <span style={{ 
-          fontSize: '12px', 
+          fontSize: '10px', 
           fontFamily: 'Space Grotesk, sans-serif', 
           fontWeight: 700, 
           letterSpacing: '0.12em', 
@@ -52,7 +52,7 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
             color: isNegative ? C.green : C.red,
             padding: '2px 8px',
             borderRadius: '6px',
-            fontSize: '11px',
+            fontSize: '10px',
             fontFamily: 'JetBrains Mono, monospace',
             fontWeight: 700
           }}>
@@ -62,7 +62,7 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
       </div>
 
       <div style={{ 
-        fontSize: '32px', 
+        fontSize: '24px', 
         fontFamily: 'Inter, sans-serif', 
         fontWeight: 900, 
         color: C.textBright, 

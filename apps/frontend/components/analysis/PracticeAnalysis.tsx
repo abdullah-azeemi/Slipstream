@@ -122,6 +122,7 @@ export default function PracticeAnalysis({
   const [compounds, setCompounds] = useState<CompoundTeam[]>([])
   const [sectors, setSectors] = useState<SectorDriver[]>([])
   const [loading, setLoading] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [activeDegCmp, setActiveDegCmp] = useState<string>('HARD')
   const [scatterTip, setScatterTip] = useState<{ x: number; y: number; lap: ScatterLap; gapMs: number } | null>(null)
 
@@ -139,6 +140,11 @@ export default function PracticeAnalysis({
   useEffect(() => {
     if (allDrivers.length >= 2 && selected.length === 0)
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.length])
 
@@ -352,7 +358,7 @@ export default function PracticeAnalysis({
   if (loading) return <div style={{ textAlign: 'center', padding: '100px', color: TEXT_DIM, fontFamily: 'Inter' }}>Initializing Dashboard...</div>
 
   return (
-    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: '24px', fontFamily: 'Inter, sans-serif' }}>
+    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: isMobile ? '12px' : '24px', fontFamily: 'Inter, sans-serif' }}>
 
       {/* ── Dashboard Header ─────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
@@ -372,7 +378,7 @@ export default function PracticeAnalysis({
               {session?.date_start ? new Date(session.date_start).toLocaleDateString() : 'Active Session'}
             </span>
           </div>
-          <h1 style={{ fontSize: '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
             GAP ANALYSIS
           </h1>
         </div>
@@ -398,7 +404,7 @@ export default function PracticeAnalysis({
       </div>
 
       {/* ── Main Dashboard Grid ──────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', gap: '24px', marginBottom: '24px' }}>
 
         {/* Left Col: Gap Analysis Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px', position: 'relative' }}>
@@ -413,7 +419,9 @@ export default function PracticeAnalysis({
               ))}
             </div>
           </div>
-          <canvas ref={scatterRef} style={{ display: 'block', width: '100%', height: '400px' }} onMouseMove={handleScatterMove} onMouseLeave={() => setScatterTip(null)} />
+          <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <canvas ref={scatterRef} style={{ display: 'block', width: isMobile ? '130%' : '100%', height: isMobile ? '300px' : '400px', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleScatterMove} onMouseLeave={() => setScatterTip(null)} />
+          </div>
           {scatterTip && (
             <Tooltip x={scatterTip.x} y={scatterTip.y}>
               <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>LAP {scatterTip.lap.lap_number}</div>
@@ -438,14 +446,14 @@ export default function PracticeAnalysis({
       </div>
 
       {/* ── Sub Grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px' }}>
         <SectorCard label="SECTOR 1" time={selectedStats?.s1 || '—'} color="#10B981" delta={-150} />
         <SectorCard label="SECTOR 2" time={selectedStats?.s2 || '—'} color="#F59E0B" delta={40} />
         <SectorCard label="SECTOR 3" time={selectedStats?.s3 || '—'} color="#6E56CF" delta={210} />
       </div>
 
       {/* ── Bottom Grid ──────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: '24px' }}>
 
         {/* Strategy Analysis */}
         <div style={{ background: '#13233D', border: '1px solid #1A2E4B', borderRadius: '24px', padding: '24px', color: '#fff', boxShadow: '0 8px 32px rgba(19,35,61,0.2)' }}>

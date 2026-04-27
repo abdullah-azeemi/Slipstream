@@ -468,11 +468,11 @@ function PerformanceMatrix({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
       {/* Matrix table */}
-      <Panel style={{ flex: 1 }}>
+      <Panel style={{ flex: 1, overflowX: 'auto' }}>
         <PanelHeader title="Performance Matrix" />
         <div style={{ padding: '12px 16px' }}>
           {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, paddingBottom: 10, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, paddingBottom: 10, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
             <span style={{ fontSize: 9, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>METRIC</span>
             {driverData.map(d => (
               <span key={d.abbr} style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour, textAlign: 'right' }}>{d.abbr}</span>
@@ -483,7 +483,7 @@ function PerformanceMatrix({
             const valid = row.values.map(v => v.v).filter((v): v is number => v !== null)
             const best = valid.length ? (row.higherIsBetter ? Math.max(...valid) : Math.min(...valid)) : null
             return (
-              <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{row.label}</span>
                 {row.values.map(({ abbr, v, fmt }) => {
                   const isBest = v !== null && v === best
@@ -498,7 +498,7 @@ function PerformanceMatrix({
           })}
 
           {/* Theoretical row */}
-          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${driverData.length}, minmax(104px, 1fr))`, gap: 6, padding: '10px 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, padding: '10px 0' }}>
             <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Theoretical</span>
             {theoBest.map(({ abbr, ms }) => {
               const isBest = ms !== null && ms === Math.min(...theoBest.filter(t => t.ms !== null).map(t => t.ms!))
@@ -658,6 +658,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [selected, setSelected] = useState<number[]>([])
+  const [isMobile, setIsMobile] = useState(false)
   const [telData, setTelData] = useState<Map<number, Interp>>(new Map())
   const [tooltipNx, setTooltipNx] = useState<number | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -697,6 +698,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       setDrivers(d)
       if (d.length >= 2) setSelected([d[0].driver_number, d[1].driver_number])
     })
+
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [sessionKey])
 
   // Reconcile selection for qualifying
@@ -944,7 +950,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: 'linear-gradient(180deg, #F5F7FB 0%, #EEF3FA 22%, #EAF0F8 100%)', minHeight: '100vh', paddingBottom: 80 }}>
-      <div ref={containerRef} style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px' }}>
+      <div ref={containerRef} style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px' }}>
 
         {/* Header */}
         <div style={{ padding: '28px 0 22px', borderBottom: `1px solid ${C.border}`, marginBottom: 24 }}>
@@ -954,7 +960,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               Telemetry Lab
             </span>
           </div>
-          <h1 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 28, color: C.textBright, letterSpacing: '-0.03em', margin: 0 }}>
+          <h1 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: isMobile ? 22 : 28, color: C.textBright, letterSpacing: '-0.03em', margin: 0 }}>
             Telemetry Analysis
           </h1>
           {driverData.length > 0 && (
@@ -990,7 +996,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         {isQualifying && (
           <>
             {/* Controls row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap: 16, marginBottom: 16 }}>
 
               {/* Left: segment + driver picker */}
               <Panel>
@@ -1070,9 +1076,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
             {/* Sector hero cards + performance matrix */}
             {driverData.length >= 2 && sectorTimes.size > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr minmax(340px, 0.6fr)', gap: 18, marginBottom: 16, alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr minmax(340px, 0.6fr)', gap: 18, marginBottom: 16, alignItems: 'start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} />
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
+                    <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} />
+                  </div>
                   {cornerInsights && (
                     <CornerInsights data={cornerInsights} driverColours={insightDriverColours} />
                   )}
@@ -1109,10 +1117,11 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               <>
                 {/* Scrubber */}
                 <div style={{
-                  position: 'sticky', top: 68, zIndex: 40,
-                  height: 140, background: 'rgba(255,255,255,0.98)', border: `1px solid ${C.borderMid}`,
-                  borderRadius: 24, display: 'flex', alignItems: 'center', padding: '0 28px',
+                  position: 'sticky', top: isMobile ? 12 : 68, zIndex: 40,
+                  height: isMobile ? 'auto' : 140, background: 'rgba(255,255,255,0.98)', border: `1px solid ${C.borderMid}`,
+                  borderRadius: 24, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', padding: isMobile ? '16px' : '0 28px',
                   marginBottom: 20, boxShadow: '0 24px 64px rgba(37,54,82,0.18)', backdropFilter: 'blur(24px)',
+                  gap: isMobile ? 12 : 0
                 }}>
                   {!tooltipData ? (
                     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -1123,29 +1132,29 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   ) : (
                     <>
                       {/* Left: Position */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 32, borderRight: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', gap: isMobile ? 8 : 4, paddingRight: isMobile ? 0 : 32, borderRight: isMobile ? 'none' : `1px solid ${C.border}`, alignItems: isMobile ? 'baseline' : 'flex-start', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-start', borderBottom: isMobile ? `1px solid ${C.border}` : 'none', paddingBottom: isMobile ? 8 : 0 }}>
                         <span style={{ fontSize: 10, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800 }}>POSITION</span>
-                        <span style={{ fontSize: 24, color: C.textBright, fontFamily: 'JetBrains Mono, monospace', fontWeight: 900 }}>{(tooltipData.dist / 1000).toFixed(3)}<span style={{ fontSize: 12, color: C.textDim, marginLeft: 2 }}>KM</span></span>
+                        <span style={{ fontSize: isMobile ? 18 : 24, color: C.textBright, fontFamily: 'JetBrains Mono, monospace', fontWeight: 900 }}>{(tooltipData.dist / 1000).toFixed(3)}<span style={{ fontSize: 10, color: C.textDim, marginLeft: 2 }}>KM</span></span>
                       </div>
 
                       {/* Units */}
-                      <div style={{ display: 'flex', flex: 1, justifyContent: 'space-around' }}>
+                      <div style={{ display: 'flex', flex: 1, justifyContent: 'space-around', flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: isMobile ? 20 : 0 }}>
                         {tooltipData.values.map((v: { abbr: string; rpm: number; colour: string; speed: number; gear: number; throttle: number; brake: number }) => {
                           const rpmBase = 8000, rpmMax = 12000
                           const rpmPct = Math.max(0, Math.min(1, (v.rpm - rpmBase) / (rpmMax - rpmBase)))
                           const needleDeg = -180 + rpmPct * 180
                           const mph = Math.round(v.speed * 0.621371)
                           return (
-                            <div key={v.abbr} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <div key={v.abbr} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, justifyContent: isMobile ? 'center' : 'flex-start', borderBottom: isMobile && tooltipData.values.length > 1 && v.abbr !== tooltipData.values[tooltipData.values.length - 1].abbr ? `1px dashed ${C.border}` : 'none', paddingBottom: isMobile ? 12 : 0 }}>
                               {/* Driver Info */}
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                                <span style={{ fontSize: 22, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 900, color: C.textBright }}>{v.abbr}</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, minWidth: isMobile ? 40 : 'auto' }}>
+                                <span style={{ fontSize: isMobile ? 16 : 22, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 900, color: C.textBright }}>{v.abbr}</span>
                                 <div style={{ width: 20, height: 6, borderRadius: 3, background: v.colour, boxShadow: `0 4px 12px ${v.colour}50` }} />
                               </div>
 
                               {/* Gauge Unit */}
-                              <div style={{ position: 'relative', width: 160, height: 110, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                                <svg style={{ position: 'absolute', top: -15, width: 160, height: 160 }}>
+                              <div style={{ position: 'relative', width: isMobile ? 120 : 160, height: isMobile ? 85 : 110, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                                <svg style={{ position: 'absolute', top: isMobile ? -10 : -15, width: isMobile ? 120 : 160, height: isMobile ? 120 : 160 }} viewBox="0 0 160 160">
                                   {/* Performance Zones */}
                                   <path d="M 25 80 A 55 55 0 0 1 66 35" fill="none" stroke={C.green} strokeWidth="12" opacity="0.08" />
                                   <path d="M 66 35 A 55 55 0 0 1 107 35" fill="none" stroke={C.gold} strokeWidth="12" opacity="0.08" />
@@ -1174,7 +1183,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                   })}
 
                                   {/* Label with Decorator */}
-                                  <text x="80" y="52" fontSize="6" fontWeight="900" textAnchor="middle" fill={C.textDim} fontFamily="Space Grotesk" letterSpacing="0.05em">-- RPM x1000 --</text>
+                                  {!isMobile && <text x="80" y="52" fontSize="6" fontWeight="900" textAnchor="middle" fill={C.textDim} fontFamily="Space Grotesk" letterSpacing="0.05em">-- RPM x1000 --</text>}
 
                                   {/* Needle */}
                                   <g style={{ transform: `rotate(${needleDeg + 180}deg)`, transformOrigin: '80px 80px', transition: 'transform 0.08s cubic-bezier(0.1, 0.7, 0.1, 1)' }}>
@@ -1185,28 +1194,28 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, marginBottom: 0, marginTop: 18 }}>
                                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 0 }}>
-                                    <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.65 }}>
-                                      {v.speed.toFixed(0)} kmh / {mph} mph
+                                    <span style={{ fontSize: isMobile ? 9 : 11, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textMid, opacity: 0.65 }}>
+                                      {v.speed.toFixed(0)} kmh / {mph.toFixed(0)} mph
                                     </span>
                                   </div>
-                                  <span style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em', marginTop: 5 }}>
+                                  <span style={{ fontSize: isMobile ? 10 : 11, fontFamily: 'Inter, sans-serif', fontWeight: 950, color: C.textBright, lineHeight: 1, letterSpacing: '-0.02em', marginTop: 5 }}>
                                     Gear: {v.gear}
                                   </span>
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', gap: 12, height: 95, alignItems: 'center' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 75, fontSize: 8, fontWeight: 900, color: C.textDim, opacity: 0.4, textAlign: 'right', width: 22, fontFamily: 'JetBrains Mono' }}>
+                              <div style={{ display: 'flex', gap: isMobile ? 6 : 12, height: isMobile ? 70 : 95, alignItems: 'center' }}>
+                                <div style={{ display: 'none', flexDirection: 'column', justifyContent: 'space-between', height: isMobile ? 50 : 75, fontSize: 8, fontWeight: 900, color: C.textDim, opacity: 0.4, textAlign: 'right', width: 22, fontFamily: 'JetBrains Mono' }}>
                                   <span>100</span>
                                   <span>0</span>
                                 </div>
-                                <div style={{ display: 'flex', gap: 10, height: 75, alignItems: 'flex-end' }}>
+                                <div style={{ display: 'flex', gap: isMobile ? 5 : 10, height: isMobile ? 50 : 75, alignItems: 'flex-end' }}>
                                   {[
-                                    { label: 'THROTTLE', val: v.throttle, col: C.green },
-                                    { label: 'BRAKING', val: v.brake, col: C.brake, status: v.brake > 0 ? 'ON' : 'OFF' }
+                                    { label: 'T', fullLabel: 'THROTTLE', val: v.throttle, col: C.green },
+                                    { label: 'B', fullLabel: 'BRAKING', val: v.brake, col: C.brake, status: v.brake > 0 ? 'ON' : 'OFF' }
                                   ].map(p => (
-                                    <div key={p.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                                      <div style={{ width: 14, height: 75, background: 'rgba(0,0,0,0.04)', borderRadius: 2, position: 'relative', overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                                    <div key={p.fullLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                                      <div style={{ width: isMobile ? 10 : 14, height: isMobile ? 50 : 75, background: 'rgba(0,0,0,0.04)', borderRadius: 2, position: 'relative', overflow: 'hidden', border: `1px solid ${C.border}` }}>
 
                                         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column-reverse' }}>
                                           {Array.from({ length: 8 }).map((_, i) => (
@@ -1221,10 +1230,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                                         </div>
                                         <div style={{ position: 'absolute', bottom: 0, width: '100%', height: `${p.val}%`, background: p.col, opacity: 0.15, transition: 'height 0.1s linear' }} />
                                       </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 45 }}>
-                                        <span style={{ fontSize: 6, fontWeight: 950, color: C.textDim, letterSpacing: '0.04em' }}>{p.label}</span>
-                                        {p.status && <span style={{ fontSize: 8, fontWeight: 950, color: p.val > 0 ? p.col : C.textDim, lineHeight: 1.2 }}>{p.status}</span>}
-                                      </div>
+                                      <span style={{ fontSize: 7, fontWeight: 950, color: C.textDim }}>{isMobile ? p.label : p.fullLabel}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1271,8 +1277,8 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         const sc = activeSegment === 'Q1' ? '#3671C6' : activeSegment === 'Q2' ? C.gold : C.red
                         const cutoff = activeSegment === 'Q1' ? 14 : activeSegment === 'Q2' ? 9 : null
                         return (
-                          <div style={{ minWidth: 580 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 58px 58px 58px', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
+                          <div style={{ minWidth: isMobile ? '700px' : 580 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 64px 64px 64px', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
                               {['P', 'DRV', 'TEAM', 'TIME', 'S1', 'S2', 'S3'].map(h => (
                                 <span key={h} style={{ fontSize: 8, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', textAlign: ['TIME', 'S1', 'S2', 'S3'].includes(h) ? 'right' : 'left' }}>{h}</span>
                               ))}
@@ -1282,7 +1288,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                               const showCut = cutoff !== null && entry.position === cutoff
                               return (
                                 <div key={entry.driver_number}>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 58px 58px 58px', gap: 4, alignItems: 'center', padding: '8px 8px', borderRadius: 10, background: isFastest ? `${sc}08` : 'transparent', opacity: entry.eliminated ? 0.45 : 1 }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 64px 64px 64px', gap: 4, alignItems: 'center', padding: '8px 8px', borderRadius: 10, background: isFastest ? `${sc}08` : 'transparent', opacity: entry.eliminated ? 0.45 : 1 }}>
                                     <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: isFastest ? sc : C.textMid, fontWeight: isFastest ? 700 : 500 }}>P{entry.position}</span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                       <div style={{ width: 3, height: 12, borderRadius: 2, background: `#${entry.team_colour}`, flexShrink: 0 }} />
@@ -1329,39 +1335,51 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         </div>
                       }
                     />
-                    <canvas ref={el => { chartRefs.current[0] = el }} height={CHARTS[0].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <canvas ref={el => { chartRefs.current[0] = el }} height={isMobile ? 300 : CHARTS[0].height} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    </div>
                   </Panel>
 
                   {/* Braking */}
                   <Panel>
                     <PanelHeader title="Braking" />
-                    <canvas ref={el => { chartRefs.current[1] = el }} height={CHARTS[1].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <canvas ref={el => { chartRefs.current[1] = el }} height={isMobile ? 120 : CHARTS[1].height} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    </div>
                   </Panel>
 
                   {/* Delta */}
                   {driverData.length >= 2 && (
                     <Panel>
                       <PanelHeader title="Speed Delta" subtitle={`${driverData[0].abbr} vs ${driverData[1].abbr}`} />
-                      <canvas ref={deltaRef} height={96} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                      <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        <canvas ref={deltaRef} height={isMobile ? 80 : 96} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                      </div>
                     </Panel>
                   )}
 
                   {/* Throttle */}
                   <Panel>
                     <PanelHeader title="Throttle Input" subtitle="0 – 100%" />
-                    <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <canvas ref={el => { chartRefs.current[2] = el }} height={isMobile ? 160 : CHARTS[2].height} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    </div>
                   </Panel>
 
                   {/* Gear */}
                   <Panel>
                     <PanelHeader title="Gear Selection" subtitle="1 – 8" />
-                    <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <canvas ref={el => { chartRefs.current[3] = el }} height={isMobile ? 100 : CHARTS[3].height} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    </div>
                   </Panel>
 
                   {/* RPM */}
                   <Panel>
                     <PanelHeader title="Engine RPM" subtitle="6 000 – 13 000" />
-                    <canvas ref={el => { chartRefs.current[4] = el }} height={CHARTS[4].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <canvas ref={el => { chartRefs.current[4] = el }} height={isMobile ? 120 : CHARTS[4].height} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    </div>
                   </Panel>
                 </div>
 
