@@ -8,6 +8,16 @@ export type { InsightsData }
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+function getErrorMessage(error: unknown, fallback = 'Failed to load braking analysis'): string {
+  if (error instanceof Error) return error.message || fallback
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object' && 'type' in error) {
+    const type = String((error as { type?: unknown }).type ?? '').trim()
+    return type ? `Failed while handling ${type}` : fallback
+  }
+  return fallback
+}
+
 type CornerStats = {
   corner_number: number
   brake_point_dist_m: number
@@ -95,6 +105,7 @@ export default function BrakingAnalysis({
     }
 
     const abort = new AbortController()
+    let active = true
     setLoading(true)
     setError(null)
 
@@ -106,6 +117,7 @@ export default function BrakingAnalysis({
         return res.json()
       })
       .then((d: CompareStats) => {
+        if (!active) return
         setData(d)
         if (onInsightsLoad && d.insights) {
           const colours: Record<string, string> = {}
@@ -119,12 +131,17 @@ export default function BrakingAnalysis({
         }
       })
       .catch(err => {
-        if (err?.name === 'AbortError') return
-        setError(err?.message ?? 'Failed to load braking analysis')
+        if (!active || err?.name === 'AbortError') return
+        setError(getErrorMessage(err))
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (active) setLoading(false)
+      })
 
-    return () => abort.abort()
+    return () => {
+      active = false
+      abort.abort()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, drivers])
 
@@ -163,9 +180,13 @@ export default function BrakingAnalysis({
     const minY = Math.min(...ys)
     const maxY = Math.max(...ys)
     const pad = compact ? 28 : 36
-    const scale = Math.min((W - pad * 2) / (maxX - minX || 1), (H - pad * 2) / (maxY - minY || 1))
-    const tx = (x: number) => (x - minX) * scale + pad
-    const ty = (y: number) => (y - minY) * scale + pad
+    const trackWidth = maxX - minX || 1
+    const trackHeight = maxY - minY || 1
+    const scale = Math.min((W - pad * 2) / trackWidth, (H - pad * 2) / trackHeight) * 0.9
+    const offsetX = (W - trackWidth * scale) / 2
+    const offsetY = (H - trackHeight * scale) / 2
+    const tx = (x: number) => (x - minX) * scale + offsetX
+    const ty = (y: number) => (y - minY) * scale + offsetY
     const [driverAKey, driverBKey] = data.driver_keys
 
     ctx.lineWidth = 3.5

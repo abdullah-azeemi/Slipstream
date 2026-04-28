@@ -2680,3 +2680,189 @@ def generate_insights(driver_keys: list, drivers: dict, matched_corners: list) -
         "driver_profiles": driver_profiles,
         "key_corner": key_c,
     }
+
+
+# ── Qualifying: speed trap + lap progression analysis ─────────────────────────
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/quali-speed")
+def quali_speed(session_key: int):
+    """
+    Qualifying speed trap and lap progression analysis.
+
+    Returns three datasets:
+    1. speed_trap: fastest speed at each timing point per driver
+       (speed_i1, speed_i2, speed_fl, speed_st on their best lap)
+    2. lap_progression: each driver's lap times in order — shows
+       improvement across Q session runs
+    3. sector_contribution: which sector each driver gained/lost vs pole
+
+    WHY speed_st specifically:
+    The FIA speed trap (SpeedST) is placed at the circuit's fastest point,
+    always on the main straight. It's the definitive measure of raw
+    straight-line car speed, unaffected by driver skill at braking/cornering.
+    High speed_st = low drag setup. Low speed_st = high downforce setup.
+    This tells you a team's strategic philosophy for the circuit.
+    """
+    with engine.connect() as conn:
+
+        speed_rows = conn.execute(text("""
+            SELECT
+                l.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                l.lap_time_ms,
+                l.speed_i1,
+                l.speed_i2,
+                l.speed_fl,
+                l.speed_st,
+                l.s1_ms,
+                l.s2_ms,
+                l.s3_ms
+            FROM lap_times l
+            JOIN drivers d 
+                ON d.driver_number = l.driver_number
+                AND d.session_key  = l.session_key
+            WHERE l.session_key = :sk
+              AND l.lap_time_ms = (
+                  SELECT MIN(lap_time_ms) 
+                  FROM lap_times 
+                  WHERE session_key = :sk 
+                    AND driver_number = l.driver_number
+                    AND deleted = FALSE
+              )
+            ORDER BY l.lap_time_ms ASC
+        """), {"sk": session_key}).mappings().all()
+
+        # ── Lap progression ───────────────────────────────────────────────────
+        # Every non-deleted lap per driver, in lap order.
+        # Shows whether a driver improved, stayed flat, or got worse.
+        # The shape of this curve tells you about car balance evolution
+        # across the session (track evolution, tyre temperature management).
+        progression_rows = conn.execute(text("""
+            SELECT
+                l.driver_number,
+                d.abbreviation,
+                d.team_colour,
+                d.team_name,
+                l.lap_number,
+                l.lap_time_ms,
+                l.s1_ms,
+                l.s2_ms,
+                l.s3_ms,
+                l.compound,
+                l.deleted,
+                l.quali_segment
+            FROM lap_times l
+            JOIN drivers d
+                ON d.driver_number = l.driver_number
+                AND d.session_key  = l.session_key
+            WHERE l.session_key = :sk
+              AND l.lap_time_ms  IS NOT NULL
+            ORDER BY l.driver_number, l.lap_number ASC
+        """), {"sk": session_key}).mappings().all()
+
+    if not speed_rows:
+        return jsonify({"speed_trap": [], "lap_progression": {}, "insights": []})
+
+    from backend.api.v1.strategy import _resolve
+
+    # Process speed trap data
+    speed_trap = []
+    for r in speed_rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        speed_trap.append(d)
+
+    # Find pole and compute gaps
+    pole_lap   = speed_trap[0]["lap_time_ms"] if speed_trap else None
+    max_speed_st = max((r["speed_st"] or 0) for r in speed_trap) if speed_trap else None
+
+    for i, r in enumerate(speed_trap):
+        r["gap_to_pole_ms"] = None if i == 0 else (
+            round(r["lap_time_ms"] - pole_lap, 1) if r["lap_time_ms"] and pole_lap else None
+        )
+        r["speed_st_delta"] = (
+            round((r["speed_st"] or 0) - (speed_trap[i-1]["speed_st"] or 0), 1)
+            if i > 0 and r["speed_st"] else None
+        )
+        # Downforce indicator: drivers with top speed > median are low-downforce
+        r["speed_st_rank"] = i + 1
+
+    # Process lap progression — group by driver
+    lap_progression = {}
+    for r in progression_rows:
+        dn  = str(r["driver_number"])
+        if dn not in lap_progression:
+            lap_progression[dn] = {
+                "driver_number": r["driver_number"],
+                "abbreviation":  r["abbreviation"],
+                "team_colour":   _resolve(r["team_colour"], r["team_name"]),
+                "team_name":     r["team_name"],
+                "laps": []
+            }
+        lap_progression[dn]["laps"].append({
+            "lap_number":   r["lap_number"],
+            "lap_time_ms":  r["lap_time_ms"],
+            "s1_ms":        r["s1_ms"],
+            "s2_ms":        r["s2_ms"],
+            "s3_ms":        r["s3_ms"],
+            "compound":     r["compound"],
+            "deleted":      r["deleted"],
+            "quali_segment": r["quali_segment"],
+        })
+
+    # ── Speed trap insights ───────────────────────────────────────────────────
+    insights = []
+
+    if len(speed_trap) >= 2:
+        fastest_st = max(speed_trap, key=lambda r: r["speed_st"] or 0)
+        slowest_st = min(speed_trap, key=lambda r: r["speed_st"] or 999)
+        st_spread  = (fastest_st["speed_st"] or 0) - (slowest_st["speed_st"] or 0)
+
+        # Speed trap spread insight
+        # Wide spread = teams have very different downforce philosophies
+        # Narrow spread = everyone converged on similar setup
+        if st_spread > 15:
+            insights.append({
+                "tier":    "NOTABLE",
+                "title":   f"Wide speed trap spread — {st_spread:.0f} km/h between fastest and slowest",
+                "detail":  (f"{fastest_st['abbreviation']} runs the lowest drag "
+                            f"({fastest_st['speed_st']} km/h) while "
+                            f"{slowest_st['abbreviation']} runs highest downforce "
+                            f"({slowest_st['speed_st']} km/h). "
+                            f"A {st_spread:.0f} km/h gap signals different tyre management "
+                            f"or aerodynamic philosophies for this circuit."),
+            })
+
+        # Pole sitter speed comparison
+        pole_driver = speed_trap[0]
+        pole_st     = pole_driver["speed_st"] or 0
+        pole_st_rank = sorted(speed_trap, key=lambda r: -(r["speed_st"] or 0)).index(pole_driver) + 1
+
+        if pole_st_rank > 3:
+            insights.append({
+                "tier":    "CRITICAL",
+                "title":   f"{pole_driver['abbreviation']} on pole despite only P{pole_st_rank} top speed",
+                "detail":  (f"{pole_driver['abbreviation']} set pole with {pole_st} km/h top speed "
+                            f"(P{pole_st_rank} of the field). This indicates their lap time "
+                            f"advantage comes from mechanical grip and cornering rather than "
+                            f"straight-line speed — a high-downforce setup paying off."),
+            })
+
+        # Fastest straight-line car
+        if fastest_st["abbreviation"] != speed_trap[0]["abbreviation"]:
+            insights.append({
+                "tier":    "NOTABLE",
+                "title":   f"{fastest_st['abbreviation']} has the fastest car in a straight line",
+                "detail":  (f"{fastest_st['abbreviation']} recorded {fastest_st['speed_st']} km/h "
+                            f"at the speed trap — {st_spread:.0f} km/h faster than "
+                            f"{slowest_st['abbreviation']}. Low drag setup likely "
+                            f"trading cornering performance for straight-line speed."),
+            })
+
+    return jsonify({
+        "speed_trap":      speed_trap,
+        "lap_progression": lap_progression,
+        "insights":        insights,
+    })

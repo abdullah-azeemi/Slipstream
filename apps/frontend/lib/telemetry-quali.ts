@@ -24,6 +24,15 @@ export type DriverOption = {
   driver_number: number
 }
 
+export function getQualifyingAdvancePosition(
+  sessionYear: number | null | undefined,
+  segment: TelemetrySegment,
+): number | null {
+  if (segment === 'Q3') return null
+  if (segment === 'Q2') return 10
+  return (sessionYear ?? 0) >= 2026 ? 16 : 15
+}
+
 export function getSegmentEntries(
   qualiSegments: QualiSegmentsData | null,
   segment: TelemetrySegment,
@@ -61,10 +70,13 @@ export function reconcileSelectedDrivers(
 export function getSegmentSummary(
   segment: TelemetrySegment,
   entries: QualiSegmentEntry[],
+  sessionYear?: number | null,
 ) {
   const leader = entries[0] ?? null
-  const cutoffIndex = segment === 'Q1' ? 14 : segment === 'Q2' ? 9 : null
-  const cutoff = cutoffIndex !== null ? (entries[cutoffIndex] ?? null) : null
+  const cutoffPosition = getQualifyingAdvancePosition(sessionYear, segment)
+  const cutoff = cutoffPosition !== null
+    ? (entries.find(entry => entry.position === cutoffPosition) ?? entries[cutoffPosition - 1] ?? null)
+    : null
 
   return {
     leader,

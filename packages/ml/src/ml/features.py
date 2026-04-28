@@ -42,6 +42,7 @@ Our features fall into three categories:
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -58,48 +59,48 @@ log = structlog.get_logger()
 # you can test "does adding team form actually help?" by swapping feature lists.
 
 ORIGINAL_FEATURES = [
-    'grid_position',
-    'quali_gap_ms',
-    's1_gap_ms', 's2_gap_ms', 's3_gap_ms',
-    's1_rank',   's2_rank',   's3_rank',
-    'quali_compound_soft',
-    'quali_compound_inter',
-    'is_street_circuit',
-    'is_power_circuit',
-    'is_high_df_circuit',
+    "grid_position",
+    "quali_gap_ms",
+    "s1_gap_ms",
+    "s2_gap_ms",
+    "s3_gap_ms",
+    "s1_rank",
+    "s2_rank",
+    "s3_rank",
+    "quali_compound_soft",
+    "quali_compound_inter",
+    "is_street_circuit",
+    "is_power_circuit",
+    "is_high_df_circuit",
 ]
 
 NEW_FEATURES = [
     # Rolling team performance — captures car development momentum
-    'team_form_3race',          # team's avg finish position, last 3 races
-    'team_form_trend',          # is team improving or declining? (negative = improving)
-
+    "team_form_3race",  # team's avg finish position, last 3 races
+    "team_form_trend",  # is team improving or declining? (negative = improving)
     # Driver-circuit historical performance
-    'driver_circuit_avg',       # driver's avg finish here across all prior years
-    'driver_circuit_best',      # driver's best finish here (ceiling of performance)
-
+    "driver_circuit_avg",  # driver's avg finish here across all prior years
+    "driver_circuit_best",  # driver's best finish here (ceiling of performance)
     # Qualifying momentum — did driver peak in Q2 or improve to Q3?
-    'quali_improvement_q2_q3',  # lap time delta Q2→Q3 best (negative = got faster)
-
+    "quali_improvement_q2_q3",  # lap time delta Q2→Q3 best (negative = got faster)
     # FP2 race simulation signal — compound strategy intention
-    'fp2_hard_laps_pct',        # % of team's FP2 laps on HARD (high = planning 1-stop)
-    'fp2_medium_laps_pct',      # % of team's FP2 laps on MEDIUM
-
+    "fp2_hard_laps_pct",  # % of team's FP2 laps on HARD (high = planning 1-stop)
+    "fp2_medium_laps_pct",  # % of team's FP2 laps on MEDIUM
     # Derived qualifying quality signals
-    'sector_weakness_score',    # max sector rank - min sector rank (consistency measure)
-    'pole_gap_pct',             # quali gap as % of pole time (circuit-normalised)
+    "sector_weakness_score",  # max sector rank - min sector rank (consistency measure)
+    "pole_gap_pct",  # quali gap as % of pole time (circuit-normalised)
 ]
 
 FEATURE_COLS = ORIGINAL_FEATURES + NEW_FEATURES
-TARGET_COL   = 'finish_position'
+TARGET_COL = "finish_position"
 
 # Circuit classification
 # WHY we encode this: tree-based models can't infer "Monaco is tight" from
 # lap times alone. Explicit flags let the model learn "street circuits favour
 # grid position more than power circuits do."
-STREET_CIRCUITS  = {'Monaco Grand Prix', 'Azerbaijan Grand Prix', 'Singapore Grand Prix'}
-POWER_CIRCUITS   = {'Italian Grand Prix', 'Belgian Grand Prix', 'Azerbaijan Grand Prix'}
-HIGH_DF_CIRCUITS = {'Monaco Grand Prix', 'Hungarian Grand Prix'}
+STREET_CIRCUITS = {"Monaco Grand Prix", "Azerbaijan Grand Prix", "Singapore Grand Prix"}
+POWER_CIRCUITS = {"Italian Grand Prix", "Belgian Grand Prix", "Azerbaijan Grand Prix"}
+HIGH_DF_CIRCUITS = {"Monaco Grand Prix", "Hungarian Grand Prix"}
 
 
 def get_engine():
@@ -109,6 +110,7 @@ def get_engine():
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 1: Load shared historical context
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def load_race_history(engine) -> pd.DataFrame:
     """
@@ -124,7 +126,9 @@ def load_race_history(engine) -> pd.DataFrame:
     as training — total laps + cumulative time when live position unavailable.
     """
     with engine.connect() as conn:
-        rows = conn.execute(text("""
+        rows = (
+            conn.execute(
+                text("""
             WITH final_lap AS (
                 SELECT DISTINCT ON (l.driver_number, l.session_key)
                     l.session_key,
@@ -171,11 +175,18 @@ def load_race_history(engine) -> pd.DataFrame:
                 AND d.session_key  = tb.session_key
             WHERE s.session_type = 'R'
             ORDER BY s.date_start ASC
-        """)).mappings().all()
+        """)
+            )
+            .mappings()
+            .all()
+        )
 
     df = pd.DataFrame([dict(r) for r in rows])
-    log.info("history.loaded", rows=len(df),
-             years=sorted(df['year'].unique().tolist()) if len(df) else [])
+    log.info(
+        "history.loaded",
+        rows=len(df),
+        years=sorted(df["year"].unique().tolist()) if len(df) else [],
+    )
     return df
 
 
@@ -191,10 +202,12 @@ def load_fp2_compound_usage(engine) -> pd.DataFrame:
 
     Returns: one row per (gp_name, year, team_name, compound) with lap counts.
     """
-    expected_columns = ['gp_name', 'year', 'team_name', 'compound', 'laps']
+    expected_columns = ["gp_name", "year", "team_name", "compound", "laps"]
 
     with engine.connect() as conn:
-        rows = conn.execute(text("""
+        rows = (
+            conn.execute(
+                text("""
             SELECT
                 s.gp_name,
                 s.year,
@@ -211,7 +224,11 @@ def load_fp2_compound_usage(engine) -> pd.DataFrame:
               AND l.lap_time_ms  IS NOT NULL
               AND l.deleted      = FALSE
             GROUP BY s.gp_name, s.year, d.team_name, l.compound
-        """)).mappings().all()
+        """)
+            )
+            .mappings()
+            .all()
+        )
 
     if not rows:
         return pd.DataFrame(columns=expected_columns)
@@ -222,6 +239,7 @@ def load_fp2_compound_usage(engine) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 2: Feature computation functions
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def compute_team_form(
     history: pd.DataFrame,
@@ -254,11 +272,8 @@ def compute_team_form(
     """
     # Filter to this team, strictly before the race date
     # The date filter is critical — no data leakage
-    mask = (
-        (history['team_name'] == team_name) &
-        (history['date_start'] < before_date)
-    )
-    team_hist = history[mask].sort_values('date_start')
+    mask = (history["team_name"] == team_name) & (history["date_start"] < before_date)
+    team_hist = history[mask].sort_values("date_start")
 
     # Take last N races
     recent = team_hist.tail(window * 2)  # *2 because 2 drivers per team
@@ -268,22 +283,22 @@ def compute_team_form(
         # WHY 10 (not NaN): tree models handle missing values differently.
         # A neutral midfield value (P10 of 20) is more informative than
         # imputing with mean, which leaks global statistics.
-        return {'team_form_3race': 10.0, 'team_form_trend': 0.0}
+        return {"team_form_3race": 10.0, "team_form_trend": 0.0}
 
-    avg_finish = float(recent['finish_position'].mean())
+    avg_finish = float(recent["finish_position"].mean())
 
     # Trend: fit a line through recent results
     # If the line slopes down (negative), team is improving
     # If the line slopes up (positive), team is declining
     if len(recent) >= 3:
         x = np.arange(len(recent))
-        trend = float(np.polyfit(x, recent['finish_position'].values, deg=1)[0])
+        trend = float(np.polyfit(x, recent["finish_position"].values, deg=1)[0])
     else:
         trend = 0.0
 
     return {
-        'team_form_3race': round(avg_finish, 2),
-        'team_form_trend': round(trend, 3),
+        "team_form_3race": round(avg_finish, 2),
+        "team_form_trend": round(trend, 3),
     }
 
 
@@ -313,19 +328,22 @@ def compute_driver_circuit_history(
         driver_circuit_best: best finish here (the driver's ceiling)
     """
     mask = (
-        (history['driver_number'] == driver_number) &
-        (history['gp_name'] == gp_name) &
-        (history['date_start'] < before_date)
+        (history["driver_number"] == driver_number)
+        & (history["gp_name"] == gp_name)
+        & (history["date_start"] < before_date)
     )
     circuit_hist = history[mask]
 
     if len(circuit_hist) == 0:
-        return {'driver_circuit_avg': 10.0, 'driver_circuit_best': 10}
+        return {"driver_circuit_avg": 10.0, "driver_circuit_best": 10}
 
     return {
-        'driver_circuit_avg':  round(float(circuit_hist['finish_position'].mean()), 2),
-        'driver_circuit_best': int(circuit_hist['finish_position'].min()),
+        "driver_circuit_avg": round(float(circuit_hist["finish_position"].mean()), 2),
+        "driver_circuit_best": int(circuit_hist["finish_position"].min()),
     }
+
+
+# compute_quali_momentum removed (drop-dead feature)
 
 
 def compute_quali_momentum(
@@ -357,7 +375,9 @@ def compute_quali_momentum(
                                  0 = no Q3 data (eliminated in Q2)
     """
     with engine.connect() as conn:
-        rows = conn.execute(text("""
+        rows = (
+            conn.execute(
+                text("""
             SELECT
                 -- Get the fastest lap in each 'deleted' = FALSE group
                 -- FastF1 marks Q1/Q2/Q3 phases via tyre_life_laps and stint
@@ -371,19 +391,24 @@ def compute_quali_momentum(
               AND deleted       = FALSE
             GROUP BY COALESCE(stint, 1)
             ORDER BY COALESCE(stint, 1)
-        """), {"qk": quali_key, "dn": driver_number}).mappings().all()
+        """),
+                {"qk": quali_key, "dn": driver_number},
+            )
+            .mappings()
+            .all()
+        )
 
-    phase_times = {r['q_phase']: r['best_ms'] for r in rows}
+    phase_times = {r["q_phase"]: r["best_ms"] for r in rows}
 
     q2_best = phase_times.get(2)
     q3_best = phase_times.get(3)
 
     if q2_best is None or q3_best is None:
         # Driver eliminated before Q3, or stint data unavailable
-        return {'quali_improvement_q2_q3': 0.0}
+        return {"quali_improvement_q2_q3": 0.0}
 
     improvement = float(q3_best - q2_best)  # negative = improved
-    return {'quali_improvement_q2_q3': round(improvement, 1)}
+    return {"quali_improvement_q2_q3": round(improvement, 1)}
 
 
 def compute_fp2_strategy(
@@ -413,37 +438,38 @@ def compute_fp2_strategy(
         fp2_hard_laps_pct: % of FP2 laps on HARD (0-1)
         fp2_medium_laps_pct: % of FP2 laps on MEDIUM (0-1)
     """
-    required_columns = {'team_name', 'gp_name', 'year', 'compound', 'laps'}
+    required_columns = {"team_name", "gp_name", "year", "compound", "laps"}
     if fp2_data.empty or not required_columns.issubset(fp2_data.columns):
-        return {'fp2_hard_laps_pct': 0.0, 'fp2_medium_laps_pct': 0.0}
+        return {"fp2_hard_laps_pct": 0.0, "fp2_medium_laps_pct": 0.0}
 
     mask = (
-        (fp2_data['team_name'] == team_name) &
-        (fp2_data['gp_name']   == gp_name) &
-        (fp2_data['year']      == year)
+        (fp2_data["team_name"] == team_name)
+        & (fp2_data["gp_name"] == gp_name)
+        & (fp2_data["year"] == year)
     )
     team_fp2 = fp2_data[mask]
 
     if len(team_fp2) == 0:
         # No FP2 data — neutral 0 (not informative but not misleading)
-        return {'fp2_hard_laps_pct': 0.0, 'fp2_medium_laps_pct': 0.0}
+        return {"fp2_hard_laps_pct": 0.0, "fp2_medium_laps_pct": 0.0}
 
-    total_laps = team_fp2['laps'].sum()
+    total_laps = team_fp2["laps"].sum()
     if total_laps == 0:
-        return {'fp2_hard_laps_pct': 0.0, 'fp2_medium_laps_pct': 0.0}
+        return {"fp2_hard_laps_pct": 0.0, "fp2_medium_laps_pct": 0.0}
 
-    hard_laps   = team_fp2.loc[team_fp2['compound'] == 'HARD',   'laps'].sum()
-    medium_laps = team_fp2.loc[team_fp2['compound'] == 'MEDIUM', 'laps'].sum()
+    hard_laps = team_fp2.loc[team_fp2["compound"] == "HARD", "laps"].sum()
+    medium_laps = team_fp2.loc[team_fp2["compound"] == "MEDIUM", "laps"].sum()
 
     return {
-        'fp2_hard_laps_pct':   round(float(hard_laps   / total_laps), 3),
-        'fp2_medium_laps_pct': round(float(medium_laps / total_laps), 3),
+        "fp2_hard_laps_pct": round(float(hard_laps / total_laps), 3),
+        "fp2_medium_laps_pct": round(float(medium_laps / total_laps), 3),
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 3: Main feature matrix builder
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def build_feature_matrix() -> pd.DataFrame:
     """
@@ -464,11 +490,13 @@ def build_feature_matrix() -> pd.DataFrame:
     # These are expensive operations — we do them once, not per race
     log.info("feature.loading_history")
     race_history = load_race_history(engine)
-    fp2_data     = load_fp2_compound_usage(engine)
+    fp2_data = load_fp2_compound_usage(engine)
 
     # Get all qualifying + race pairs
     with engine.connect() as conn:
-        pairs = conn.execute(text("""
+        pairs = (
+            conn.execute(
+                text("""
             SELECT
                 year,
                 gp_name,
@@ -481,29 +509,36 @@ def build_feature_matrix() -> pd.DataFrame:
                 MAX(CASE WHEN session_type = 'Q' THEN session_key END) IS NOT NULL AND
                 MAX(CASE WHEN session_type = 'R' THEN session_key END) IS NOT NULL
             ORDER BY date_start ASC
-        """)).mappings().all()
+        """)
+            )
+            .mappings()
+            .all()
+        )
 
     log.info("feature.pairs", count=len(pairs))
 
     all_rows = []
     for pair in pairs:
         rows = _build_weekend_features(
-            year       = pair['year'],
-            gp_name    = pair['gp_name'],
-            date_start = pd.Timestamp(pair['date_start']),
-            quali_key  = pair['quali_key'],
-            race_key   = pair['race_key'],
-            race_history = race_history,
-            fp2_data     = fp2_data,
-            engine       = engine,
+            year=pair["year"],
+            gp_name=pair["gp_name"],
+            date_start=pd.Timestamp(pair["date_start"]),
+            quali_key=pair["quali_key"],
+            race_key=pair["race_key"],
+            race_history=race_history,
+            fp2_data=fp2_data,
+            engine=engine,
         )
         all_rows.extend(rows)
-        log.info("feature.weekend_done",
-                 year=pair['year'], gp=pair['gp_name'], rows=len(rows))
+        log.info(
+            "feature.weekend_done",
+            year=pair["year"],
+            gp=pair["gp_name"],
+            rows=len(rows),
+        )
 
     df = pd.DataFrame(all_rows)
-    log.info("feature.matrix_built", shape=df.shape,
-             features=FEATURE_COLS)
+    log.info("feature.matrix_built", shape=df.shape, features=FEATURE_COLS)
     return df
 
 
@@ -521,7 +556,9 @@ def _build_weekend_features(
 
     # ── Qualifying data ───────────────────────────────────────────────────────
     with engine.connect() as conn:
-        quali_laps = conn.execute(text("""
+        quali_laps = (
+            conn.execute(
+                text("""
             SELECT DISTINCT ON (l.driver_number)
                 l.driver_number,
                 d.abbreviation,
@@ -536,9 +573,16 @@ def _build_weekend_features(
             WHERE l.session_key  = :qk
               AND l.lap_time_ms  IS NOT NULL
             ORDER BY l.driver_number, l.lap_time_ms ASC
-        """), {"qk": quali_key}).mappings().all()
+        """),
+                {"qk": quali_key},
+            )
+            .mappings()
+            .all()
+        )
 
-        race_results = conn.execute(text("""
+        race_results = (
+            conn.execute(
+                text("""
             WITH final_lap AS (
                 SELECT DISTINCT ON (l.driver_number)
                     l.driver_number,
@@ -568,38 +612,48 @@ def _build_weekend_features(
                     ORDER BY COALESCE(live_pos, calc_pos) ASC
                 ) AS finish_position
             FROM tie_breaker
-        """), {"rk": race_key}).mappings().all()
+        """),
+                {"rk": race_key},
+            )
+            .mappings()
+            .all()
+        )
 
     if not quali_laps or not race_results:
-        log.warning("feature.missing_data", year=year, gp=gp_name,
-                    quali=len(quali_laps or []), race=len(race_results or []))
+        log.warning(
+            "feature.missing_data",
+            year=year,
+            gp=gp_name,
+            quali=len(quali_laps or []),
+            race=len(race_results or []),
+        )
         return []
 
-    finish_map = {r['driver_number']: r['finish_position'] for r in race_results}
+    finish_map = {r["driver_number"]: r["finish_position"] for r in race_results}
 
     # ── Qualifying feature computation ────────────────────────────────────────
     q = pd.DataFrame([dict(r) for r in quali_laps])
-    q['grid_position']        = q['lap_time_ms'].rank(method='min').astype(int)
-    q['quali_gap_to_pole_ms'] = q['lap_time_ms'] - q['lap_time_ms'].min()
-    pole_time                 = float(q['lap_time_ms'].min())
+    q["grid_position"] = q["lap_time_ms"].rank(method="min").astype(int)
+    q["quali_gap_to_pole_ms"] = q["lap_time_ms"] - q["lap_time_ms"].min()
+    pole_time = float(q["lap_time_ms"].min())
 
-    for sec in ['s1_ms', 's2_ms', 's3_ms']:
-        q[f'{sec}_rank'] = q[sec].rank(method='min', na_option='bottom').astype(int)
-        q[f'{sec}_gap']  = (q[sec] - q[sec].min()).fillna(9999)
+    for sec in ["s1_ms", "s2_ms", "s3_ms"]:
+        q[f"{sec}_rank"] = q[sec].rank(method="min", na_option="bottom").astype(int)
+        q[f"{sec}_gap"] = (q[sec] - q[sec].min()).fillna(9999)
 
     # Circuit type flags
-    is_street  = int(gp_name in STREET_CIRCUITS)
-    is_power   = int(gp_name in POWER_CIRCUITS)
+    is_street = int(gp_name in STREET_CIRCUITS)
+    is_power = int(gp_name in POWER_CIRCUITS)
     is_high_df = int(gp_name in HIGH_DF_CIRCUITS)
 
     rows = []
     for _, r in q.iterrows():
-        driver_number = int(r['driver_number'])
-        finish        = finish_map.get(driver_number)
+        driver_number = int(r["driver_number"])
+        finish = finish_map.get(driver_number)
         if finish is None:
             continue
 
-        team_name = r['team_name'] or 'Unknown'
+        team_name = r["team_name"] or "Unknown"
 
         # ── New features — computed per driver using shared context ───────────
 
@@ -607,64 +661,67 @@ def _build_weekend_features(
         # Uses race_history filtered to before this race's date
         team_form = compute_team_form(race_history, team_name, date_start)
 
-        # Feature: driver circuit history
+        # driver_circuit_avg, driver_circuit_best
         driver_circuit = compute_driver_circuit_history(
             race_history, driver_number, gp_name, date_start
         )
 
-        # Feature: qualifying momentum Q2→Q3
-        # WHY we pass engine here: this needs a DB query per driver.
-        # In a larger system we'd preload Q2/Q3 times for all drivers at once.
-        # For 26 weekends × 20 drivers = 520 queries — acceptable for now.
-        quali_momentum = compute_quali_momentum(quali_key, driver_number, engine)
-
         # Feature: FP2 strategy signal
         fp2_strategy = compute_fp2_strategy(fp2_data, team_name, gp_name, year)
+
+        # Feature: Qualifying momentum
+        quali_momentum = compute_quali_momentum(quali_key, driver_number, engine)
 
         # Feature: sector consistency (derived from existing sector features)
         # WHY: A driver P3 who is P1 in S1, P6 in S3 has a clear weakness.
         # A driver P3 who is P3 in all sectors is consistently P3.
         # The first driver will lose more in races than the second.
-        sector_ranks    = [int(r['s1_ms_rank']), int(r['s2_ms_rank']), int(r['s3_ms_rank'])]
-        weakness_score  = max(sector_ranks) - min(sector_ranks)
+        sector_ranks = [
+            int(r["s1_ms_rank"]),
+            int(r["s2_ms_rank"]),
+            int(r["s3_ms_rank"]),
+        ]
+        weakness_score = max(sector_ranks) - min(sector_ranks)
 
         # Feature: pole gap as percentage
         # WHY: 0.5s gap at Monaco ≈ 0.2s gap at Monza (different lap lengths).
         # Percentage normalises across circuits so the model can compare.
-        gap_ms        = float(r['quali_gap_to_pole_ms'] or 0)
-        pole_gap_pct  = round(gap_ms / max(pole_time, 1) * 100, 4)
+        gap_ms = float(r["quali_gap_to_pole_ms"] or 0)
+        pole_gap_pct = round(gap_ms / max(pole_time, 1) * 100, 4)
 
-        rows.append({
-            # Identifiers (not features — never passed to model)
-            'year':          year,
-            'gp_name':       gp_name,
-            'driver_number': driver_number,
-            'abbreviation':  r['abbreviation'],
-            'team_name':     team_name,
-            # Original features
-            'grid_position':        int(r['grid_position']),
-            'quali_gap_ms':         float(r['quali_gap_to_pole_ms'] or 0),
-            's1_gap_ms':            float(r['s1_ms_gap']),
-            's2_gap_ms':            float(r['s2_ms_gap']),
-            's3_gap_ms':            float(r['s3_ms_gap']),
-            's1_rank':              int(r['s1_ms_rank']),
-            's2_rank':              int(r['s2_ms_rank']),
-            's3_rank':              int(r['s3_ms_rank']),
-            'quali_compound_soft':  int(r['quali_compound'] == 'SOFT'),
-            'quali_compound_inter': int(r['quali_compound'] == 'INTERMEDIATE'),
-            'is_street_circuit':    is_street,
-            'is_power_circuit':     is_power,
-            'is_high_df_circuit':   is_high_df,
-            # New features
-            **team_form,
-            **driver_circuit,
-            **quali_momentum,
-            **fp2_strategy,
-            'sector_weakness_score': weakness_score,
-            'pole_gap_pct':          pole_gap_pct,
-            # Target
-            'finish_position': int(finish),
-        })
+        rows.append(
+            {
+                # Identifiers (not features — never passed to model)
+                "year": year,
+                "gp_name": gp_name,
+                "driver_number": driver_number,
+                "abbreviation": r["abbreviation"],
+                "team_name": team_name,
+                # Original features
+                "grid_position": int(r["grid_position"]),
+                "quali_gap_ms": float(r["quali_gap_to_pole_ms"] or 0),
+                "s1_gap_ms": float(r["s1_ms_gap"]),
+                "s2_gap_ms": float(r["s2_ms_gap"]),
+                "s3_gap_ms": float(r["s3_ms_gap"]),
+                "s1_rank": int(r["s1_ms_rank"]),
+                "s2_rank": int(r["s2_ms_rank"]),
+                "s3_rank": int(r["s3_ms_rank"]),
+                "quali_compound_soft": int(r["quali_compound"] == "SOFT"),
+                "quali_compound_inter": int(r["quali_compound"] == "INTERMEDIATE"),
+                "is_street_circuit": is_street,
+                "is_power_circuit": is_power,
+                "is_high_df_circuit": is_high_df,
+                # New features
+                **team_form,
+                **driver_circuit,
+                **quali_momentum,
+                **fp2_strategy,
+                "sector_weakness_score": weakness_score,
+                "pole_gap_pct": pole_gap_pct,
+                # Target
+                "finish_position": int(finish),
+            }
+        )
 
     return rows
 
@@ -672,6 +729,7 @@ def _build_weekend_features(
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 4: Inference feature builder (no target)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def build_inference_features(quali_session_key: int) -> pd.DataFrame:
     """
@@ -689,21 +747,26 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
 
     # Load context — all history up to now (inference = "current moment")
     race_history = load_race_history(engine)
-    fp2_data     = load_fp2_compound_usage(engine)
+    fp2_data = load_fp2_compound_usage(engine)
 
     with engine.connect() as conn:
-        session_row = conn.execute(text("""
+        session_row = conn.execute(
+            text("""
             SELECT gp_name, year, date_start FROM sessions WHERE session_key = :sk
-        """), {"sk": quali_session_key}).first()
+        """),
+            {"sk": quali_session_key},
+        ).first()
 
         if not session_row:
             raise ValueError(f"Session {quali_session_key} not found")
 
-        gp_name    = session_row[0]
-        year       = session_row[1]
+        gp_name = session_row[0]
+        year = session_row[1]
         date_start = pd.Timestamp(session_row[2])
 
-        quali_laps = conn.execute(text("""
+        quali_laps = (
+            conn.execute(
+                text("""
             SELECT DISTINCT ON (l.driver_number)
                 l.driver_number,
                 d.abbreviation,
@@ -718,67 +781,78 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
             WHERE l.session_key = :qk
               AND l.lap_time_ms IS NOT NULL
             ORDER BY l.driver_number, l.lap_time_ms ASC
-        """), {"qk": quali_session_key}).mappings().all()
+        """),
+                {"qk": quali_session_key},
+            )
+            .mappings()
+            .all()
+        )
 
     if not quali_laps:
         raise ValueError(f"No qualifying data for session {quali_session_key}")
 
-    q          = pd.DataFrame([dict(r) for r in quali_laps])
-    q['grid_position']        = q['lap_time_ms'].rank(method='min').astype(int)
-    q['quali_gap_to_pole_ms'] = q['lap_time_ms'] - q['lap_time_ms'].min()
-    pole_time                 = float(q['lap_time_ms'].min())
+    q = pd.DataFrame([dict(r) for r in quali_laps])
+    q["grid_position"] = q["lap_time_ms"].rank(method="min").astype(int)
+    q["quali_gap_to_pole_ms"] = q["lap_time_ms"] - q["lap_time_ms"].min()
+    pole_time = float(q["lap_time_ms"].min())
 
-    for sec in ['s1_ms', 's2_ms', 's3_ms']:
-        q[f'{sec}_rank'] = q[sec].rank(method='min', na_option='bottom').astype(int)
-        q[f'{sec}_gap']  = (q[sec] - q[sec].min()).fillna(9999)
+    for sec in ["s1_ms", "s2_ms", "s3_ms"]:
+        q[f"{sec}_rank"] = q[sec].rank(method="min", na_option="bottom").astype(int)
+        q[f"{sec}_gap"] = (q[sec] - q[sec].min()).fillna(9999)
 
-    is_street  = int(gp_name in STREET_CIRCUITS)
-    is_power   = int(gp_name in POWER_CIRCUITS)
+    is_street = int(gp_name in STREET_CIRCUITS)
+    is_power = int(gp_name in POWER_CIRCUITS)
     is_high_df = int(gp_name in HIGH_DF_CIRCUITS)
 
     rows = []
     for _, r in q.iterrows():
-        driver_number  = int(r['driver_number'])
-        team_name      = r['team_name'] or 'Unknown'
+        driver_number = int(r["driver_number"])
+        team_name = r["team_name"] or "Unknown"
 
-        team_form      = compute_team_form(race_history, team_name, date_start)
+        team_form = compute_team_form(race_history, team_name, date_start)
         driver_circuit = compute_driver_circuit_history(
             race_history, driver_number, gp_name, date_start
         )
+        fp2_strategy = compute_fp2_strategy(fp2_data, team_name, gp_name, year)
         quali_momentum = compute_quali_momentum(
             quali_session_key, driver_number, engine
         )
-        fp2_strategy   = compute_fp2_strategy(fp2_data, team_name, gp_name, year)
 
-        sector_ranks   = [int(r['s1_ms_rank']), int(r['s2_ms_rank']), int(r['s3_ms_rank'])]
+        sector_ranks = [
+            int(r["s1_ms_rank"]),
+            int(r["s2_ms_rank"]),
+            int(r["s3_ms_rank"]),
+        ]
         weakness_score = max(sector_ranks) - min(sector_ranks)
-        gap_ms         = float(r['quali_gap_to_pole_ms'] or 0)
-        pole_gap_pct   = round(gap_ms / max(pole_time, 1) * 100, 4)
+        gap_ms = float(r["quali_gap_to_pole_ms"] or 0)
+        pole_gap_pct = round(gap_ms / max(pole_time, 1) * 100, 4)
 
-        rows.append({
-            'gp_name':               gp_name,
-            'driver_number':        driver_number,
-            'abbreviation':         r['abbreviation'],
-            'team_name':            team_name,
-            'grid_position':        int(r['grid_position']),
-            'quali_gap_ms':         float(r['quali_gap_to_pole_ms'] or 0),
-            's1_gap_ms':            float(r['s1_ms_gap']),
-            's2_gap_ms':            float(r['s2_ms_gap']),
-            's3_gap_ms':            float(r['s3_ms_gap']),
-            's1_rank':              int(r['s1_ms_rank']),
-            's2_rank':              int(r['s2_ms_rank']),
-            's3_rank':              int(r['s3_ms_rank']),
-            'quali_compound_soft':  int(r['quali_compound'] == 'SOFT'),
-            'quali_compound_inter': int(r['quali_compound'] == 'INTERMEDIATE'),
-            'is_street_circuit':    is_street,
-            'is_power_circuit':     is_power,
-            'is_high_df_circuit':   is_high_df,
-            **team_form,
-            **driver_circuit,
-            **quali_momentum,
-            **fp2_strategy,
-            'sector_weakness_score': weakness_score,
-            'pole_gap_pct':          pole_gap_pct,
-        })
+        rows.append(
+            {
+                "gp_name": gp_name,
+                "driver_number": driver_number,
+                "abbreviation": r["abbreviation"],
+                "team_name": team_name,
+                "grid_position": int(r["grid_position"]),
+                "quali_gap_ms": float(r["quali_gap_to_pole_ms"] or 0),
+                "s1_gap_ms": float(r["s1_ms_gap"]),
+                "s2_gap_ms": float(r["s2_ms_gap"]),
+                "s3_gap_ms": float(r["s3_ms_gap"]),
+                "s1_rank": int(r["s1_ms_rank"]),
+                "s2_rank": int(r["s2_ms_rank"]),
+                "s3_rank": int(r["s3_ms_rank"]),
+                "quali_compound_soft": int(r["quali_compound"] == "SOFT"),
+                "quali_compound_inter": int(r["quali_compound"] == "INTERMEDIATE"),
+                "is_street_circuit": is_street,
+                "is_power_circuit": is_power,
+                "is_high_df_circuit": is_high_df,
+                **team_form,
+                **driver_circuit,
+                **quali_momentum,
+                **fp2_strategy,
+                "sector_weakness_score": weakness_score,
+                "pole_gap_pct": pole_gap_pct,
+            }
+        )
 
     return pd.DataFrame(rows)

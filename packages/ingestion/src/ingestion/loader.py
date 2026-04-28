@@ -218,6 +218,16 @@ def load_laps(laps: list[dict], session_key: int) -> int:
                 'quali_segment':    _clean_int(lap.get('quali_segment')),
                 'deleted':          _clean_bool(lap.get('deleted')),
                 'recorded_at':      now,
+                # Speed trap measurements — from FastF1 SpeedI1/I2/FL/ST
+                # These are km/h readings at official FIA timing lines:
+                # speed_i1 = intermediate 1 (end of S1 straight)
+                # speed_i2 = intermediate 2 (mid-lap straight)
+                # speed_fl = finish line speed (exit of final corner)
+                # speed_st = official speed trap (fastest point on circuit)
+                'speed_i1':         _clean_float(lap.get('speed_i1')),
+                'speed_i2':         _clean_float(lap.get('speed_i2')),
+                'speed_fl':         _clean_float(lap.get('speed_fl')),
+                'speed_st':         _clean_float(lap.get('speed_st')),
             }
             conn.execute(text("""
                 INSERT INTO lap_times (
@@ -225,13 +235,15 @@ def load_laps(laps: list[dict], session_key: int) -> int:
                     lap_time_ms, s1_ms, s2_ms, s3_ms,
                     compound, tyre_life_laps,
                     is_personal_best, track_status, position, quali_segment, deleted,
-                    recorded_at
+                    recorded_at,
+                    speed_i1, speed_i2, speed_fl, speed_st
                 ) VALUES (
                     :session_key, :driver_number, :lap_number,
                     :lap_time_ms, :s1_ms, :s2_ms, :s3_ms,
                     :compound, :tyre_life_laps,
                     :is_personal_best, :track_status, :position, :quali_segment, :deleted,
-                    :recorded_at
+                    :recorded_at,
+                    :speed_i1, :speed_i2, :speed_fl, :speed_st
                 )
             """), row)
     log.info("loader.laps_loaded", count=len(laps), session_key=session_key)
