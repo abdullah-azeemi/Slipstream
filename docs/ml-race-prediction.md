@@ -1,6 +1,6 @@
 # ML Race Prediction
 
-Slipstream's ML module predicts race finishing positions from qualifying performance, historical race context, and an optional FP2 strategy signal.
+Pitwall's ML module now treats **podium probability** as the primary product target. The stable production backbone still learns race finishing order, then converts that race-order model into P1/P2/P3 and podium probabilities with Monte Carlo uncertainty, feature-stream attribution, and statistical validation artifacts.
 
 This document answers three practical questions:
 
@@ -12,17 +12,17 @@ This document answers three practical questions:
 
 ### Live prediction
 
-For a live prediction on an unseen weekend, the model uses:
+For a live prediction on an unseen weekend, the model can use:
 
 - The current qualifying session (`Q`)
 - Historical race sessions (`R`) already ingested in the database
-- The current weekend's `FP2` if available
+- The current weekend's `FP1` long-run signal if available
+- The current weekend's `SQ` / Sprint signal if available
+- The current weekend's `FP2` if available on non-sprint weekends
 
-It does **not** currently use:
+It does **not** use:
 
-- `FP1`
 - `FP3`
-- Sprint sessions (`S`, `SQ`)
 - The current race session itself
 
 In deployed environments, prediction requests may also trigger model training if no saved model exists yet. This means the first prediction request after a fresh deploy can be slow while the model is built and written to disk.
@@ -34,7 +34,7 @@ For training, Slipstream builds examples from weekends that have:
 - one qualifying session (`Q`)
 - one race session (`R`)
 
-`FP2` is optional enrichment. If there is no matching FP2 data, the model still trains and uses neutral strategy values.
+`FP1`, `FP2`, `SQ`, and Sprint are optional enrichment. If a stream is missing, the model still trains and uses neutral values while the API reports the missing weekend input explicitly.
 
 Model files are stored in `ML_MODELS_DIR` when that environment variable is set, otherwise they default to `./ml_models`.
 
@@ -56,12 +56,13 @@ These are the direct weekend-performance features:
 - `quali_compound_inter`
 - `sector_weakness_score`
 - `pole_gap_pct`
-- `quali_improvement_q2_q3`
+- `speed_st_rank`
+- `speed_st_delta_kmh`
 
 Implementation notes:
 
 - The model takes the fastest qualifying lap per driver.
-- `quali_improvement_q2_q3` is derived from the same qualifying session by comparing the driver's best Q2 and Q3 pace.
+- `quali_improvement_q2_q3` was removed from model inputs because stint-based Q2/Q3 inference was not reliable enough for a public prediction story.
 
 ### From historical race sessions (`R`)
 
@@ -71,23 +72,28 @@ These features give medium-term context:
 - `team_recent_podium_rate`
 - `driver_circuit_avg_finish`
 - `driver_circuit_best_finish`
+- `sprint_finish_position`
+- `sprint_position_delta`
 
 Implementation notes:
 
 - These are computed only from races before the predicted weekend.
 - They are designed to capture car form and driver/circuit comfort.
 
-### From the current weekend's FP2
+### From the current weekend's practice and sprint data
 
-These are strategy-intent features:
+These are strategy-intent and race-sim features:
 
 - `fp2_hard_laps_pct`
 - `fp2_medium_laps_pct`
+- `fp1_deg_rate_ms_lap`
+- `fp1_long_run_pace_ms`
 
 Implementation notes:
 
 - FP2 is used because it is the most race-representative practice session.
-- Missing FP2 data is treated as neutral `0.0` values rather than an error.
+- On sprint weekends like Miami, FP1 becomes the first tyre/race-sim signal.
+- Missing practice or sprint data is treated as neutral values rather than an error, and `/predictions` reports which streams were available.
 
 ### Static circuit context
 
@@ -96,6 +102,9 @@ These flags come from Slipstream's circuit categorisation:
 - `is_street_circuit`
 - `is_power_circuit`
 - `is_high_df_circuit`
+- `sc_probability`
+- `overtake_difficulty`
+- `dnf_rate_circuit`
 
 ## Minimum ingest checklist
 
@@ -105,12 +114,13 @@ You should ingest:
 
 1. The target weekend's qualifying session
 2. Enough historical race sessions to give the model context
-3. Optionally the target weekend's FP2
+3. Optionally the target weekend's FP1, SQ, Sprint, and FP2 where the format provides them
 
 Example:
 
 ```bash
 uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session Q
+uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session FP1
 uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session FP2
 ```
 
@@ -197,10 +207,11 @@ Current behavior:
 
 ## Mental model
 
-The current model is essentially:
+The current v1.5 model is essentially:
 
 - `Q` tells us how fast the weekend looks right now
+- FP1/FP2/Sprint streams hint at Sunday raceability and tyre behaviour
 - historical `R` tells us how strong the team and driver have been
-- `FP2` hints at Sunday tyre strategy
+- circuit priors tell us how much track position, safety cars, and reliability matter
 
-That keeps the feature set grounded in information that is realistically available before the race starts.
+That keeps the feature set grounded in information that is realistically available before the race starts while making podium probability, uncertainty, and attribution the public output.

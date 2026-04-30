@@ -81,11 +81,19 @@ NEW_FEATURES = [
     # Driver-circuit historical performance
     "driver_circuit_avg",  # driver's avg finish here across all prior years
     "driver_circuit_best",  # driver's best finish here (ceiling of performance)
-    # Qualifying momentum — did driver peak in Q2 or improve to Q3?
-    "quali_improvement_q2_q3",  # lap time delta Q2→Q3 best (negative = got faster)
     # FP2 race simulation signal — compound strategy intention
     "fp2_hard_laps_pct",  # % of team's FP2 laps on HARD (high = planning 1-stop)
     "fp2_medium_laps_pct",  # % of team's FP2 laps on MEDIUM
+    # Miami v1.5 weekend signals
+    "speed_st_rank",  # speed trap rank on best qualifying lap
+    "speed_st_delta_kmh",  # straight-line speed gap to fastest speed trap
+    "fp1_deg_rate_ms_lap",  # FP1 long-run degradation slope
+    "fp1_long_run_pace_ms",  # FP1 long-run average pace
+    "sprint_finish_position",  # sprint result where available, neutral otherwise
+    "sprint_position_delta",  # sprint gain/loss vs start proxy
+    "sc_probability",  # circuit safety-car prior
+    "overtake_difficulty",  # 0-1 circuit passing difficulty prior
+    "dnf_rate_circuit",  # circuit reliability/DNF prior
     # Derived qualifying quality signals
     "sector_weakness_score",  # max sector rank - min sector rank (consistency measure)
     "pole_gap_pct",  # quali gap as % of pole time (circuit-normalised)
@@ -101,6 +109,96 @@ TARGET_COL = "finish_position"
 STREET_CIRCUITS = {"Monaco Grand Prix", "Azerbaijan Grand Prix", "Singapore Grand Prix"}
 POWER_CIRCUITS = {"Italian Grand Prix", "Belgian Grand Prix", "Azerbaijan Grand Prix"}
 HIGH_DF_CIRCUITS = {"Monaco Grand Prix", "Hungarian Grand Prix"}
+
+FEATURE_STREAMS = {
+    "car_pace": [
+        "grid_position",
+        "quali_gap_ms",
+        "s1_gap_ms",
+        "s2_gap_ms",
+        "s3_gap_ms",
+        "s1_rank",
+        "s2_rank",
+        "s3_rank",
+        "speed_st_rank",
+        "speed_st_delta_kmh",
+        "sector_weakness_score",
+        "pole_gap_pct",
+    ],
+    "tyre_strategy": [
+        "quali_compound_soft",
+        "quali_compound_inter",
+        "fp2_hard_laps_pct",
+        "fp2_medium_laps_pct",
+        "fp1_deg_rate_ms_lap",
+        "fp1_long_run_pace_ms",
+    ],
+    "driver_team_form": [
+        "team_form_3race",
+        "team_form_trend",
+        "driver_circuit_avg",
+        "driver_circuit_best",
+        "sprint_finish_position",
+        "sprint_position_delta",
+    ],
+    "circuit_context": [
+        "is_street_circuit",
+        "is_power_circuit",
+        "is_high_df_circuit",
+        "sc_probability",
+        "overtake_difficulty",
+        "dnf_rate_circuit",
+    ],
+}
+
+CIRCUIT_PRIORS = {
+    "Miami Grand Prix": {
+        "sc_probability": 0.72,
+        "overtake_difficulty": 0.64,
+        "dnf_rate_circuit": 0.12,
+    },
+    "Monaco Grand Prix": {
+        "sc_probability": 0.80,
+        "overtake_difficulty": 0.95,
+        "dnf_rate_circuit": 0.18,
+    },
+    "Singapore Grand Prix": {
+        "sc_probability": 0.90,
+        "overtake_difficulty": 0.78,
+        "dnf_rate_circuit": 0.16,
+    },
+    "Azerbaijan Grand Prix": {
+        "sc_probability": 0.78,
+        "overtake_difficulty": 0.42,
+        "dnf_rate_circuit": 0.20,
+    },
+    "Australian Grand Prix": {
+        "sc_probability": 0.55,
+        "overtake_difficulty": 0.50,
+        "dnf_rate_circuit": 0.14,
+    },
+    "Italian Grand Prix": {
+        "sc_probability": 0.35,
+        "overtake_difficulty": 0.32,
+        "dnf_rate_circuit": 0.10,
+    },
+    "Belgian Grand Prix": {
+        "sc_probability": 0.45,
+        "overtake_difficulty": 0.36,
+        "dnf_rate_circuit": 0.12,
+    },
+    "Hungarian Grand Prix": {
+        "sc_probability": 0.50,
+        "overtake_difficulty": 0.76,
+        "dnf_rate_circuit": 0.11,
+    },
+}
+
+DEFAULT_CIRCUIT_PRIORS = {
+    "sc_probability": 0.45,
+    "overtake_difficulty": 0.50,
+    "dnf_rate_circuit": 0.12,
+}
 
 
 def get_engine():
@@ -466,6 +564,193 @@ def compute_fp2_strategy(
     }
 
 
+def compute_fp1_long_run_signal(
+    engine,
+    team_name: str,
+    gp_name: str,
+    year: int,
+) -> dict:
+    """
+    FP1 race-sim proxy for sprint weekends.
+
+    Miami 2026 has only FP1 before sprint qualifying, so this is deliberately
+    conservative: use medium/hard stints of 5+ usable laps and return neutral
+    values if the session has no credible long-run work.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+            WITH fp1 AS (
+                SELECT session_key
+                FROM sessions
+                WHERE gp_name = :gp_name
+                  AND year = :year
+                  AND session_type = 'FP1'
+                ORDER BY date_start DESC NULLS LAST
+                LIMIT 1
+            ),
+            clean_laps AS (
+                SELECT
+                    l.driver_number,
+                    l.lap_number,
+                    l.lap_time_ms,
+                    l.compound,
+                    COALESCE(l.stint, 1) AS stint
+                FROM lap_times l
+                JOIN fp1 ON fp1.session_key = l.session_key
+                JOIN drivers d
+                    ON d.session_key = l.session_key
+                    AND d.driver_number = l.driver_number
+                WHERE d.team_name = :team_name
+                  AND l.lap_time_ms IS NOT NULL
+                  AND l.deleted = FALSE
+                  AND l.compound IN ('MEDIUM', 'HARD')
+            ),
+            stints AS (
+                SELECT
+                    driver_number,
+                    compound,
+                    stint,
+                    COUNT(*) AS laps,
+                    AVG(lap_time_ms) AS avg_ms,
+                    REGR_SLOPE(lap_time_ms, lap_number) AS deg_ms_lap
+                FROM clean_laps
+                GROUP BY driver_number, compound, stint
+                HAVING COUNT(*) >= 5
+            )
+            SELECT
+                AVG(avg_ms) AS long_run_pace_ms,
+                AVG(deg_ms_lap) AS deg_rate_ms_lap
+            FROM stints
+        """),
+            {"team_name": team_name, "gp_name": gp_name, "year": year},
+        ).mappings().first()
+
+    if not rows or rows["long_run_pace_ms"] is None:
+        return {"fp1_deg_rate_ms_lap": 0.0, "fp1_long_run_pace_ms": 0.0}
+
+    return {
+        "fp1_deg_rate_ms_lap": round(float(rows["deg_rate_ms_lap"] or 0.0), 2),
+        "fp1_long_run_pace_ms": round(float(rows["long_run_pace_ms"] or 0.0), 1),
+    }
+
+
+def compute_sprint_signal(
+    engine,
+    driver_number: int,
+    gp_name: str,
+    year: int,
+) -> dict:
+    """Sprint result signal where available; neutral when the weekend has no sprint."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("""
+            WITH sprint_session AS (
+                SELECT session_key
+                FROM sessions
+                WHERE gp_name = :gp_name
+                  AND year = :year
+                  AND session_type IN ('S', 'SS')
+                ORDER BY date_start DESC NULLS LAST
+                LIMIT 1
+            ),
+            final_lap AS (
+                SELECT DISTINCT ON (l.driver_number)
+                    l.driver_number,
+                    l.lap_number AS total_laps,
+                    l.position AS live_pos
+                FROM lap_times l
+                JOIN sprint_session ss ON ss.session_key = l.session_key
+                ORDER BY l.driver_number, l.lap_number DESC
+            ),
+            sprint_time AS (
+                SELECT l.driver_number, SUM(l.lap_time_ms) AS total_ms
+                FROM lap_times l
+                JOIN sprint_session ss ON ss.session_key = l.session_key
+                WHERE l.lap_time_ms IS NOT NULL AND l.deleted = FALSE
+                GROUP BY l.driver_number
+            ),
+            classified AS (
+                SELECT
+                    fl.driver_number,
+                    ROW_NUMBER() OVER (
+                        ORDER BY fl.total_laps DESC, st.total_ms ASC NULLS LAST
+                    ) AS calc_pos,
+                    fl.live_pos
+                FROM final_lap fl
+                LEFT JOIN sprint_time st ON st.driver_number = fl.driver_number
+            )
+            SELECT COALESCE(live_pos, calc_pos) AS sprint_finish_position
+            FROM classified
+            WHERE driver_number = :driver_number
+        """),
+            {"driver_number": driver_number, "gp_name": gp_name, "year": year},
+        ).mappings().first()
+
+    if not row or row["sprint_finish_position"] is None:
+        return {"sprint_finish_position": 10.0, "sprint_position_delta": 0.0}
+
+    sprint_pos = float(row["sprint_finish_position"])
+    return {
+        "sprint_finish_position": sprint_pos,
+        "sprint_position_delta": round(10.0 - sprint_pos, 2),
+    }
+
+
+def compute_circuit_priors(gp_name: str) -> dict:
+    priors = {**DEFAULT_CIRCUIT_PRIORS, **CIRCUIT_PRIORS.get(gp_name, {})}
+    return {k: float(v) for k, v in priors.items()}
+
+
+def compute_weekend_inputs_used(engine, gp_name: str, year: int) -> dict:
+    """Report available weekend streams so the UI can be honest about gaps."""
+    expected = {
+        "FP1": "practice_long_run",
+        "SQ": "sprint_qualifying",
+        "S": "sprint_race",
+        "SS": "sprint_race",
+        "Q": "qualifying",
+    }
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+            SELECT
+                s.session_type,
+                s.session_key,
+                COUNT(l.lap_number) AS lap_count,
+                MAX(s.date_start) AS date_start
+            FROM sessions s
+            LEFT JOIN lap_times l ON l.session_key = s.session_key
+            WHERE s.gp_name = :gp_name
+              AND s.year = :year
+              AND s.session_type IN ('FP1', 'SQ', 'S', 'SS', 'Q')
+            GROUP BY s.session_type, s.session_key
+            ORDER BY date_start ASC NULLS LAST
+        """),
+            {"gp_name": gp_name, "year": year},
+        ).mappings().all()
+
+    status = {
+        "practice_long_run": {"available": False, "session_type": "FP1", "lap_count": 0},
+        "sprint_qualifying": {"available": False, "session_type": "SQ", "lap_count": 0},
+        "sprint_race": {"available": False, "session_type": "S", "lap_count": 0},
+        "qualifying": {"available": False, "session_type": "Q", "lap_count": 0},
+    }
+    for row in rows:
+        key = expected.get(row["session_type"])
+        if not key:
+            continue
+        lap_count = int(row["lap_count"] or 0)
+        status[key] = {
+            "available": lap_count > 0,
+            "session_type": row["session_type"],
+            "session_key": row["session_key"],
+            "lap_count": lap_count,
+        }
+
+    return status
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 3: Main feature matrix builder
 # ══════════════════════════════════════════════════════════════════════════════
@@ -565,6 +850,7 @@ def _build_weekend_features(
                 d.team_name,
                 l.lap_time_ms,
                 l.s1_ms, l.s2_ms, l.s3_ms,
+                l.speed_st,
                 l.compound AS quali_compound
             FROM lap_times l
             JOIN drivers d
@@ -640,6 +926,8 @@ def _build_weekend_features(
     for sec in ["s1_ms", "s2_ms", "s3_ms"]:
         q[f"{sec}_rank"] = q[sec].rank(method="min", na_option="bottom").astype(int)
         q[f"{sec}_gap"] = (q[sec] - q[sec].min()).fillna(9999)
+    q["speed_st_rank"] = q["speed_st"].rank(method="min", ascending=False, na_option="bottom").astype(int)
+    fastest_speed_st = float(q["speed_st"].max()) if q["speed_st"].notna().any() else 0.0
 
     # Circuit type flags
     is_street = int(gp_name in STREET_CIRCUITS)
@@ -669,8 +957,9 @@ def _build_weekend_features(
         # Feature: FP2 strategy signal
         fp2_strategy = compute_fp2_strategy(fp2_data, team_name, gp_name, year)
 
-        # Feature: Qualifying momentum
-        quali_momentum = compute_quali_momentum(quali_key, driver_number, engine)
+        fp1_signal = compute_fp1_long_run_signal(engine, team_name, gp_name, year)
+        sprint_signal = compute_sprint_signal(engine, driver_number, gp_name, year)
+        circuit_priors = compute_circuit_priors(gp_name)
 
         # Feature: sector consistency (derived from existing sector features)
         # WHY: A driver P3 who is P1 in S1, P6 in S3 has a clear weakness.
@@ -688,6 +977,7 @@ def _build_weekend_features(
         # Percentage normalises across circuits so the model can compare.
         gap_ms = float(r["quali_gap_to_pole_ms"] or 0)
         pole_gap_pct = round(gap_ms / max(pole_time, 1) * 100, 4)
+        speed_st = float(r["speed_st"]) if pd.notna(r["speed_st"]) else fastest_speed_st
 
         rows.append(
             {
@@ -714,8 +1004,12 @@ def _build_weekend_features(
                 # New features
                 **team_form,
                 **driver_circuit,
-                **quali_momentum,
                 **fp2_strategy,
+                "speed_st_rank": int(r["speed_st_rank"]),
+                "speed_st_delta_kmh": round(float(speed_st - fastest_speed_st), 2),
+                **fp1_signal,
+                **sprint_signal,
+                **circuit_priors,
                 "sector_weakness_score": weakness_score,
                 "pole_gap_pct": pole_gap_pct,
                 # Target
@@ -773,6 +1067,7 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
                 d.team_name,
                 l.lap_time_ms,
                 l.s1_ms, l.s2_ms, l.s3_ms,
+                l.speed_st,
                 l.compound AS quali_compound
             FROM lap_times l
             JOIN drivers d
@@ -799,6 +1094,8 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
     for sec in ["s1_ms", "s2_ms", "s3_ms"]:
         q[f"{sec}_rank"] = q[sec].rank(method="min", na_option="bottom").astype(int)
         q[f"{sec}_gap"] = (q[sec] - q[sec].min()).fillna(9999)
+    q["speed_st_rank"] = q["speed_st"].rank(method="min", ascending=False, na_option="bottom").astype(int)
+    fastest_speed_st = float(q["speed_st"].max()) if q["speed_st"].notna().any() else 0.0
 
     is_street = int(gp_name in STREET_CIRCUITS)
     is_power = int(gp_name in POWER_CIRCUITS)
@@ -814,9 +1111,9 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
             race_history, driver_number, gp_name, date_start
         )
         fp2_strategy = compute_fp2_strategy(fp2_data, team_name, gp_name, year)
-        quali_momentum = compute_quali_momentum(
-            quali_session_key, driver_number, engine
-        )
+        fp1_signal = compute_fp1_long_run_signal(engine, team_name, gp_name, year)
+        sprint_signal = compute_sprint_signal(engine, driver_number, gp_name, year)
+        circuit_priors = compute_circuit_priors(gp_name)
 
         sector_ranks = [
             int(r["s1_ms_rank"]),
@@ -826,6 +1123,7 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
         weakness_score = max(sector_ranks) - min(sector_ranks)
         gap_ms = float(r["quali_gap_to_pole_ms"] or 0)
         pole_gap_pct = round(gap_ms / max(pole_time, 1) * 100, 4)
+        speed_st = float(r["speed_st"]) if pd.notna(r["speed_st"]) else fastest_speed_st
 
         rows.append(
             {
@@ -848,8 +1146,12 @@ def build_inference_features(quali_session_key: int) -> pd.DataFrame:
                 "is_high_df_circuit": is_high_df,
                 **team_form,
                 **driver_circuit,
-                **quali_momentum,
                 **fp2_strategy,
+                "speed_st_rank": int(r["speed_st_rank"]),
+                "speed_st_delta_kmh": round(float(speed_st - fastest_speed_st), 2),
+                **fp1_signal,
+                **sprint_signal,
+                **circuit_priors,
                 "sector_weakness_score": weakness_score,
                 "pole_gap_pct": pole_gap_pct,
             }

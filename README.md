@@ -1,78 +1,54 @@
-# Slipstream
+# Pitwall
 
 **Open-source F1 post-race analytics platform.**
 
-Qualifying telemetry, tyre strategy, race analysis, and practice intelligence — all from public data, zero paid APIs.
+Qualifying telemetry, corner analysis, race intelligence, practice data, ML predictions — all from public data, zero paid APIs.
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square)
 ![Flask](https://img.shields.io/badge/Flask-3-lightgrey?style=flat-square)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-PostgreSQL-orange?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)
 
 ---
 
 ## What it does
 
-### Qualifying — Speed Traces
-Distance-aligned telemetry overlay for up to 4 drivers. Speed, throttle, brake, gear, RPM, DRS zones, sector times from timing data, and an interactive track map with braking markers. Hover any point to see all drivers' values simultaneously.
+### Qualifying — Full Telemetry Lab
+Distance-aligned telemetry overlay for up to 4 drivers across Q1/Q2/Q3 segments. Speed, throttle, brake, gear, RPM, speed delta, and an interactive track map. Hover any point to see all drivers' values simultaneously via a live instrumentation cluster.
 
-Qualifying sessions also support segment-aware comparison:
-- switch between `Q1`, `Q2`, and `Q3`
-- compare each driver's best telemetry lap from that segment
-- drivers who did not reach the selected segment are disabled in the selector
-- the UI shows the actual lap number currently being rendered per driver
-- compare corner-entry and corner-exit behaviour with the braking analysis card
-- inspect a compact performance matrix, theoretical lap, and LLM-style insight summary alongside the sector cards
+**Corner Analysis** — FastF1 official corner positions used as ground truth. Braking distance, deceleration rate, throttle application point, and exit speed compared at each real braking corner. Rules-based insight engine generates CRITICAL/NOTABLE findings automatically.
 
-![Qualifying telemetry showing ANT vs RUS speed traces](.github/assets/qualifying-telemetry.png)
-
-Drop the screenshot file at `.github/assets/qualifying-telemetry.png` if you want this image to render on GitHub.
+**Speed Trap Analysis** — FIA timing point speeds (I1, I2, FL, ST) per driver on best lap. Lap progression chart showing improvement across the session. Identifies low-drag vs high-downforce setup philosophy from straight-line speed data.
 
 ### Race — Lap-by-Lap Intelligence
-- **Lap time evolution** — every lap as a time series, compound-coloured dots, pit laps flagged
-- **Gap to leader** — cumulative time behind P1 per lap, correct across pit windows
-- **Position changes** — full field battle chart, selected drivers highlighted
-- **Fastest lap card** — who set it, on what compound, how old the tyre was, top 5 with gaps
-- **Pit stop analysis** — undercut/overcut verdict for each stop: position before vs 3 laps after
-- **Stint pace** — clean lap averages + degradation rate (ms/lap) per stint
-
-![Race analysis showing pace, gaps, and stint intelligence](.github/assets/race-analysis.png)
-
-Drop the screenshot file at `.github/assets/race-analysis.png` if you want this image to render on GitHub.
+- **Lap time evolution** — every lap as a time series, compound-coloured dots, shared crosshair across charts
+- **Position changes** — full field battle chart, interactive with lap-by-lap position tooltip
+- **Stint pace** — clean lap averages + degradation rate (ms/lap) per stint, outlier-filtered
 
 ### Practice — Friday Intelligence
-- **Gap to session best** — every lap as a dot showing gap to the fastest time of the session
-- **Compound delta table** — each driver's best time per compound and gap to session fastest on that tyre
-- **Tyre degradation comparison** — stint traces normalised to baseline so you see pure deg shape, all drivers overlaid
-- **Compound strategy reveal** — laps per compound per team, shows planned race strategy before Sunday
-- **Sector progression** — early/mid/late session sector time improvement, shows who found setup
+- **Long run pace** — stints >=5 laps with linear degradation trend
+- **Tyre degradation rate** — ms/lap per compound per driver + compound averages
+
+### ML Predictions
+XGBoost model trained on 461 rows across 5 seasons. FLAML AutoML feature selection. Monte Carlo simulation for win/podium probabilities. SHAP explanations per driver.
+
+**Statistically validated:** Permutation test p=0.000 confirms features carry genuine predictive signal. SHAP analysis: grid position (35%), sector gaps (17%), team/driver context (15%). Grid position matters 2x more for frontrunners (SHAP=4.22) vs midfield (1.86).
 
 ### Championship Standings
-Live driver and constructor standings from the official Jolpica F1 API. Updates every race weekend automatically — no ingestion needed for standings.
-
----
-
-## Why this project exists
-
-Slipstream is built to make high-quality F1 analysis accessible without paid telemetry feeds or closed tooling.
-
-The goal is to give fans, builders, and contributors a practical analytics stack that can:
-
-- ingest public motorsport data
-- store it in a query-friendly schema
-- expose it through clean APIs
-- turn it into race-weekend intelligence in the UI
+Live driver and constructor standings from the official Jolpica F1 API. No ingestion needed.
 
 ---
 
 ## Stack
 
 ```
-Frontend    Next.js 16 (App Router) + Tailwind CSS v4 + inline styles
-Backend     Flask 3 + SQLAlchemy
+Frontend    Next.js 14 (App Router) — inline styles, Space Grotesk/Inter/JetBrains Mono
+Backend     Flask 3 + SQLAlchemy + FastF1 (circuit ground truth)
 Database    TimescaleDB (PostgreSQL 15) + Redis
+ML          FLAML AutoML + XGBoost + SHAP + scipy (statistical validation)
 Data        FastF1 + Jolpica (official F1 standings)
-Streaming   Apache Kafka (infrastructure ready, live mode in roadmap)
+Streaming   Apache Kafka (infrastructure ready)
 Infra       Docker Compose — zero paid services
 Package mgr uv workspaces (Python monorepo)
 ```
@@ -84,359 +60,163 @@ Package mgr uv workspaces (Python monorepo)
 ```
 pitwall/
 ├── apps/
-│   ├── backend/
-│   │   ├── src/backend/
-│   │   │   ├── __init__.py          ← Flask app factory
-│   │   │   └── api/v1/
-│   │   │       ├── sessions.py      ← sessions, race-results, standings
-│   │   │       ├── laps.py
-│   │   │       ├── drivers.py
-│   │   │       ├── telemetry.py
-│   │   │       ├── strategy.py
-│   │   │       ├── analysis.py      ← all race + FP analysis endpoints
-│   │   │       └── predictions.py   ← ML stub (roadmap)
-│   │   └── tests/                   ← backend pytest suite
+│   ├── backend/src/backend/
+│   │   ├── __init__.py          ← Flask app factory
+│   │   └── api/v1/
+│   │       ├── sessions.py      ← sessions, race-results, standings
+│   │       ├── laps.py
+│   │       ├── drivers.py
+│   │       ├── telemetry.py
+│   │       ├── strategy.py
+│   │       ├── analysis.py      ← all analysis + corner detection
+│   │       └── predictions.py
 │   └── frontend/
 │       ├── app/
-│       │   ├── page.tsx             ← Home + championship standings
-│       │   ├── sessions/page.tsx    ← Session browser, grouped by GP
+│       │   ├── page.tsx             ← Home + standings
+│       │   ├── sessions/page.tsx    ← Session browser
 │       │   ├── sessions/[key]/      ← Session detail + telemetry + strategy
-│       │   └── predictions/page.tsx ← ML predictions (roadmap)
-│       └── components/
-│           ├── analysis/
-│           │   ├── RaceAnalysis.tsx
-│           │   ├── PracticeAnalysis.tsx
-│           │   └── BrakingAnalysis.tsx
-│           └── telemetry/
-│               └── CornerAnalysis.tsx
+│       │   └── predictions/page.tsx ← ML predictions + SHAP
+│       └── components/analysis/
+│           ├── RaceAnalysis.tsx
+│           ├── PracticeAnalysis.tsx
+│           ├── BrakingAnalysis.tsx
+│           ├── CornerInsights.tsx
+│           └── QualiSpeedPanel.tsx
 ├── packages/
-│   └── ingestion/
-│       └── src/ingestion/
-│           ├── ingest_session.py    ← main entry point
-│           ├── fastf1_client.py
-│           ├── loader.py
-│           └── models.py
-├── infra/
-│   ├── docker-compose.yml
-│   ├── kafka/create-topics.sh
-│   └── postgres/init.sql
-├── pyproject.toml                   ← uv workspace root
+│   ├── ingestion/src/ingestion/
+│   │   ├── ingest_session.py
+│   │   ├── fastf1_client.py     ← extracts SpeedI1/I2/FL/ST
+│   │   └── loader.py
+│   └── ml/src/ml/
+│       ├── features.py          ← 22-feature matrix builder
+│       ├── train.py             ← FLAML AutoML, leave-one-year-out CV
+│       └── predict.py           ← Monte Carlo + SHAP
+├── infra/docker-compose.yml
+├── pyproject.toml
 └── Makefile
-```
-
----
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A["FastF1 + Jolpica"] --> B["Ingestion Package"]
-    B --> C["TimescaleDB / PostgreSQL"]
-    C --> D["Flask API"]
-    D --> E["Next.js Frontend"]
-    C --> F["Celery Workers"]
-    C --> G["ML Training / Inference"]
-    F --> C
-    G --> C
-    G --> H["ML Artifacts / Predictions"]
 ```
 
 ---
 
 ## Quickstart
 
-### Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- [Node.js 20+](https://nodejs.org/) + [pnpm](https://pnpm.io/) — `npm i -g pnpm`
-
-### 1. Clone and configure
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/), [uv](https://docs.astral.sh/uv/), Node.js 20+ + pnpm
 
 ```bash
-git clone https://github.com/abdullah-azeemi/Slipstream.git
-cd Slipstream
+git clone https://github.com/abdullah-azeemi/Pitwall.git
+cd Pitwall
 cp .env.example .env
-```
 
-### 2. Start infrastructure
+make up          # start TimescaleDB, Redis, Kafka, MLflow
+make backend     # Flask on :8000
+cd apps/frontend && pnpm install && pnpm dev   # Next.js on :3000
 
-```bash
-make up
-```
-
-Starts TimescaleDB, Redis, Kafka, and MLflow. Wait ~15 seconds for TimescaleDB to initialise.
-
-### 3. Setup Database
-
-```bash
-make migrate
-```
-
-This creates the necessary tables in your database. **This is required on first run or after a `make reset`.**
-
-### 4. Start the backend
-
-```bash
-make backend
-# API at http://localhost:8000
-# Health check: curl http://localhost:8000/health
-```
-
-### 5. Start the frontend
-
-```bash
-cd apps/frontend
-pnpm install
-pnpm dev
-# App at http://localhost:3000
-```
-
-Or from the repo root:
-
-```bash
-make frontend
-```
-
-### 6. Ingest initial data (Optional)
-
-To see the app in action immediately with sample data (2024 British GP):
-
-```bash
-make seed
-```
-
-Or ingest any specific session:
-
-```bash
-# 2026 Australian GP — qualifying (includes telemetry for speed traces)
+# Ingest your first session
 uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session Q
-
-# Race (lap times + strategy, no telemetry)
 uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session R
-
-# Practice (for FP analysis panels)
-uv run python -m ingestion.ingest_session --year 2026 --gp "Australian" --session FP2
 ```
-
-FastF1 caches session data locally at `./fastf1_cache` — subsequent runs are instant.
-
-### Qualifying segment note
-
-For `Q1/Q2/Q3` telemetry comparisons, `lap_times.quali_segment` must exist and be populated.
-
-If you are upgrading an existing database, run the migration first:
-
-```bash
-make migrate
-```
-
-Then re-ingest the qualifying sessions you want to compare so both `lap_times` and `telemetry` are aligned to the stored segment metadata.
 
 ---
 
 ## Loading historical data
 
-For the full race analysis suite, you need paired qualifying + race sessions. Each GP takes ~30–90 seconds to ingest depending on session size.
-
 ```bash
-# Example: ingest a full season of key circuits
 for year in 2022 2023 2024 2025; do
   for gp in "Australian" "Monaco" "British" "Italian" "Belgian"; do
     uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session Q
     uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session R
-    uv run python -m ingestion.ingest_session --year $year --gp "$gp" --session FP2
   done
 done
 ```
 
-Storage estimate: ~200MB for 5 circuits × 4 seasons (lap times only, no telemetry for historical races).
-
-**Telemetry note:** Telemetry is large, but Slipstream stores only the segment-best qualifying telemetry laps per driver (`best Q1`, `best Q2`, `best Q3`) rather than every qualifying lap. All other analysis panels (race, FP) use only `lap_times` which is compact.
-
-### ML prediction data requirements
-
-Slipstream's current ML pipeline predicts race finishing positions from qualifying-era information plus historical race context.
-
-- Live prediction needs the current `Q` session.
-- Historical form features need past `R` sessions in the database.
-- `FP2` is optional but improves the strategy signal.
-- `FP1`, `FP3`, sprint sessions, and the current race are not used for inference today.
-
-Training is built from weekends that have both `Q` and `R` sessions. Missing `FP2` does not block training or prediction; it falls back to neutral strategy values.
-
-On deployed environments, the predictions endpoint can train the model on demand the first time it is requested if no model file exists yet. That first request can be noticeably slower than later ones.
-
-For Railway-style deployments, set:
-
-```bash
-ML_MODELS_DIR=/app/ml_models
-```
-
-and mount persistent storage at the same path if you want trained models to survive redeploys.
-
-See [docs/ml-race-prediction.md](./docs/ml-race-prediction.md) for the full feature-to-session map, ingest checklist, and common local failure modes.
-
-![Prediction view showing projected finishing order and model confidence](.github/assets/predictions.png)
-
-Drop the screenshot file at `.github/assets/predictions.png` if you want this image to render on GitHub.
+Storage: ~200MB for 5 circuits x 4 seasons (lap times). Telemetry ~50MB per qualifying session.
 
 ---
 
 ## API reference
 
-Base URL: `http://localhost:8000`
-
 ```
 GET /health
 
-# Sessions
 GET /api/v1/sessions
 GET /api/v1/sessions/:key
 GET /api/v1/sessions/:key/race-results
-GET /api/v1/sessions/:key/drivers
-GET /api/v1/sessions/:key/laps?driver=<num>
 GET /api/v1/sessions/:key/fastest
 GET /api/v1/sessions/:key/strategy
-
-# Standings (live from Jolpica, no ingestion needed)
 GET /api/v1/standings/drivers?year=2026
 GET /api/v1/standings/constructors?year=2026
 
-# Qualifying telemetry
 GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63
-GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63&laps=12:8,63:5
 GET /api/v1/sessions/:key/telemetry/stats?drivers=12,63
-GET /api/v1/sessions/:key/analysis/quali-segments
 
-# Race analysis
 GET /api/v1/sessions/:key/analysis/lap-evolution?drivers=12,63
-GET /api/v1/sessions/:key/analysis/gap-to-leader
 GET /api/v1/sessions/:key/analysis/position-changes
 GET /api/v1/sessions/:key/analysis/stint-pace
-GET /api/v1/sessions/:key/analysis/undercut
-GET /api/v1/sessions/:key/analysis/fastest-lap
+GET /api/v1/sessions/:key/analysis/long-runs
+GET /api/v1/sessions/:key/analysis/tyre-deg
+GET /api/v1/sessions/:key/analysis/driver-compare-stats?drivers=63,12
+GET /api/v1/sessions/:key/analysis/quali-speed
 
-# Practice analysis
-GET /api/v1/sessions/:key/analysis/fp-scatter
-GET /api/v1/sessions/:key/analysis/fp-compound-delta
-GET /api/v1/sessions/:key/analysis/fp-tyre-deg
-GET /api/v1/sessions/:key/analysis/fp-compounds
-GET /api/v1/sessions/:key/analysis/fp-sectors
+GET /api/v1/sessions/:key/predictions
+GET /api/v1/predictions/latest
 ```
 
 ---
 
-## Current launch note
+## Corner detection
 
-Before publishing publicly, verify the quickstart on a clean machine:
+Corner positions come from FastF1 `get_circuit_info()` — not inferred from speed traces. For each official corner the algorithm maps its X/Y to a track distance via reference lap telemetry, filters to corners with speed <200 km/h AND brake samples >0, then finds each driver's apex as the minimum-speed sample within +-100m. Results: Melbourne = 4 corners (T1, T3, T11, T13), Monaco = 7. Corner data is cached in memory after first load (~5s).
 
-- `make up`
-- `make migrate`
-- `make seed`
-- `make backend`
-- `make frontend`
+---
 
-That confirms infrastructure, ingestion, API routes, and the UI all work from the documented path.
+## ML results
 
-## Deploy checklist
+| Metric | Value |
+|--------|-------|
+| Training rows | 461 (5 seasons, 5 circuits) |
+| Model | XGBoost via FLAML AutoML |
+| MAE | 3.620 +- 0.472 positions |
+| 95% Bootstrap CI | [3.352, 3.905] |
+| Permutation test p | 0.000 ✅ |
+| Top SHAP feature | grid_position — 2.56 pos avg impact |
 
-When shipping qualifying telemetry changes to Railway/Vercel:
+Features predict absolute finish order (p=0.000) but not position change from grid (p=0.704) — race deltas are driven by stochastic events not captured in qualifying data.
 
-1. Deploy backend code that matches the frontend segment logic.
-2. Run DB migrations before re-ingesting:
-   `make migrate`
-3. Re-ingest qualifying sessions that need `Q1/Q2/Q3` comparison so `lap_times.quali_segment` is populated.
-4. Verify segment data directly:
-   `GET /api/v1/sessions/:key/analysis/quali-segments`
-5. Verify telemetry compare with pinned laps:
-   `GET /api/v1/sessions/:key/telemetry/compare?drivers=12,63&laps=12:8,63:5`
-6. Deploy the frontend after the backend is already serving the new segment data.
-7. Hard refresh the client and confirm the segment tabs, disabled drivers, and lap badges update together.
-
-## Public launch note
-
-If you are preparing Slipstream for a public Railway deployment, do not treat the hosted database as a full historical archive.
-
-Railway storage is limited, so the best launch strategy is:
-
-- keep current-season `Q` and `R`
-- keep selective `FP2`
-- keep qualifying telemetry only for the comparison weekends the UI actually needs
-
-See [docs/release-checklist.md](./docs/release-checklist.md) for the full pre-public checklist and storage-aware launch plan.
+---
 
 ## Dev commands
 
 ```bash
-make up          # start Docker services (TimescaleDB, Redis, Kafka, MLflow)
-make down        # stop all services
-make backend     # Flask dev server on :8000
-make test        # run 23 pytest tests
-make db-shell    # psql into TimescaleDB
-lsof -ti:8000 | xargs kill -9   # kill stuck backend port
+make up / make down       # Docker services
+make backend              # Flask :8000
+make test                 # pytest (23 tests)
+make db-shell             # psql
+lsof -ti:8000 | xargs kill -9   # kill stuck port
 ```
-
----
-
-## Design decisions
-
-**TimescaleDB over plain PostgreSQL** — `lap_times` and `telemetry` are hypertables partitioned by time. Multi-season queries stay fast without manual partitioning.
-
-**DELETE-then-INSERT** — TimescaleDB hypertables require the partition key in unique constraints. Rather than complex upsert logic, ingestion deletes all rows for a session before re-inserting. Safe to rerun.
-
-**Distance-aligned telemetry** — two drivers' fastest laps have different sample counts (FastF1 samples at ~10Hz, actual count varies by car/lap). Both are interpolated to 400 evenly-spaced distance points before rendering so the overlay is spatially accurate.
-
-**Official standings via Jolpica** — calculating points from ingested race results only works for sessions you've loaded. Jolpica gives the full season standings regardless of what you've ingested, and updates automatically after each race.
-
-**Gap to leader via cumulative time** — uses each lap's `position = 1` driver as the leader reference. Cumulative lap times including pit laps give the true time gap. `GREATEST(0, ...)` clamps negative values from pit timing noise.
 
 ---
 
 ## Roadmap
 
-### Shipped
-
-- [x] Qualifying telemetry with Q1/Q2/Q3 segment-aware comparison
-- [x] Race analysis suite: pace, gaps, positions, pit stop and stint views
-- [x] Practice analysis views driven by compact `lap_times` data
-- [x] ML race prediction pipeline using qualifying, historical race context, and optional FP2 strategy signal
-- [x] Storage-aware auto-ingest flow for newly completed weekends
-
-### Next
-
-- [ ] Race engineer style insight summaries grounded in existing analytics endpoints
-- [ ] Better data quality checks and ingestion health reporting
-- [ ] Bulk ingestion utility for curated multi-season loading
-- [ ] Prediction UX polish and clearer model confidence/explanation cards
-- [ ] What-if simulator for grid and weather scenario testing
-- [ ] Live mode via OpenF1 streaming during race weekends
+- [ ] Gap to leader + undercut analysis (race panels)
+- [ ] ML Phase 3 — circuit stratification experiment
+- [ ] Probability calibration — Brier score
+- [ ] LLM commentary on insight JSON
+- [ ] Auto-ingest new 2026 race weekends
+- [ ] Live mode via OpenF1 + Kafka
 
 ---
 
 ## Data sources
 
-- **[FastF1](https://github.com/theOehrly/Fast-F1)** — timing, telemetry, tyre data
-- **[OpenF1](https://openf1.org/)** — live timing API (roadmap)
+- **[FastF1](https://github.com/theOehrly/Fast-F1)** — timing, telemetry, circuit info
+- **[OpenF1](https://openf1.org/)** — live timing (roadmap)
 - **[Jolpica](https://jolpi.ca/)** — official F1 standings
 
-All data is sourced from public APIs. Slipstream stores processed data locally — no data is redistributed.
-
----
-
-## Contributing
-
-Issues and PRs welcome. If you hit ingestion errors on a circuit not listed here, open an issue with the circuit name and error — compound constraint violations are common and easy to fix.
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and workflow expectations.
-
-Community and repo standards:
-
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- [SECURITY.md](./SECURITY.md)
+All data from public APIs. No data redistributed.
 
 ---
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](LICENSE)., 

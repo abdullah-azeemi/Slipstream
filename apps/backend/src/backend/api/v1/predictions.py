@@ -28,6 +28,7 @@ def race_predictions(session_key: int):
         return jsonify({"error": "Predictions only available for qualifying sessions"}), 400
 
     try:
+        from ml.features import compute_weekend_inputs_used
         from ml.predict import predict_race, explain_prediction
         from ml.model_store import global_metadata_path, gp_metadata_path, load_metadata
     except ImportError:
@@ -42,9 +43,12 @@ def race_predictions(session_key: int):
         return jsonify({"error": str(e)}), 500
 
     # Merge SHAP factors
-    shap_map = {e["driver_number"]: e["factors"] for e in explanations}
+    shap_map = {e["driver_number"]: e for e in explanations}
     for p in predictions:
-        p["factors"] = shap_map.get(p["driver_number"], [])
+        shap_entry = shap_map.get(p["driver_number"], {})
+        p["factors"] = shap_entry.get("factors", [])
+        if shap_entry.get("feature_streams"):
+            p["feature_streams"] = shap_entry["feature_streams"]
 
     # Add team colours from DB
     with engine.connect() as conn:
@@ -60,18 +64,40 @@ def race_predictions(session_key: int):
     gp_metadata = load_metadata(gp_metadata_path(row[1]))
     global_metadata = load_metadata(global_metadata_path())
     model_metadata = gp_metadata or global_metadata or {}
+    validation_report = model_metadata.get("validation_report") or {
+        "available": False,
+        "caveat": "Train the v1.5 model to populate statistical validation artifacts.",
+        "feature_tests": [],
+        "vif": [],
+        "permutation_importance": [],
+    }
+    model_baselines = {
+        "grid_top3_accuracy": model_metadata.get("grid_baseline_top3_accuracy_mean"),
+        "model_top3_accuracy": model_metadata.get("cv_top3_accuracy_mean"),
+        "podium_precision": model_metadata.get("cv_podium_precision_mean"),
+        "podium_recall": model_metadata.get("cv_podium_recall_mean"),
+        "podium_brier": model_metadata.get("cv_podium_brier_mean"),
+    }
+    weekend_inputs = compute_weekend_inputs_used(engine, row[1], row[2])
 
     return jsonify({
         "session_key": session_key,
         "gp_name":     row[1],
         "year":        row[2],
         "predictions": predictions,
+        "validation_report": validation_report,
+        "model_baselines": model_baselines,
+        "weekend_inputs_used": weekend_inputs,
         "model": {
             "scope": model_metadata.get("model_scope", "global"),
             "best_estimator": model_metadata.get("best_estimator"),
             "cv_mae_mean": model_metadata.get("cv_mae_mean"),
             "cv_mae_std": model_metadata.get("cv_mae_std"),
             "cv_top3_accuracy_mean": model_metadata.get("cv_top3_accuracy_mean"),
+            "cv_podium_precision_mean": model_metadata.get("cv_podium_precision_mean"),
+            "cv_podium_recall_mean": model_metadata.get("cv_podium_recall_mean"),
+            "cv_podium_brier_mean": model_metadata.get("cv_podium_brier_mean"),
+            "grid_baseline_top3_accuracy_mean": model_metadata.get("grid_baseline_top3_accuracy_mean"),
             "cv_folds": model_metadata.get("cv_folds"),
             "n_training_rows": model_metadata.get("n_training_rows"),
             "years": model_metadata.get("years", []),

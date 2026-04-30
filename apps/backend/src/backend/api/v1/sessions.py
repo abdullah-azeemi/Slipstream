@@ -1,8 +1,21 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from backend.extensions import engine
 
 sessions_bp = Blueprint("sessions", __name__)
+
+
+def _is_missing_table_error(exc: ProgrammingError) -> bool:
+    return "UndefinedTable" in exc.__class__.__name__ or "does not exist" in str(exc.orig)
+
+
+def _missing_schema_response():
+    return jsonify({
+        "error": "Database schema is not initialized",
+        "detail": "The backend connected to Postgres, but required Pitwall tables such as sessions do not exist.",
+        "suggested_command": "uv run alembic -c apps/backend/alembic.ini upgrade head",
+    }), 503
 
 
 @sessions_bp.get("/sessions")
@@ -12,10 +25,11 @@ def list_sessions():
     Qualifying sessions appear before Race sessions on the same date
     so the home page hero shows the most recent qualifying.
     """
-    with engine.connect() as conn:
-        rows = (
-            conn.execute(
-                text("""
+    try:
+        with engine.connect() as conn:
+            rows = (
+                conn.execute(
+                    text("""
             SELECT
                 session_key, year, gp_name, country,
                 session_type, session_name,
@@ -34,10 +48,14 @@ def list_sessions():
                     ELSE 5
                 END ASC
         """)
+                )
+                .mappings()
+                .all()
             )
-            .mappings()
-            .all()
-        )
+    except ProgrammingError as exc:
+        if _is_missing_table_error(exc):
+            return _missing_schema_response()
+        raise
     return jsonify([dict(r) for r in rows])
 
 

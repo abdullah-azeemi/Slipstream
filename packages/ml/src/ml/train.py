@@ -27,6 +27,7 @@ from ml.model_store import (
     gp_model_path,
     save_metadata,
 )
+from ml.validation import compute_podium_metrics, compute_validation_report
 
 log = structlog.get_logger()
 
@@ -39,6 +40,10 @@ def cross_validate(df: pd.DataFrame) -> dict:
     years     = sorted(df['year'].unique())
     errors    = []
     top3_hits = []
+    podium_precision = []
+    podium_recall = []
+    brier_scores = []
+    grid_top3_hits = []
 
     log.info("cv.start", years=list(years))
 
@@ -75,6 +80,23 @@ def cross_validate(df: pd.DataFrame) -> dict:
         overlap     = len(actual_top3 & pred_top3)
         top3_hits.append(overlap / 3.0)
 
+        pred_ranks = pred_series.rank(method="first").to_numpy()
+        podium_probs = np.clip((4.5 - pred_ranks) / 3.0, 0.05, 0.95)
+        metrics = compute_podium_metrics(
+            test_df[TARGET_COL].to_numpy(),
+            pred_ranks,
+            podium_probs,
+            test_df["grid_position"].to_numpy(),
+        )
+        if metrics["podium_precision"] is not None:
+            podium_precision.append(metrics["podium_precision"])
+        if metrics["podium_recall"] is not None:
+            podium_recall.append(metrics["podium_recall"])
+        if metrics["brier_score"] is not None:
+            brier_scores.append(metrics["brier_score"])
+        if metrics["grid_baseline_top3_hit_rate"] is not None:
+            grid_top3_hits.append(metrics["grid_baseline_top3_hit_rate"])
+
         log.info("cv.fold",
                  test_year=int(test_year),
                  mae=round(mae, 2),
@@ -86,6 +108,10 @@ def cross_validate(df: pd.DataFrame) -> dict:
             "mae_mean": None,
             "mae_std": None,
             "top3_accuracy_mean": None,
+            "podium_precision_mean": None,
+            "podium_recall_mean": None,
+            "podium_brier_mean": None,
+            "grid_baseline_top3_accuracy_mean": None,
             "n_folds": 0,
         }
 
@@ -93,6 +119,10 @@ def cross_validate(df: pd.DataFrame) -> dict:
         "mae_mean":           round(float(np.mean(errors)), 3),
         "mae_std":            round(float(np.std(errors)),  3),
         "top3_accuracy_mean": round(float(np.mean(top3_hits)), 3),
+        "podium_precision_mean": round(float(np.mean(podium_precision)), 3) if podium_precision else None,
+        "podium_recall_mean": round(float(np.mean(podium_recall)), 3) if podium_recall else None,
+        "podium_brier_mean": round(float(np.mean(brier_scores)), 3) if brier_scores else None,
+        "grid_baseline_top3_accuracy_mean": round(float(np.mean(grid_top3_hits)), 3) if grid_top3_hits else None,
         "n_folds":            len(errors),
     }
 
@@ -145,7 +175,12 @@ def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
             "cv_mae_mean": gp_cv_metrics["mae_mean"],
             "cv_mae_std": gp_cv_metrics["mae_std"],
             "cv_top3_accuracy_mean": gp_cv_metrics["top3_accuracy_mean"],
+            "cv_podium_precision_mean": gp_cv_metrics["podium_precision_mean"],
+            "cv_podium_recall_mean": gp_cv_metrics["podium_recall_mean"],
+            "cv_podium_brier_mean": gp_cv_metrics["podium_brier_mean"],
+            "grid_baseline_top3_accuracy_mean": gp_cv_metrics["grid_baseline_top3_accuracy_mean"],
             "cv_folds": gp_cv_metrics["n_folds"],
+            "validation_report": compute_validation_report(gp_df, model),
         })
 
         gp_models[gp_name] = str(model_path)
@@ -193,7 +228,11 @@ def main():
         for year in sorted(df['year'].unique()):
             print(f"  {int(year)}: held out as test set")
         print(f"\n  MAE:            {cv_metrics['mae_mean']} ± {cv_metrics['mae_std']} positions")
-        print(f"  Top-3 accuracy: {cv_metrics['top3_accuracy_mean'] * 100:.1f}%")
+        if cv_metrics['top3_accuracy_mean'] is not None:
+            print(f"  Top-3 accuracy: {cv_metrics['top3_accuracy_mean'] * 100:.1f}%")
+        print(f"  Podium precision: {cv_metrics['podium_precision_mean']}")
+        print(f"  Podium recall:    {cv_metrics['podium_recall_mean']}")
+        print(f"  Podium Brier:     {cv_metrics['podium_brier_mean']}")
         print(f"  Folds:          {cv_metrics['n_folds']}")
 
         # Train final model on all data
@@ -213,6 +252,10 @@ def main():
                 "cv_mae_mean":           cv_metrics['mae_mean'],
                 "cv_mae_std":            cv_metrics['mae_std'],
                 "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
+                "cv_podium_precision_mean": cv_metrics["podium_precision_mean"],
+                "cv_podium_recall_mean": cv_metrics["podium_recall_mean"],
+                "cv_podium_brier_mean": cv_metrics["podium_brier_mean"],
+                "grid_baseline_top3_accuracy_mean": cv_metrics["grid_baseline_top3_accuracy_mean"],
             })
 
         # Log feature importance — the most valuable thing to track.
@@ -259,6 +302,8 @@ def main():
         with open(GLOBAL_MODEL_PATH, 'wb') as f:
             pickle.dump(model, f)
 
+        validation_report = compute_validation_report(df, model)
+
         save_metadata(global_metadata_path(), {
             "model_scope": "global",
             "best_estimator": model.best_estimator,
@@ -267,7 +312,12 @@ def main():
             "cv_mae_mean": cv_metrics['mae_mean'],
             "cv_mae_std": cv_metrics['mae_std'],
             "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
+            "cv_podium_precision_mean": cv_metrics["podium_precision_mean"],
+            "cv_podium_recall_mean": cv_metrics["podium_recall_mean"],
+            "cv_podium_brier_mean": cv_metrics["podium_brier_mean"],
+            "grid_baseline_top3_accuracy_mean": cv_metrics["grid_baseline_top3_accuracy_mean"],
             "cv_folds": cv_metrics['n_folds'],
+            "validation_report": validation_report,
         })
 
         gp_models = train_gp_models(df)
