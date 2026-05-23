@@ -409,8 +409,12 @@ export default function LandingPage() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['TELEMETRY', 'SESSIONS', 'PREDICTIONS', 'GITHUB'].map(l => {
-            const href = l === 'GITHUB' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${l.toLowerCase()}`
+          {['LATEST WEEKEND', 'TELEMETRY', 'SESSIONS', 'PREDICTIONS', 'GITHUB'].map(l => {
+            const href = l === 'GITHUB'
+              ? 'https://github.com/abdullah-azeemi/Slipstream'
+              : l === 'LATEST WEEKEND'
+                ? '/sessions/latest'
+                : `/${l.toLowerCase()}`
             return (
               <Link key={l} href={href} target={l === 'GITHUB' ? '_blank' : undefined} style={{
                 fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700,
@@ -420,7 +424,7 @@ export default function LandingPage() {
           })}
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#CBD5E1', fontWeight: 500 }}>
-          © 2026 SLIPSTREAM DATA SYSTEMS · APACHE 2.0
+          © 2026 SLIPSTREAM  · APACHE 2.0
         </div>
       </footer>
 

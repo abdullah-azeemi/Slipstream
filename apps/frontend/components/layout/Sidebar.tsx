@@ -10,18 +10,20 @@ import {
   Brain, 
   Headphones, 
   HelpCircle, 
-  Sparkles 
+  Sparkles,
+  Flag
 } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
 
   const navItems = [
-    { name: 'RACE OVERVIEW', icon: LayoutDashboard, href: '/dashboard' },
-    { name: 'DRIVER ANALYSIS', icon: User, href: '/analysis' },
-    { name: 'CAR SETUP', icon: Sliders, href: '/setup' },
-    { name: 'STRATEGY TOOL', icon: Brain, href: '/predictions' },
-    { name: 'PIT WALL', icon: Headphones, href: '/pitwall' },
+    { name: 'RACE OVERVIEW', icon: LayoutDashboard, href: '/dashboard', active: pathname === '/dashboard' },
+    { name: 'LATEST WEEKEND', icon: Flag, href: '/sessions/latest', active: pathname === '/sessions/latest' || pathname.endsWith('/overview') },
+    { name: 'DRIVER ANALYSIS', icon: User, href: '/analysis', active: pathname === '/analysis' },
+    { name: 'CAR SETUP', icon: Sliders, href: '/setup', active: pathname === '/setup' },
+    { name: 'STRATEGY TOOL', icon: Brain, href: '/predictions', active: pathname === '/predictions' },
+    { name: 'PIT WALL', icon: Headphones, href: '/pitwall', active: pathname === '/pitwall' },
   ]
 
   return (
@@ -71,7 +73,7 @@ export default function Sidebar() {
       {/* Navigation Links */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
         {navItems.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = item.active
           return (
             <Link 
               key={item.name} 

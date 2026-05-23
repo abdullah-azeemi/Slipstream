@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Calendar, ChevronDown, ChevronRight, Layers3, Radio, Flag, Clock3 } from 'lucide-react'
-import { getSessionRoute } from '@/lib/session-routing'
+import { getSessionOverviewRoute } from '@/lib/session-routing'
 import { sessionTypeLabel } from '@/lib/utils'
 import type { Session } from '@/types/f1'
 
@@ -397,7 +397,7 @@ export default function SessionsPage() {
                 )}
 
                 <Link
-                  href={getSessionRoute(summary.latest.session_key, summary.latest.session_type)}
+                  href={getSessionOverviewRoute(summary.latest.session_key)}
                   style={{
                     width: isMobile ? '42px' : '52px',
                     height: isMobile ? '42px' : '52px',
@@ -423,7 +423,7 @@ export default function SessionsPage() {
                   return (
                     <Link
                       key={session.session_key}
-                      href={getSessionRoute(session.session_key, session.session_type)}
+                      href={getSessionOverviewRoute(session.session_key)}
                       style={{
                         textDecoration: 'none',
                         color: '#14233C',

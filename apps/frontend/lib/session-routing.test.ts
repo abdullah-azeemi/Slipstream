@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { getSessionRoute, isPracticeSessionType } from '@/lib/session-routing'
+import {
+  getSessionOverviewRoute,
+  getSessionRoute,
+  getSessionTelemetryRoute,
+  isPracticeSessionType,
+} from '@/lib/session-routing'
 
 describe('session routing helpers', () => {
   it('recognizes free practice session types', () => {
@@ -20,5 +25,10 @@ describe('session routing helpers', () => {
     expect(getSessionRoute(11283, 'Q')).toBe('/sessions/11283')
     expect(getSessionRoute(11284, 'SQ')).toBe('/sessions/11284')
     expect(getSessionRoute(11285, 'R')).toBe('/sessions/11285')
+  })
+
+  it('builds overview and telemetry routes explicitly', () => {
+    expect(getSessionOverviewRoute(11286)).toBe('/sessions/11286/overview')
+    expect(getSessionTelemetryRoute(11287)).toBe('/sessions/11287/telemetry')
   })
 })

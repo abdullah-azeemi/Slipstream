@@ -71,6 +71,33 @@ const CIRCUIT_IMAGE_MAP: Array<[string, string]> = [
   ['Abu Dhabi', 'https://images.unsplash.com/photo-1509804428544-c2f9298e62a4?w=1200&q=85'],
 ]
 
+const CIRCUIT_NAME_MAP: Array<[string, string]> = [
+  ['Australian', 'Albert Park Circuit'],
+  ['Chinese', 'Shanghai International Circuit'],
+  ['Japanese', 'Suzuka Circuit'],
+  ['Bahrain', 'Bahrain International Circuit'],
+  ['Saudi', 'Jeddah Corniche Circuit'],
+  ['Miami', 'Miami International Autodrome'],
+  ['Emilia Romagna', 'Autodromo Enzo e Dino Ferrari'],
+  ['Monaco', 'Circuit de Monaco'],
+  ['Spanish', 'Circuit de Barcelona-Catalunya'],
+  ['Canadian', 'Circuit Gilles Villeneuve'],
+  ['Austrian', 'Red Bull Ring'],
+  ['British', 'Silverstone Circuit'],
+  ['Belgian', 'Circuit de Spa-Francorchamps'],
+  ['Hungarian', 'Hungaroring'],
+  ['Dutch', 'Circuit Zandvoort'],
+  ['Italian', 'Autodromo Nazionale Monza'],
+  ['Azerbaijan', 'Baku City Circuit'],
+  ['Singapore', 'Marina Bay Street Circuit'],
+  ['United States', 'Circuit of the Americas'],
+  ['Mexico', 'Autodromo Hermanos Rodriguez'],
+  ['São Paulo', 'Interlagos'],
+  ['Las Vegas', 'Las Vegas Strip Circuit'],
+  ['Qatar', 'Lusail International Circuit'],
+  ['Abu Dhabi', 'Yas Marina Circuit'],
+]
+
 export function getCircuitImage(gpName: string): string {
   if (!gpName) return 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=85'
   const match = CIRCUIT_IMAGE_MAP.find(([key]) =>
@@ -79,6 +106,14 @@ export function getCircuitImage(gpName: string): string {
   return match
     ? match[1]
     : 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=85'
+}
+
+export function getCircuitName(gpName: string): string | null {
+  if (!gpName) return null
+  const match = CIRCUIT_NAME_MAP.find(([key]) =>
+    gpName.toLowerCase().includes(key.toLowerCase())
+  )
+  return match?.[1] ?? null
 }
 
 /** Abbreviation for session type */

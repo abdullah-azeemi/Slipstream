@@ -1,5 +1,6 @@
 import React from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import {
   Thermometer,
   Wind,
@@ -131,7 +132,7 @@ export default async function DashboardPage() {
 
         <div style={{
           position: 'relative',
-          height: 400,
+          minHeight: 400,
           borderRadius: 24,
           overflow: 'hidden',
           boxShadow: '0 20px 40px -12px rgba(0,0,0,0.1)'
@@ -187,7 +188,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 24, border: '1px solid #F1F5F9' }}>
+        <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 24, border: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ fontSize: 13, fontWeight: 900, color: '#0F172A', marginBottom: 24, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             SESSION CONDITIONS
           </h3>
@@ -197,6 +198,47 @@ export default async function DashboardPage() {
             <ConditionCard icon={Wind} label="AIR TEMP" value={sessionWeather?.air_temperature ? `${sessionWeather.air_temperature}°C` : 'N/A'} color="#10B981" />
             <ConditionCard icon={Droplets} label="HUMIDITY" value={sessionWeather?.humidity ? `${sessionWeather.humidity}%` : 'N/A'} color="#0EA5E9" />
             <ConditionCard icon={Sun} label="RAINFALL" value={sessionWeather?.rainfall ? 'WET' : 'DRY'} color="#F59E0B" />
+          </div>
+
+          <div style={{
+            marginTop: 18,
+            paddingTop: 18,
+            borderTop: '1px solid #F1F5F9',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Quick Access
+              </div>
+            </div>
+            <Link
+              href="/sessions/latest"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                textDecoration: 'none',
+                background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(241,245,251,0.98) 100%)',
+                border: '1px solid rgba(226,232,240,0.92)',
+                borderRadius: 16,
+                padding: '14px 16px',
+                color: '#0F172A',
+                boxShadow: '0 10px 28px rgba(24,39,75,0.06)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Open Latest Weekend
+                </div>
+                <div style={{ marginTop: 4, color: '#64748B', fontSize: 12 }}>
+                  Race, quali, and practice summary with direct analysis actions.
+                </div>
+              </div>
+              <span style={{ fontSize: 18, color: '#94A3B8' }}>→</span>
+            </Link>
           </div>
         </div>
       </div>

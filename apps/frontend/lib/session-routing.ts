@@ -7,3 +7,11 @@ export function getSessionRoute(sessionKey: number, sessionType: string): string
     ? `/sessions/${sessionKey}/telemetry`
     : `/sessions/${sessionKey}`
 }
+
+export function getSessionOverviewRoute(sessionKey: number): string {
+  return `/sessions/${sessionKey}/overview`
+}
+
+export function getSessionTelemetryRoute(sessionKey: number): string {
+  return `/sessions/${sessionKey}/telemetry`
+}

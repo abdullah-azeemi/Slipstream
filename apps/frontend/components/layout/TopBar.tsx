@@ -9,9 +9,26 @@ export default function TopBar() {
   const pathname = usePathname()
 
   const navItems = [
-    { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Season Calendar', href: '/schedule' },
-    { name: 'Archive', href: '/sessions' },
+    {
+      name: 'Dashboard',
+      href: '/dashboard',
+      active: pathname === '/dashboard',
+    },
+    {
+      name: 'Latest Weekend',
+      href: '/sessions/latest',
+      active: pathname === '/sessions/latest' || pathname.endsWith('/overview'),
+    },
+    {
+      name: 'Season Calendar',
+      href: '/schedule',
+      active: pathname === '/schedule',
+    },
+    {
+      name: 'Archive',
+      href: '/sessions',
+      active: pathname === '/sessions' || (pathname.startsWith('/sessions/') && pathname !== '/sessions/latest' && !pathname.endsWith('/overview')),
+    },
   ]
 
   return (
@@ -44,9 +61,9 @@ export default function TopBar() {
         </Link>
 
         {/* Desktop Nav */}
-        <div className="topbar-nav-links" style={{ display: 'flex', gap: 32 }}>
+          <div className="topbar-nav-links" style={{ display: 'flex', gap: 32 }}>
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive = item.active
             return (
               <Link
                 key={item.name}

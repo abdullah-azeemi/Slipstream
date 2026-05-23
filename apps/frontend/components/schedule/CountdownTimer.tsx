@@ -5,9 +5,10 @@ import React, { useState, useEffect } from 'react'
 interface CountdownTimerProps {
   targetDate: string
   sessionName?: string
+  variant?: 'dark' | 'light'
 }
 
-export default function CountdownTimer({ targetDate, sessionName }: CountdownTimerProps) {
+export default function CountdownTimer({ targetDate, sessionName, variant = 'dark' }: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState({
     days: '00', hours: '00', mins: '00', secs: '00'
   })
@@ -54,18 +55,27 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
     return () => clearInterval(interval)
   }, [targetDate])
 
+  const isLight = variant === 'light'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
       {sessionName && (
-        <span style={{ fontSize: '11px', color: '#A1A1AA', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '2px', fontFamily: 'monospace' }}>
+        <span style={{
+          fontSize: '11px',
+          color: isLight ? '#64748B' : '#A1A1AA',
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+          marginBottom: '2px',
+          fontFamily: 'monospace',
+        }}>
           {isLive ? 'LIVE NOW — ' : 'NEXT — '}{sessionName.toUpperCase()} {isLive && '•'}
         </span>
       )}
 
       {isLive ? (
         <div style={{
-          background: '#E8002D',
-          color: '#fff',
+          background: isLight ? '#FFF1F3' : '#E8002D',
+          color: isLight ? '#BE123C' : '#fff',
           fontSize: '14px',
           fontWeight: 800,
           padding: '6px 14px',
@@ -75,9 +85,15 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
           alignItems: 'center',
           gap: '8px',
           letterSpacing: '0.05em',
-          boxShadow: '0 0 15px rgba(232,0,45,0.4)'
+          boxShadow: isLight ? 'none' : '0 0 15px rgba(232,0,45,0.4)',
+          border: isLight ? '1px solid rgba(244,63,94,0.18)' : 'none',
         }}>
-          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff' }} />
+          <div style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: isLight ? '#E11D48' : '#fff',
+          }} />
           SESSION LIVE
         </div>
       ) : (
@@ -89,8 +105,8 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
             { label: 'SEC', value: timeLeft.secs, isRed: true }
           ].map((unit, idx) => (
             <div key={idx} className="countdown-unit" style={{
-              background: 'rgba(21, 21, 24, 0.8)',
-              backdropFilter: 'blur(4px)',
+              background: isLight ? '#FFFFFF' : 'rgba(21, 21, 24, 0.8)',
+              backdropFilter: isLight ? 'none' : 'blur(4px)',
               borderRadius: '8px',
               padding: '8px 10px',
               minWidth: '54px',
@@ -98,13 +114,14 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              border: isLight ? '1px solid rgba(203,213,225,0.92)' : '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: isLight ? '0 8px 18px rgba(24,39,75,0.06)' : 'none',
             }}>
               <span className="countdown-value" style={{
                 fontSize: '18px',
                 fontWeight: 800,
                 fontFamily: 'Rajdhani, sans-serif',
-                color: unit.isRed ? '#E80020' : '#FFFFFF',
+                color: unit.isRed ? '#E80020' : (isLight ? '#14233C' : '#FFFFFF'),
                 lineHeight: 1
               }}>
                 {unit.value}
@@ -112,7 +129,7 @@ export default function CountdownTimer({ targetDate, sessionName }: CountdownTim
               <span style={{
                 fontSize: '8px',
                 fontWeight: 600,
-                color: '#A1A1AA',
+                color: isLight ? '#94A3B8' : '#A1A1AA',
                 marginTop: '2px',
                 letterSpacing: '0.05em'
               }}>
