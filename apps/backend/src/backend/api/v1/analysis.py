@@ -1986,7 +1986,6 @@ def driver_compare_stats(session_key: int):
         + brake-evidence filter (the previous approach).
         """
         import numpy as np
-        import math
 
         if len(samples) < 20:
             return []
@@ -2498,7 +2497,7 @@ def generate_insights(driver_keys: list, drivers: dict, matched_corners: list) -
     exit_delta = s0["avg_exit_speed_kmh"] - s1["avg_exit_speed_kmh"]
     if abs(exit_delta) > 2:
         faster_exit = abbr0 if exit_delta > 0 else abbr1
-        slower_exit = abbr1 if exit_delta > 0 else abbr0
+       
         insights.append(
             {
                 "id": "exit_speed",
@@ -2776,7 +2775,6 @@ def quali_speed(session_key: int):
 
     # Find pole and compute gaps
     pole_lap   = speed_trap[0]["lap_time_ms"] if speed_trap else None
-    max_speed_st = max((r["speed_st"] or 0) for r in speed_trap) if speed_trap else None
 
     for i, r in enumerate(speed_trap):
         r["gap_to_pole_ms"] = None if i == 0 else (
