@@ -1,7 +1,96 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
 import { Zap, Brain, Globe, Activity } from 'lucide-react'
+
+function LandingHeroMedia() {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [shouldRenderVideo, setShouldRenderVideo] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+    const syncMotionPreference = () => {
+      setShouldRenderVideo(!mediaQuery.matches)
+    }
+
+    syncMotionPreference()
+    mediaQuery.addEventListener('change', syncMotionPreference)
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncMotionPreference)
+    }
+  }, [])
+
+  useEffect(() => {
+    const video = videoRef.current
+
+    if (!video || !shouldRenderVideo) {
+      setVideoReady(false)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void video.play().catch(() => {})
+          return
+        }
+
+        video.pause()
+      },
+      { threshold: 0.35 },
+    )
+
+    observer.observe(video)
+
+    return () => {
+      observer.disconnect()
+      video.pause()
+    }
+  }, [shouldRenderVideo])
+
+  return (
+    <>
+      <Image
+        src="/LandingPage3-poster.jpg"
+        alt="Pitwall landing page hero"
+        fill
+        priority
+        sizes="(max-width: 768px) 100vw, 1000px"
+        style={{ objectFit: 'cover' }}
+      />
+      {shouldRenderVideo ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          poster="/LandingPage3-poster.jpg"
+          aria-hidden="true"
+          onCanPlay={() => setVideoReady(true)}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: videoReady ? 1 : 0,
+            transition: 'opacity 220ms ease',
+          }}
+        >
+          <source src="/LandingPage3.webm" type="video/webm" />
+          <source src="/LandingPage3.mp4" type="video/mp4" />
+        </video>
+      ) : null}
+    </>
+  )
+}
 
 export default function LandingPage() {
   return (
@@ -32,21 +121,7 @@ export default function LandingPage() {
           boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.12)',
           background: '#F1F5F9',
         }}>
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          >
-            <source src="/LandingPage3.mp4" type="video/mp4" />
-          </video>
+          <LandingHeroMedia />
         </div>
 
         {/* Hero Text Content */}

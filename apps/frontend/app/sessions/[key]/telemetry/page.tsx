@@ -10,6 +10,7 @@ import {
   reconcileSelectedDrivers,
   type QualiSegmentsData,
 } from '@/lib/telemetry-quali'
+import { createHoverClearController } from '@/lib/hover-clear'
 import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
 import RaceAnalysis from '@/components/analysis/RaceAnalysis'
@@ -855,6 +856,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const trackRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartMeasureRef = useRef<HTMLDivElement | null>(null)
+  const hoverClearControllerRef = useRef<ReturnType<typeof createHoverClearController> | null>(null)
 
   const segmentEntries = getSegmentEntries(qualiSegments, selectedSegment)
   const segmentDriverNumbers = getSegmentDriverNumbers(segmentEntries)
@@ -1043,6 +1045,17 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       active = false
     }
   }, [sessionKey, selected, selectedKey])
+
+  useEffect(() => {
+    hoverClearControllerRef.current = createHoverClearController(() => {
+      setTooltipNx(null)
+      setTooltipData(null)
+    })
+
+    return () => {
+      hoverClearControllerRef.current?.dispose()
+    }
+  }, [])
 
   const driverData: DriverRenderData[] = selected.map(dn => {
     const interp = telData.get(dn)
@@ -1272,6 +1285,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!telemetryReady || !driverData.length) return
+    hoverClearControllerRef.current?.cancel()
     const rect = e.currentTarget.getBoundingClientRect()
     const cW = rect.width - PAD.left - PAD.right
     if (cW <= 0) return
@@ -1290,7 +1304,9 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     })
   }, [driverData, telemetryReady])
 
-  const handleMouseLeave = useCallback(() => { setTooltipNx(null); setTooltipData(null) }, [])
+  const handleMouseLeave = useCallback(() => {
+    hoverClearControllerRef.current?.schedule()
+  }, [])
 
   const toggleDriver = (dn: number) => {
     if (isQualifying && qualiSegments?.segments && !segmentDriverNumbers.has(dn)) return

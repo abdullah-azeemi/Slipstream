@@ -25,16 +25,43 @@ log = structlog.get_logger()
 
 AUTO_INGEST_LOCK_ID = 48219031
 
-# Sessions to ingest per race weekend — order matters (FP before Q before R)
-SESSION_TYPES = [
-    ("FP1", False),    # Practice 1 — lap times only, no telemetry
-    ("FP2", False),   # Practice 2 — lap times only, no telemetry
-    ("FP3", False),   # Practice 3 — lap times only, no telemetry
-    ("Q",   True),    # Qualifying — with telemetry for speed traces
-    ("R",   False),   # Race — lap times only
+CONVENTIONAL_SESSIONS = [
+    ("FP1", False),
+    ("FP2", False),
+    ("FP3", False),
+    ("Q", False),
+    ("R", False),
 ]
 
-CURRENT_YEAR = datetime.now().year
+SPRINT_SESSIONS = [
+    ("FP1", False),
+    ("Q", False),
+    ("SQ", False),
+    ("SS", False),
+    ("R", False),
+]
+
+FASTF1_SESSION_LOOKUP = {
+    "FP1": "Practice 1",
+    "FP2": "Practice 2",
+    "FP3": "Practice 3",
+    "Q": "Qualifying",
+    "SQ": "Sprint Qualifying",
+    "SS": "Sprint",
+    "R": "Race",
+}
+
+CLI_SESSION_MAP = {
+    "FP1": "FP1",
+    "FP2": "FP2",
+    "FP3": "FP3",
+    "Q": "Q",
+    "SQ": "SQ",
+    "SS": "S",
+    "R": "R",
+}
+
+SPRINT_EVENT_FORMATS = {"sprint", "sprint_qualifying", "sprint_shootout"}
 
 
 def _database_url() -> str:
@@ -109,6 +136,7 @@ def get_fastf1_schedule(year: int) -> list[dict]:
                 "gp_name":    str(event["EventName"]),
                 "country":    str(event.get("Country", "")),
                 "date_start": event.get("EventDate"),
+                "event_format": str(event.get("EventFormat", "")).lower(),
             })
         return events
     except Exception as e:
@@ -116,7 +144,13 @@ def get_fastf1_schedule(year: int) -> list[dict]:
         return []
 
 
-def session_has_completed(event: dict, session_type: str) -> bool:
+def sessions_for_event(event: dict) -> list[tuple[str, bool]]:
+    if event.get("event_format") in SPRINT_EVENT_FORMATS:
+        return SPRINT_SESSIONS
+    return CONVENTIONAL_SESSIONS
+
+
+def session_has_completed(year: int, event: dict, session_type: str) -> bool:
     """
     Check if a session has likely completed based on event date.
     Uses a conservative buffer — only ingest sessions from events
@@ -126,17 +160,12 @@ def session_has_completed(event: dict, session_type: str) -> bool:
 
     try:
         import fastf1
-        year  = CURRENT_YEAR
         event_obj = fastf1.get_event(year, event["round"])
 
-        if session_type in ("FP1", "FP2", "FP3"):
-            session_date = event_obj.get_session(session_type).date
-        elif session_type in ("Q", "SQ"):
-            session_date = event_obj.get_session("Qualifying").date
-        elif session_type == "R":
-            session_date = event_obj.get_session("Race").date
-        else:
+        fastf1_session_name = FASTF1_SESSION_LOOKUP.get(session_type)
+        if not fastf1_session_name:
             return False
+        session_date = event_obj.get_session(fastf1_session_name).date
 
         if session_date is None:
             return False
@@ -171,13 +200,7 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
     Run the ingest_session script for a single session.
     Returns True if successful.
     """
-    # Map session type to FastF1 session name
-    session_map = {
-        "FP1": "FP1", "FP2": "FP2", "FP3": "FP3",
-        "Q":   "Q",   "SQ":  "SQ",
-        "R":   "R",   "S":   "Sprint",
-    }
-    session_name = session_map.get(session_type, session_type)
+    session_name = CLI_SESSION_MAP.get(session_type, session_type)
 
     # Strip " Grand Prix" suffix for the CLI argument
     gp_short = gp_name.replace(" Grand Prix", "").replace(" ePrix", "")
@@ -216,6 +239,7 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
 
 
 def run_once() -> bool:
+    current_year = datetime.now(timezone.utc).year
     engine = create_engine(_database_url())
     lock_acquired = False
 
@@ -234,10 +258,10 @@ def run_once() -> bool:
     ingested = get_ingested_sessions(engine)
     try:
         log.info("auto_ingest.start",
-                 year=CURRENT_YEAR,
+                 year=current_year,
                  already_ingested=len(ingested))
 
-        schedule = get_fastf1_schedule(CURRENT_YEAR)
+        schedule = get_fastf1_schedule(current_year)
         if not schedule:
             log.warning("auto_ingest.no_schedule")
             return False
@@ -249,21 +273,21 @@ def run_once() -> bool:
         for event in schedule:
             gp_name = event["gp_name"]
 
-            for session_type, _ in SESSION_TYPES:
-                key = (CURRENT_YEAR, gp_name, session_type)
+            for session_type, _ in sessions_for_event(event):
+                key = (current_year, gp_name, session_type)
 
                 # Skip if already in DB
                 if key in ingested:
                     continue
 
                 # Skip if session hasn't completed yet
-                if not session_has_completed(event, session_type):
+                if not session_has_completed(current_year, event, session_type):
                     log.info("auto_ingest.not_ready",
                              gp=gp_name, session=session_type)
                     continue
 
                 # Ingest it
-                success = ingest_session(CURRENT_YEAR, gp_name, session_type)
+                success = ingest_session(current_year, gp_name, session_type)
                 if success:
                     new_sessions += 1
                     ingested.add(key)   # prevent re-attempting in same run
@@ -278,7 +302,7 @@ def run_once() -> bool:
 
         if new_sessions > 0:
             if latest_gp_ingested:
-                deleted = purge_practice_sessions(engine, CURRENT_YEAR, latest_gp_ingested)
+                deleted = purge_practice_sessions(engine, current_year, latest_gp_ingested)
                 log.info("auto_ingest.practice_purged", gp=latest_gp_ingested, deleted=deleted)
             # Retrain ML model if new race weekends were added
             log.info("auto_ingest.retraining_model")

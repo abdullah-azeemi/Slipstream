@@ -715,8 +715,8 @@ def compute_weekend_inputs_used(engine, gp_name: str, year: int) -> dict:
         rows = conn.execute(
             text("""
             SELECT
-                s.session_type,
-                s.session_key,
+                session_type,
+                session_key,
                 COUNT(l.lap_number) AS lap_count,
                 MAX(s.date_start) AS date_start
             FROM sessions s
