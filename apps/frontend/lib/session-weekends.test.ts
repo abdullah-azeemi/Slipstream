@@ -14,7 +14,7 @@ const baseSession = {
   country: 'Australia',
   session_name: 'Session',
   drivers: [],
-} as const
+}
 
 function makeSession(overrides: Partial<Session> & Pick<Session, 'session_key' | 'year' | 'gp_name' | 'session_type'>): Session {
   return {
