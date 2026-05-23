@@ -230,6 +230,7 @@ export default function RaceAnalysis({
   const [undercut,    setUndercut]    = useState<UndercutRow[]>([])
   const [fastestLaps, setFastestLaps] = useState<FastestLapRow[]>([])
   const [loading,     setLoading]     = useState(false)
+  const [isMobile,    setIsMobile]    = useState(false)
 
   // Single hovered lap drives ALL charts simultaneously
   const [hovLap, setHovLap] = useState<number | null>(null)
@@ -268,8 +269,12 @@ export default function RaceAnalysis({
 
   useEffect(() => {
     if (allDrivers.length >= 2)
-       
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.map(d => d.driver_number).join(',')])
 
@@ -613,9 +618,9 @@ export default function RaceAnalysis({
               <span>Select up to 4 drivers</span>
             </div>
           </div>
-          <div style={{ minWidth: '280px', flex: '1 1 320px' }}>
-            <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.12em', marginBottom: '10px', textAlign: 'right' }}>DRIVERS (MAX 4)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }}>
+          <div style={{ minWidth: isMobile ? '100%' : '280px', flex: isMobile ? '1 1 100%' : '1 1 320px', marginTop: isMobile ? '12px' : 0 }}>
+            <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.12em', marginBottom: '10px', textAlign: isMobile ? 'left' : 'right' }}>DRIVERS (MAX 4)</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
           {allDrivers.map(d => {
             const isSel  = selected.includes(d.driver_number)
             const colour = teamColour(d.team_colour, d.team_name)
@@ -644,7 +649,7 @@ export default function RaceAnalysis({
 
       {!loading && (
         <>
-          <div className="race-analysis-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, 0.9fr)', gap: '18px', alignItems: 'start' }}>
+          <div className="race-analysis-grid" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.65fr) minmax(280px, 0.9fr)', gap: '18px', alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div ref={lapCardRef}>
                 <Card style={{ overflow: 'hidden', padding: 0 }}>
@@ -655,7 +660,9 @@ export default function RaceAnalysis({
                       <div style={{ padding: '7px 12px', borderRadius: '999px', background: '#EEF3FB', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 700, color: TEXT_DIM }}>FULL SESSION</div>
                     </div>
                   </div>
-                  <canvas ref={lapRef} height={300} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <canvas ref={lapRef} height={isMobile ? 240 : 300} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </div>
                 </Card>
               </div>
               {lapTip && (
@@ -693,7 +700,9 @@ export default function RaceAnalysis({
                   <div style={{ padding: '18px 20px 8px' }}>
                     <SectionTitle title={`Gap to Leader${leaderboard[0] ? ` (${leaderboard[0].abbreviation})` : ''}`} subtitle="Seconds behind race leader · pit laps excluded · capped at 60s" />
                   </div>
-                  <canvas ref={gapRef} height={220} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <canvas ref={gapRef} height={isMobile ? 180 : 220} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </div>
                 </Card>
               </div>
               {gapTip && (
@@ -719,7 +728,9 @@ export default function RaceAnalysis({
                   <div style={{ padding: '18px 20px 8px' }}>
                     <SectionTitle title="Position Changes" subtitle="Full field · selected drivers highlighted" />
                   </div>
-                  <canvas ref={posRef} height={250} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <canvas ref={posRef} height={isMobile ? 200 : 250} style={{ display: 'block', width: isMobile ? '130%' : '100%', cursor: 'crosshair', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                  </div>
                 </Card>
               </div>
               {posTip && (
@@ -747,7 +758,7 @@ export default function RaceAnalysis({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                       <div>
                         <div style={{ fontSize: '12px', fontFamily: 'monospace', letterSpacing: '0.08em', color: '#' + overallFastest.team_colour }}>{overallFastest.abbreviation}</div>
-                        <div style={{ fontSize: '40px', lineHeight: 1.02, fontWeight: 900, letterSpacing: '-0.05em', marginTop: '8px' }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
+                        <div style={{ fontSize: isMobile ? '28px' : '40px', lineHeight: 1.02, fontWeight: 900, letterSpacing: '-0.05em', marginTop: '8px' }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
                       </div>
                       <div style={{ padding: '6px 10px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', fontSize: '11px', fontWeight: 700, color: '#B7C4DD' }}>LAP {overallFastest.lap_number}</div>
                     </div>

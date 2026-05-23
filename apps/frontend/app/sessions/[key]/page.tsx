@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { formatLapTime, formatGap, teamColour, sessionTypeLabel } from '@/lib/utils'
+import { getSessionRoute, isPracticeSessionType } from '@/lib/session-routing'
 import Link from 'next/link'
 import { ArrowLeft, Database, Activity } from 'lucide-react'
 
@@ -55,6 +56,7 @@ const C = {
 
 export default function SessionPage() {
   const params = useParams()
+  const router = useRouter()
   const keyStr = Array.isArray(params.key) ? params.key[0] : (params.key ?? '')
   const sessionKey = parseInt(keyStr)
 
@@ -93,6 +95,12 @@ export default function SessionPage() {
       .catch(() => { })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_key])
+
+  useEffect(() => {
+    if (session?.session_type && isPracticeSessionType(session.session_type)) {
+      router.replace(getSessionRoute(sessionKey, session.session_type))
+    }
+  }, [router, session?.session_type, sessionKey])
 
   // Step 3: load leaderboard data
   useEffect(() => {
@@ -133,6 +141,14 @@ export default function SessionPage() {
     return (
       <div style={{ padding: '48px', textAlign: 'center', color: '#E8002D', fontFamily: 'monospace' }}>
         Session not found
+      </div>
+    )
+  }
+
+  if (session.session_type && isPracticeSessionType(session.session_type)) {
+    return (
+      <div style={{ padding: '48px', textAlign: 'center', color: '#3F3F46', fontFamily: 'monospace', fontSize: '13px' }}>
+        Opening practice analysis...
       </div>
     )
   }
@@ -207,7 +223,7 @@ export default function SessionPage() {
               const isA = sib.session_key === sessionKey
               const sColor = SESSION_META[sib.session_type]?.color ?? C.textDim
               return (
-                <Link key={sib.session_key} href={`/sessions/${sib.session_key}`} style={{ textDecoration: 'none' }}>
+                <Link key={sib.session_key} href={getSessionRoute(sib.session_key, sib.session_type)} style={{ textDecoration: 'none' }}>
                   <div style={{
                     padding: '8px 16px', borderRadius: 12, border: `1px solid ${isA ? sColor : C.border}`,
                     background: isA ? `${sColor}12` : 'transparent', color: isA ? sColor : C.textMid,
@@ -313,4 +329,3 @@ export default function SessionPage() {
     </div>
   )
 }
-

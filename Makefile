@@ -110,6 +110,7 @@ seed:
 	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session R --skip-telemetry
 	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session FP2 --skip-telemetry
 
+
 # ── Development ───────────────────────────────────────────────────────────────
 
 dev:

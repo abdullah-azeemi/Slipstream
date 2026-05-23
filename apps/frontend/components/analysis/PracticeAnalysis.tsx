@@ -40,6 +40,18 @@ type DegStint = {
   laps: { lap_in_stint: number; lap_time_ms: number; delta_ms: number; tyre_life_laps: number | null }[]
 }
 
+type DegVisibleStint = DegStint & {
+  isPrimary: boolean
+  strokeStyle: 'solid' | 'dashed'
+}
+
+type DegPoint = {
+  x: number
+  y: number
+  stint: DegVisibleStint
+  lap: DegStint['laps'][number]
+}
+
 type CompoundTeam = {
   team_name: string
   team_colour: string
@@ -122,16 +134,27 @@ export default function PracticeAnalysis({
   const [compounds, setCompounds] = useState<CompoundTeam[]>([])
   const [sectors, setSectors] = useState<SectorDriver[]>([])
   const [loading, setLoading] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [activeDegCmp, setActiveDegCmp] = useState<string>('HARD')
   const [scatterTip, setScatterTip] = useState<{ x: number; y: number; lap: ScatterLap; gapMs: number } | null>(null)
+  const [degTip, setDegTip] = useState<{ x: number; y: number; stint: DegVisibleStint; lap: DegStint['laps'][number] } | null>(null)
 
   const scatterRef = useRef<HTMLCanvasElement | null>(null)
   const degRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const degCanvasWrapRef = useRef<HTMLDivElement | null>(null)
 
   const scatterGeomRef = useRef<{
     laps: (ScatterLap & { gap_ms: number })[]
     xMin: number; xMax: number; yMax: number; W: number; H: number
+  } | null>(null)
+  const degGeomRef = useRef<{
+    points: DegPoint[]
+    xMax: number
+    yMin: number
+    yMax: number
+    W: number
+    H: number
   } | null>(null)
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -139,6 +162,11 @@ export default function PracticeAnalysis({
   useEffect(() => {
     if (allDrivers.length >= 2 && selected.length === 0)
       setSelected([allDrivers[0].driver_number, allDrivers[1].driver_number])
+
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers.length])
 
@@ -195,6 +223,30 @@ export default function PracticeAnalysis({
       s3: phases['middle']?.best_s3 || phases['early']?.best_s3 || 0,
     }
   }, [selected, scatter, compoundDelta, sectors])
+
+  const activeDegStints = useMemo<DegVisibleStint[]>(() => {
+    const selectedOrder = new Map(selected.map((driverNumber, index) => [driverNumber, index]))
+    const stints = (tyreDeg[activeDegCmp] ?? []).filter(stint => selected.includes(stint.driver_number))
+
+    const sorted = [...stints].sort((a, b) => {
+      const driverOrder = (selectedOrder.get(a.driver_number) ?? 99) - (selectedOrder.get(b.driver_number) ?? 99)
+      if (driverOrder !== 0) return driverOrder
+      const lapDelta = b.laps.length - a.laps.length
+      if (lapDelta !== 0) return lapDelta
+      return a.stint_num - b.stint_num
+    })
+
+    const primaryAssigned = new Set<number>()
+    return sorted.map(stint => {
+      const isPrimary = !primaryAssigned.has(stint.driver_number)
+      if (isPrimary) primaryAssigned.add(stint.driver_number)
+      return {
+        ...stint,
+        isPrimary,
+        strokeStyle: isPrimary ? 'solid' : 'dashed',
+      }
+    })
+  }, [activeDegCmp, selected, tyreDeg])
 
   // ── Draw: Gap to Best (Scatter but styled as line if comparable) ───────────
 
@@ -302,57 +354,173 @@ export default function PracticeAnalysis({
     else setScatterTip(null)
   }, [])
 
-  // ── Draw: Tyre Regression (Thermal Decay Style) ───────────────────────────
+  // ── Draw: Tyre Regression (Normalized Stint Overlay) ──────────────────────
 
   useEffect(() => {
     const canvas = degRef.current
     if (!canvas) return
-    const stints = (tyreDeg[activeDegCmp] ?? []).filter(s => selected.includes(s.driver_number))
-    const W = (containerRef.current?.clientWidth ?? 1200) * 0.45
-    const H = 240
+    const stints = activeDegStints
+    const W = Math.max((degCanvasWrapRef.current?.clientWidth ?? 0) - 4, 320)
+    const H = 260
     const ctx = clearCanvas(canvas, W, H)
+    degGeomRef.current = null
     if (!stints.length) return
 
-    const maxLaps = Math.max(...stints.map(s => s.laps.length))
+    const maxLapInStint = Math.max(...stints.flatMap(stint => stint.laps.map(lap => lap.lap_in_stint)))
     const allDeltas = stints.flatMap(s => s.laps.map(l => l.delta_ms))
-    const yMax = Math.max(...allDeltas, 1000)
+    let yMin = Math.min(...allDeltas, 0)
+    let yMax = Math.max(...allDeltas, 0)
+    if (yMin === yMax) {
+      yMin -= 200
+      yMax += 200
+    }
 
-    const barW = (W - PAD.left - PAD.right) / maxLaps - 6
-    const toY = (d: number) => H - PAD.bottom - (d / yMax) * (H - PAD.top - PAD.bottom)
+    const deltaPad = Math.max((yMax - yMin) * 0.12, 120)
+    yMin -= deltaPad
+    yMax += deltaPad
 
-    stints.forEach((stint, si) => {
-      const col = '#' + stint.team_colour
-      ctx.globalAlpha = si === 0 ? 1 : 0.4
-      stint.laps.forEach((l, i) => {
-        const x = PAD.left + (i * (barW + 6))
-        const y = toY(l.delta_ms)
-        const h = H - PAD.bottom - y
+    const cW = W - PAD.left - PAD.right
+    const cH = H - PAD.top - PAD.bottom
+    const toX = (lapInStint: number) => PAD.left + (lapInStint / Math.max(maxLapInStint, 1)) * cW
+    const toY = (delta: number) => PAD.top + ((yMax - delta) / Math.max(yMax - yMin, 1)) * cH
 
-        const grad = ctx.createLinearGradient(0, y, 0, H - PAD.bottom)
-        grad.addColorStop(0, col); grad.addColorStop(1, col + '44')
+    const ticks = 5
+    for (let idx = 0; idx <= ticks; idx += 1) {
+      const ratio = idx / ticks
+      const value = yMax - ratio * (yMax - yMin)
+      const y = PAD.top + ratio * cH
+      const isZero = Math.abs(value) < 25
 
-        ctx.fillStyle = grad
-        ctx.beginPath(); ctx.roundRect(x, y, barW, h > 0 ? h : 2, 4); ctx.fill()
+      ctx.beginPath()
+      ctx.strokeStyle = isZero ? '#13233D44' : '#EEF3F9'
+      ctx.lineWidth = isZero ? 1.5 : 1
+      ctx.moveTo(PAD.left, y)
+      ctx.lineTo(PAD.left + cW, y)
+      ctx.stroke()
 
-        if (si === 0 && i === stint.laps.length - 1) {
-          ctx.fillStyle = col; ctx.font = 'bold 10px Inter'; ctx.textAlign = 'center'
-          ctx.fillText(`${(l.delta_ms / 1000).toFixed(2)}s`, x + barW / 2, y - 8)
+      ctx.fillStyle = TEXT_DIM
+      ctx.font = '500 10px Inter'
+      ctx.textAlign = 'right'
+      const labelValue = isZero ? 0 : value
+      const sign = labelValue > 0 ? '+' : ''
+      ctx.fillText(`${sign}${(labelValue / 1000).toFixed(2)}s`, PAD.left - 10, y + 3)
+    }
+
+    for (let lapIdx = 0; lapIdx <= maxLapInStint; lapIdx += 1) {
+      const x = toX(lapIdx)
+      ctx.beginPath()
+      ctx.strokeStyle = lapIdx === 0 ? '#D8E2F0' : '#F4F7FB'
+      ctx.lineWidth = 1
+      ctx.moveTo(x, PAD.top)
+      ctx.lineTo(x, PAD.top + cH)
+      ctx.stroke()
+    }
+
+    const degPoints: DegPoint[] = []
+
+    stints.forEach(stint => {
+      const col = teamColour(stint.team_colour, stint.team_name)
+      ctx.globalAlpha = stint.isPrimary ? 1 : 0.5
+      ctx.beginPath()
+      ctx.strokeStyle = col
+      ctx.lineWidth = stint.isPrimary ? 3 : 2
+      ctx.setLineDash(stint.strokeStyle === 'dashed' ? [7, 5] : [])
+
+      stint.laps.forEach((lap, index) => {
+        const x = toX(lap.lap_in_stint)
+        const y = toY(lap.delta_ms)
+        degPoints.push({ x, y, stint, lap })
+
+        if (index === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      })
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      stint.laps.forEach((lap, index) => {
+        const x = toX(lap.lap_in_stint)
+        const y = toY(lap.delta_ms)
+
+        ctx.beginPath()
+        ctx.arc(x, y, stint.isPrimary ? 4.5 : 3.5, 0, Math.PI * 2)
+        ctx.fillStyle = COMPOUND_COLOUR[activeDegCmp] ?? col
+        ctx.fill()
+        ctx.strokeStyle = col
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+
+        if (index === stint.laps.length - 1) {
+          ctx.fillStyle = col
+          ctx.font = '700 10px Inter'
+          ctx.textAlign = 'left'
+          ctx.fillText(
+            `${stint.abbreviation} ${stint.isPrimary ? '' : `S${stint.stint_num}`}`.trim(),
+            x + 8,
+            y - 6,
+          )
         }
       })
     })
     ctx.globalAlpha = 1
 
-    // Axis
-    ctx.fillStyle = TEXT_DIM; ctx.font = '500 10px Inter'; ctx.textAlign = 'left'
-    ctx.fillText('LAP TIME DELTA', PAD.left, PAD.top - 10)
-  }, [tyreDeg, activeDegCmp, selected])
+    for (let lapIdx = 0; lapIdx <= maxLapInStint; lapIdx += 1) {
+      const x = toX(lapIdx)
+      ctx.fillStyle = TEXT_DIM
+      ctx.font = '500 10px Inter'
+      ctx.textAlign = 'center'
+      ctx.fillText(String(lapIdx + 1), x, H - PAD.bottom + 18)
+    }
+
+    ctx.fillStyle = TEXT_DIM
+    ctx.font = '500 10px Inter'
+    ctx.textAlign = 'left'
+    ctx.fillText('DELTA TO FIRST CLEAN LAP', PAD.left, PAD.top - 12)
+    ctx.textAlign = 'center'
+    ctx.fillText('LAP IN STINT', PAD.left + cW / 2, H - 14)
+
+    degGeomRef.current = { points: degPoints, xMax: maxLapInStint, yMin, yMax, W, H }
+  }, [activeDegCmp, activeDegStints])
+
+  const handleDegMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const geom = degGeomRef.current
+    if (!geom) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const scaleX = rect.width / geom.W
+    const scaleY = rect.height / geom.H
+    const mx = (e.clientX - rect.left) / scaleX
+    const my = (e.clientY - rect.top) / scaleY
+
+    let nearest: DegPoint | null = null
+    let nearestDistance = 16
+
+    geom.points.forEach(point => {
+      const distance = Math.hypot(mx - point.x, my - point.y)
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearest = point
+      }
+    })
+
+    if (!nearest) {
+      setDegTip(null)
+      return
+    }
+
+    const point = nearest as DegPoint
+    setDegTip({
+      x: e.clientX + 16,
+      y: e.clientY - 20,
+      stint: point.stint,
+      lap: point.lap,
+    })
+  }, [])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ textAlign: 'center', padding: '100px', color: TEXT_DIM, fontFamily: 'Inter' }}>Initializing Dashboard...</div>
 
   return (
-    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: '24px', fontFamily: 'Inter, sans-serif' }}>
+    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: isMobile ? '12px' : '24px', fontFamily: 'Inter, sans-serif' }}>
 
       {/* ── Dashboard Header ─────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
@@ -372,18 +540,14 @@ export default function PracticeAnalysis({
               {session?.date_start ? new Date(session.date_start).toLocaleDateString() : 'Active Session'}
             </span>
           </div>
-          <h1 style={{ fontSize: '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
             GAP ANALYSIS
           </h1>
-        </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid #D9E3EF', background: '#fff', color: TEXT_DARK, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Export Data</button>
-          <button style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', background: '#E8002D', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(232,0,45,0.2)' }}>Overlay Session</button>
         </div>
       </div>
 
       {/* ── Driver Filter ────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#FFFFFF', padding: '12px 16px', borderRadius: '16px', border: '1px solid #D9E3EF', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px', background: '#FFFFFF', padding: '12px 16px', borderRadius: '16px', border: '1px solid #D9E3EF', alignItems: 'center' }}>
         <span style={{ fontSize: '11px', fontWeight: 700, color: TEXT_DIM, marginRight: '10px' }}>DRIVERS</span>
         {allDrivers.map(d => {
           const isSel = selected.includes(d.driver_number)
@@ -402,7 +566,7 @@ export default function PracticeAnalysis({
       </div>
 
       {/* ── Main Dashboard Grid ──────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', gap: '24px', marginBottom: '24px' }}>
 
         {/* Left Col: Gap Analysis Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px', position: 'relative' }}>
@@ -417,7 +581,9 @@ export default function PracticeAnalysis({
               ))}
             </div>
           </div>
-          <canvas ref={scatterRef} style={{ display: 'block', width: '100%', height: '400px' }} onMouseMove={handleScatterMove} onMouseLeave={() => setScatterTip(null)} />
+          <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <canvas ref={scatterRef} style={{ display: 'block', width: isMobile ? '130%' : '100%', height: isMobile ? '300px' : '400px', minWidth: isMobile ? 600 : 'auto' }} onMouseMove={handleScatterMove} onMouseLeave={() => setScatterTip(null)} />
+          </div>
           {scatterTip && (
             <Tooltip x={scatterTip.x} y={scatterTip.y}>
               <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>LAP {scatterTip.lap.lap_number}</div>
@@ -442,14 +608,14 @@ export default function PracticeAnalysis({
       </div>
 
       {/* ── Sub Grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '24px', marginBottom: '24px' }}>
         <SectorCard label="SECTOR 1" time={selectedStats?.s1 || '—'} color="#10B981" delta={-150} />
         <SectorCard label="SECTOR 2" time={selectedStats?.s2 || '—'} color="#F59E0B" delta={40} />
         <SectorCard label="SECTOR 3" time={selectedStats?.s3 || '—'} color="#6E56CF" delta={210} />
       </div>
 
       {/* ── Bottom Grid ──────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: '24px' }}>
 
         {/* Strategy Analysis */}
         <div style={{ background: '#13233D', border: '1px solid #1A2E4B', borderRadius: '24px', padding: '24px', color: '#fff', boxShadow: '0 8px 32px rgba(19,35,61,0.2)' }}>
@@ -479,9 +645,14 @@ export default function PracticeAnalysis({
         {/* Tyre Degradation Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
+              <div style={{ marginTop: '6px', fontSize: '11px', color: TEXT_DIM, fontWeight: 600 }}>
+                Normalized to the first clean lap of each stint. Solid lines are each driver&apos;s primary long run; dashed lines show extra stints.
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {Object.keys(tyreDeg).map(c => (
+              {Object.keys(tyreDeg).sort().map(c => (
                 <button key={c} onClick={() => setActiveDegCmp(c)} style={{
                   padding: '4px 12px', borderRadius: '20px', border: '1px solid #D9E3EF',
                   background: activeDegCmp === c ? '#13233D' : '#fff', color: activeDegCmp === c ? '#fff' : TEXT_DIM,
@@ -490,7 +661,39 @@ export default function PracticeAnalysis({
               ))}
             </div>
           </div>
-          <canvas ref={degRef} style={{ display: 'block', width: '100%', height: '240px' }} />
+          <div ref={degCanvasWrapRef} style={{ position: 'relative', width: '100%' }}>
+            {activeDegStints.length ? (
+              <canvas
+                ref={degRef}
+                style={{ display: 'block', width: '100%', height: '260px' }}
+                onMouseMove={handleDegMove}
+                onMouseLeave={() => setDegTip(null)}
+              />
+            ) : (
+              <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_DIM, fontSize: '13px', fontWeight: 600 }}>
+                No comparable long-run stints available for this compound and driver selection.
+              </div>
+            )}
+          </div>
+          {degTip && (
+            <Tooltip x={degTip.x} y={degTip.y}>
+              <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>
+                {degTip.stint.abbreviation} · STINT {degTip.stint.stint_num}
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 900, color: TEXT_DARK }}>
+                {degTip.lap.delta_ms >= 0 ? '+' : ''}{(degTip.lap.delta_ms / 1000).toFixed(3)}s
+              </div>
+              <div style={{ fontSize: '12px', color: TEXT_DIM, fontWeight: 700 }}>
+                Lap {degTip.lap.lap_in_stint + 1} of stint
+              </div>
+              <div style={{ fontSize: '12px', color: TEXT_DIM }}>
+                Actual pace {formatLapTime(degTip.lap.lap_time_ms)}
+              </div>
+              <div style={{ fontSize: '12px', color: TEXT_DIM }}>
+                Tyre life {degTip.lap.tyre_life_laps ?? '—'}
+              </div>
+            </Tooltip>
+          )}
         </div>
       </div>
 

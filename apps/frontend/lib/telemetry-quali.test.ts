@@ -4,6 +4,7 @@ import {
   getSegmentDriverNumbers,
   getSegmentEntries,
   getSegmentLapByDriver,
+  getQualifyingAdvancePosition,
   getSegmentSummary,
   reconcileSelectedDrivers,
   type QualiSegmentsData,
@@ -49,10 +50,22 @@ describe('telemetry qualifying helpers', () => {
   })
 
   it('builds a summary with leader and cutoff context', () => {
-    const summary = getSegmentSummary('Q1', getSegmentEntries(qualiSegments, 'Q1'))
+    const summary = getSegmentSummary('Q1', getSegmentEntries(qualiSegments, 'Q1'), 2025)
 
     expect(summary.label).toBe('Full qualifying field')
     expect(summary.leader?.driver_number).toBe(12)
     expect(summary.cutoff).toBeNull()
+  })
+
+  it('uses the old qualifying cutoffs through 2025', () => {
+    expect(getQualifyingAdvancePosition(2025, 'Q1')).toBe(15)
+    expect(getQualifyingAdvancePosition(2025, 'Q2')).toBe(10)
+    expect(getQualifyingAdvancePosition(2025, 'Q3')).toBeNull()
+  })
+
+  it('uses the expanded Q1 cutoff from 2026 onward', () => {
+    expect(getQualifyingAdvancePosition(2026, 'Q1')).toBe(16)
+    expect(getQualifyingAdvancePosition(2026, 'Q2')).toBe(10)
+    expect(getQualifyingAdvancePosition(2026, 'Q3')).toBeNull()
   })
 })

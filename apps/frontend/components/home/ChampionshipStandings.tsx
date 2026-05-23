@@ -212,7 +212,7 @@ function DriverRow({ driver, imageUrl }: { driver: DriverStanding, imageUrl?: st
 
       {/* Points */}
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>{driver.points}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em' }}>{driver.points}</span>
       </div>
 
       <style jsx>{`
@@ -249,7 +249,7 @@ function ConstructorRow({ constructor }: { constructor: ConstructorStanding }) {
         <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase' }}>{constructor.team_name}</span>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>{constructor.points}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em' }}>{constructor.points}</span>
       </div>
     </div>
   )

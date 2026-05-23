@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True
-    auto_ingest_on_startup: bool = False
-    auto_ingest_interval_minutes: int = 360
+    auto_ingest_on_startup: bool = True
+    auto_ingest_interval_minutes: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",

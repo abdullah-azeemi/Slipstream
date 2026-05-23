@@ -50,7 +50,8 @@ export default function PerformanceMatrix({
       borderRadius: '24px',
       padding: '24px',
       boxShadow: '0 8px 30px rgba(0,0,0,0.03)',
-      width: '320px',
+      width: '100%',
+      maxWidth: '340px',
       display: 'flex',
       flexDirection: 'column',
       gap: '20px'

@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Slipstream Frontend
 
-## Getting Started
+Next.js app for Slipstream's race, qualifying, and practice analysis experience.
 
-First, run the development server:
+## What lives here
+
+- `app/page.tsx` - home dashboard and standings
+- `app/sessions/[key]` - session detail views
+- `app/sessions/[key]/telemetry` - qualifying telemetry, sector cards, performance matrix, braking analysis, and insight summary
+- `app/predictions` - ML prediction surface
+- `components/analysis` - race, practice, and braking analysis panels
+- `components/telemetry` - telemetry-specific UI pieces
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) after the dev server starts.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Useful checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm lint
+pnpm build
+```
 
-## Learn More
+## Telemetry UI notes
 
-To learn more about Next.js, take a look at the following resources:
+- Qualifying telemetry is segment-aware and supports `Q1`, `Q2`, and `Q3`
+- Up to four drivers can be compared at once
+- The telemetry page includes:
+  - speed, throttle, brake, gear, RPM, and DRS traces
+  - an interactive track map with braking markers
+  - sector cards and lap comparison panels
+  - a compact performance matrix
+  - braking analysis for entry and exit comparison
+  - a short insight card for quick takeaways
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Related docs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Root README](/Users/abdullahmusharaf/Desktop/F1/Pitwall/README.md)
+- [Qualifying telemetry concept](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/concepts/qualifying-telemetry.md)

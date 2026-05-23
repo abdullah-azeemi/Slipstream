@@ -125,6 +125,19 @@ That means:
 
 This prevents a common UX bug where a user thinks they are viewing `Q2` but the app is silently still showing a `Q3` lap.
 
+## Corner and braking comparison
+
+The qualifying telemetry page now includes a compact corner-analysis stack alongside the sector cards.
+
+That stack is intentionally designed to help users compare driver style, not just raw lap time:
+
+- a performance matrix for sector pace and top speed
+- a theoretical lap card for the best combined sectors
+- a braking analysis panel that shows corner entry and exit behaviour on the circuit
+- a short insight card that summarizes the biggest visible differences between the selected drivers
+
+The braking panel uses the same selected drivers as the telemetry comparison, so it stays aligned with the lap data already pinned by `Q1`, `Q2`, or `Q3`.
+
 ## Why this was worth the complexity
 
 The qualifying telemetry view is only trustworthy if the whole chain agrees:
@@ -153,14 +166,14 @@ Do not assume the frontend is wrong before verifying which lap numbers the backe
 
 ## Related code
 
-- [analysis.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/backend/src/backend/api/v1/analysis.py)
-- [telemetry.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/backend/src/backend/api/v1/telemetry.py)
-- [page.tsx](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/frontend/app/sessions/[key]/telemetry/page.tsx)
-- [telemetry-quali.ts](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/frontend/lib/telemetry-quali.ts)
-- [fastf1_client.py](/Users/abdullahmusharaf/Desktop/F1/Slipstream/packages/ingestion/src/ingestion/fastf1_client.py)
+- [analysis.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/backend/src/backend/api/v1/analysis.py)
+- [telemetry.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/backend/src/backend/api/v1/telemetry.py)
+- [page.tsx](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/frontend/app/sessions/[key]/telemetry/page.tsx)
+- [telemetry-quali.ts](/Users/abdullahmusharaf/Desktop/F1/Pitwall/apps/frontend/lib/telemetry-quali.ts)
+- [fastf1_client.py](/Users/abdullahmusharaf/Desktop/F1/Pitwall/packages/ingestion/src/ingestion/fastf1_client.py)
 
 ## Related docs
 
-- [docs/data-model.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/data-model.md)
-- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/docs/ingestion.md)
-- [README.md](/Users/abdullahmusharaf/Desktop/F1/Slipstream/README.md)
+- [docs/data-model.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/data-model.md)
+- [docs/ingestion.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/ingestion.md)
+- [README.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/README.md)
