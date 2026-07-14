@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # How many rows to insert at once (batching is faster than one-by-one)
     db_batch_size: int = 500
 
+    # Raw telemetry can be expensive in hosted Postgres. Keep "database" for
+    # local/Timescale workflows, or use "files" to store compressed lap traces
+    # outside Postgres and keep only metadata in the DB.
+    telemetry_storage_mode: str = "database"
+    telemetry_artifact_dir: str = "./telemetry_artifacts"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

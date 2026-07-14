@@ -92,7 +92,24 @@ CREATE TABLE IF NOT EXISTS telemetry (
     drs             INTEGER,
     x_pos           DOUBLE PRECISION,
     y_pos           DOUBLE PRECISION,
+    sample_order    INTEGER,
     recorded_at     TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_artifacts (
+    id              SERIAL PRIMARY KEY,
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number   INTEGER NOT NULL,
+    lap_number      INTEGER NOT NULL,
+    storage_key     TEXT NOT NULL,
+    storage_backend TEXT NOT NULL DEFAULT 'local',
+    format          TEXT NOT NULL DEFAULT 'json.gz',
+    sample_count    INTEGER NOT NULL,
+    size_bytes      INTEGER NOT NULL,
+    checksum_sha256 TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_telemetry_artifact_lap
+        UNIQUE (session_key, driver_number, lap_number)
 );
 
 CREATE TABLE IF NOT EXISTS race_results (
@@ -113,6 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
     ON lap_times (driver_number, lap_number);
 CREATE INDEX IF NOT EXISTS idx_telemetry_session_driver
     ON telemetry (session_key, driver_number);
+CREATE INDEX IF NOT EXISTS idx_telemetry_artifacts_session_driver
+    ON telemetry_artifacts (session_key, driver_number);
 """
 
 
@@ -152,6 +171,7 @@ def _create_tables(db_engine):
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS race_results CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS telemetry_artifacts CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS lap_times CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS drivers CASCADE;"))

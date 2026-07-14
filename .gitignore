@@ -12,6 +12,7 @@ __pycache__/
 
 # FastF1 cache 
 fastf1_cache/
+telemetry_artifacts/
 
 # ML artifacts ──────────────────────────────────────
 mlruns/

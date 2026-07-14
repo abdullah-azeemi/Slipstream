@@ -80,6 +80,18 @@ Includes sampled per-distance/per-time telemetry points used for:
 - throttle / brake overlays
 - telemetry stats
 
+In hosted low-storage mode, raw samples are written as compressed telemetry
+artifacts instead:
+
+- set `TELEMETRY_STORAGE_MODE=files`
+- set `TELEMETRY_ARTIFACT_DIR` to the artifact root
+- metadata is stored in `telemetry_artifacts`
+- old raw rows for that session are deleted from `telemetry`
+
+The backend telemetry API checks the database first, then falls back to the
+artifact metadata and compressed file. Frontend callers do not need to know
+which storage mode was used.
+
 ### Weather
 
 Session-level weather summary is written to `sessions`.
@@ -98,6 +110,7 @@ Why:
 
 - qualifying comparison needs rich telemetry
 - storing every qualifying lap's telemetry would be much larger with little UI benefit
+- storing selected traces as artifacts keeps hosted Postgres small
 
 ### Race (`R`)
 

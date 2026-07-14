@@ -73,9 +73,14 @@ export const telemetryApi = {
     ),
   stats: (key: number, drivers?: number[]) => {
     const q = drivers?.length ? `?drivers=${drivers.join(',')}` : ''
-    return get<import('@/types/f1').DriverTelemetryStats[]>(
+    // The API returns `max_speed`; the UI reads `max_speed_kmh`. Normalise here
+    // so the top-speed (tunnel) column populates instead of showing "—".
+    return get<(import('@/types/f1').DriverTelemetryStats & { max_speed?: number })[]>(
       `/api/v1/sessions/${key}/telemetry/stats${q}`
-    )
+    ).then(rows => rows.map(r => ({
+      ...r,
+      max_speed_kmh: r.max_speed_kmh ?? r.max_speed ?? 0,
+    })))
   },
 
 }

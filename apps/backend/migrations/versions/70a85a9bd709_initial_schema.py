@@ -15,8 +15,37 @@ depends_on = None
 def upgrade() -> None:
 
     # ── Extensions ────────────────────────────────────────────────────────────
-    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
-    op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
+    # Keep extensions opportunistic so this schema can run on plain managed
+    # Postgres providers. Local TimescaleDB still gets hypertables; hosted
+    # Neon/Supabase-style databases can continue with ordinary tables.
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_available_extensions
+                WHERE name = 'timescaledb'
+            ) THEN
+                CREATE EXTENSION IF NOT EXISTS timescaledb;
+            END IF;
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE NOTICE 'TimescaleDB unavailable; continuing with plain Postgres.';
+        END $$;
+    """)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_available_extensions
+                WHERE name = 'pgcrypto'
+            ) THEN
+                CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            END IF;
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE NOTICE 'pgcrypto unavailable; gen_random_uuid may already be built in.';
+        END $$;
+    """)
 
     # ── sessions ──────────────────────────────────────────────────────────────
     # One row per F1 session (race, qualifying, practice).
@@ -91,21 +120,28 @@ def upgrade() -> None:
         );
     """)
 
-    # Convert to hypertable — this is the TimescaleDB magic line.
-    # chunk_time_interval = 7 days means one partition per week.
+    # Convert to hypertable when TimescaleDB is installed. Hosted Postgres
+    # providers such as Neon/Supabase may not allow the extension, so the base
+    # schema must still work as ordinary PostgreSQL.
     op.execute("""
-        SELECT create_hypertable(
-            'lap_times',
-            'recorded_at',
-            chunk_time_interval => INTERVAL '7 days',
-            if_not_exists => TRUE
-        );
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+                PERFORM create_hypertable(
+                    'lap_times',
+                    'recorded_at',
+                    chunk_time_interval => INTERVAL '7 days',
+                    if_not_exists => TRUE
+                );
+            END IF;
+        END $$;
     """)
 
     # ── telemetry ─────────────────────────────────────────────────────────────
     # High-frequency per-car data: speed, throttle, brake, gear every ~100ms.
     # One race = ~500,000 rows. A season = ~10 million rows.
-    # MUST be a hypertable or queries become unusably slow.
+    # Prefer a hypertable locally, but hosted Postgres can still run this as a
+    # normal table when raw telemetry is moved to object/file storage.
     op.execute("""
         CREATE TABLE IF NOT EXISTS telemetry (
             session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
@@ -125,12 +161,17 @@ def upgrade() -> None:
     """)
 
     op.execute("""
-        SELECT create_hypertable(
-            'telemetry',
-            'recorded_at',
-            chunk_time_interval => INTERVAL '1 day',
-            if_not_exists => TRUE
-        );
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+                PERFORM create_hypertable(
+                    'telemetry',
+                    'recorded_at',
+                    chunk_time_interval => INTERVAL '1 day',
+                    if_not_exists => TRUE
+                );
+            END IF;
+        END $$;
     """)
 
     # ── race_results ──────────────────────────────────────────────────────────
@@ -156,7 +197,7 @@ def upgrade() -> None:
     # measure and improve model accuracy over time.
     op.execute("""
         CREATE TABLE IF NOT EXISTS ml_predictions (
-            id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
             prediction_type TEXT NOT NULL,
             driver_number   INTEGER,

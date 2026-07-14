@@ -12,7 +12,11 @@ GET /api/v1/sessions/<key>/telemetry/stats?drivers=44,63
 """
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
+from backend.config import settings
 from backend.extensions import engine
+import gzip
+import json
+from pathlib import Path
 
 telemetry_bp = Blueprint("telemetry", __name__)
 
@@ -51,7 +55,29 @@ def _get_telemetry_samples(conn, session_key: int, driver_number: int, lap_numbe
           AND lap_number    = :ln
         ORDER BY distance_m ASC NULLS LAST
     """), {"sk": session_key, "dn": driver_number, "ln": lap_number}).mappings().all()
-    return [dict(r) for r in rows]
+    samples = [dict(r) for r in rows]
+    if samples:
+        return samples
+
+    artifact = conn.execute(text("""
+        SELECT storage_key, storage_backend, format
+        FROM telemetry_artifacts
+        WHERE session_key   = :sk
+          AND driver_number = :dn
+          AND lap_number    = :ln
+        LIMIT 1
+    """), {"sk": session_key, "dn": driver_number, "ln": lap_number}).mappings().first()
+    if not artifact:
+        return []
+    if artifact["storage_backend"] != "local" or artifact["format"] != "json.gz":
+        return []
+
+    path = Path(settings.telemetry_artifact_dir) / artifact["storage_key"]
+    if not path.exists():
+        return []
+    with gzip.open(path, "rb") as f:
+        payload = json.loads(f.read().decode("utf-8"))
+    return payload.get("samples", [])
 
 
 def _resolve_telemetry_lap(
@@ -72,51 +98,46 @@ def _resolve_telemetry_lap(
         # If the exact pinned lap has no telemetry, stay as close as possible
         # to that lap first so Q1/Q2/Q3 toggles don't all collapse to the same
         # global fastest telemetry lap.
-        nearby_row = conn.execute(text("""
+        nearby_rows = conn.execute(text("""
             SELECT lt.lap_number
             FROM lap_times lt
             WHERE lt.session_key   = :sk
               AND lt.driver_number = :dn
               AND lt.lap_time_ms   IS NOT NULL
               AND lt.deleted       = FALSE
-              AND EXISTS (
-                  SELECT 1
-                  FROM telemetry t
-                  WHERE t.session_key   = lt.session_key
-                    AND t.driver_number = lt.driver_number
-                    AND t.lap_number    = lt.lap_number
-              )
             ORDER BY ABS(lt.lap_number - :pinned_ln) ASC, lt.lap_time_ms ASC, lt.lap_number ASC
-            LIMIT 1
-        """), {"sk": session_key, "dn": driver_number, "pinned_ln": pinned_lap_number}).first()
-        if nearby_row:
-            return nearby_row[0]
+            LIMIT 8
+        """), {"sk": session_key, "dn": driver_number, "pinned_ln": pinned_lap_number}).scalars().all()
+        for lap_number in nearby_rows:
+            if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
+                return lap_number
 
-    row = conn.execute(text("""
+    rows = conn.execute(text("""
         SELECT lt.lap_number
         FROM lap_times lt
         WHERE lt.session_key   = :sk
           AND lt.driver_number = :dn
           AND lt.lap_time_ms   IS NOT NULL
           AND lt.deleted       = FALSE
-          AND EXISTS (
-              SELECT 1
-              FROM telemetry t
-              WHERE t.session_key   = lt.session_key
-                AND t.driver_number = lt.driver_number
-                AND t.lap_number    = lt.lap_number
-          )
         ORDER BY lt.lap_time_ms ASC, lt.lap_number ASC
-        LIMIT 1
-    """), {"sk": session_key, "dn": driver_number}).first()
-    return row[0] if row else None
+        LIMIT 8
+    """), {"sk": session_key, "dn": driver_number}).scalars().all()
+    for lap_number in rows:
+        if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
+            return lap_number
+    return None
 
 
 @telemetry_bp.get("/sessions/<int:session_key>/telemetry/<int:driver_number>")
 def driver_telemetry(session_key: int, driver_number: int):
     """Fastest lap telemetry for one driver."""
     with engine.connect() as conn:
-        lap_number = _get_fastest_lap_number(conn, session_key, driver_number)
+        lap_number = _resolve_telemetry_lap(
+            conn,
+            session_key,
+            driver_number,
+            _get_fastest_lap_number(conn, session_key, driver_number),
+        )
         if lap_number is None:
             return {"error": "No telemetry found"}, 404
 

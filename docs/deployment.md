@@ -6,7 +6,8 @@ Today that usually means:
 
 - backend on Railway
 - frontend on Vercel
-- Postgres on Railway
+- Postgres on Railway, Neon, or Supabase
+- optional compressed telemetry artifacts outside Postgres
 
 The most important deployment rule in this project is:
 
@@ -44,6 +45,12 @@ Responsible for:
 - schema changes
 - migration state
 - stored derived metadata such as `quali_segment`
+- compact analytics and artifact metadata
+
+The main database should stay relational. Keep `sessions`, `drivers`,
+`lap_times`, `race_results`, prediction rows, and telemetry summaries in
+Postgres. Raw telemetry can be stored outside the database when hosted storage
+is tight.
 
 ### Ingestion
 
@@ -100,12 +107,39 @@ Expected behavior after a correct deploy:
 Check:
 
 - `DATABASE_URL`
+- `TELEMETRY_ARTIFACT_DIR` if raw telemetry is stored as compressed artifacts
 - `ML_MODELS_DIR` if deployed predictions need persisted model files
 - `AUTO_INGEST_ENABLED` if you want to disable the built-in backend scheduler
 - `AUTO_INGEST_INTERVAL_MINUTES` to control how often production checks for new sessions
 - `REDIS_URL` if workers are in use
 - `KAFKA_BOOTSTRAP_SERVERS` if stream/worker features depend on it
 - `MLFLOW_TRACKING_URI` if training/registry behavior depends on it
+
+### Ingestion
+
+Check:
+
+- `DATABASE_URL`
+- `TELEMETRY_STORAGE_MODE`
+- `TELEMETRY_ARTIFACT_DIR`
+
+`TELEMETRY_STORAGE_MODE=database` keeps raw samples in the `telemetry` table.
+This is useful locally with TimescaleDB.
+
+`TELEMETRY_STORAGE_MODE=files` writes one compressed `json.gz` artifact per
+session/driver/lap and stores only metadata in `telemetry_artifacts`. This is
+the cheaper hosted mode for Neon/Supabase-style databases.
+
+Example hosted setting:
+
+```bash
+TELEMETRY_STORAGE_MODE=files
+TELEMETRY_ARTIFACT_DIR=/app/telemetry_artifacts
+```
+
+Railway files are not durable unless you attach a volume. Use this mode for
+testing or with a persistent volume first; move the artifact directory to object
+storage such as Cloudflare R2 when telemetry becomes a production feature.
 
 ### Frontend / Vercel
 

@@ -5,7 +5,11 @@ All inputs are plain dicts from fastf1_client (raw FastF1 values).
 This module handles all type conversion: Timedeltas to ms, NaN to None, etc.
 """
 from __future__ import annotations
+import gzip
+import hashlib
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from sqlalchemy import create_engine, text
 from ingestion.config import settings
@@ -267,12 +271,113 @@ _TEL_INSERT = """
 """
 
 
+def _telemetry_storage_mode() -> str:
+    mode = settings.telemetry_storage_mode.strip().lower()
+    return mode if mode in {"database", "files"} else "database"
+
+
+def _telemetry_storage_key(session_key: int, driver_number: int, lap_number: int) -> str:
+    return f"telemetry/session_{session_key}/driver_{driver_number}/lap_{lap_number}.json.gz"
+
+
+def _write_telemetry_artifact(
+    rows: list[dict],
+    session_key: int,
+    driver_number: int,
+    lap_number: int,
+) -> dict:
+    storage_key = _telemetry_storage_key(session_key, driver_number, lap_number)
+    path = Path(settings.telemetry_artifact_dir) / storage_key
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "session_key": session_key,
+        "driver_number": driver_number,
+        "lap_number": lap_number,
+        "samples": rows,
+    }
+    raw = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    with gzip.open(path, "wb") as f:
+        f.write(raw)
+
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {
+        "session_key": session_key,
+        "driver_number": driver_number,
+        "lap_number": lap_number,
+        "storage_key": storage_key,
+        "storage_backend": "local",
+        "format": "json.gz",
+        "sample_count": len(rows),
+        "size_bytes": path.stat().st_size,
+        "checksum_sha256": digest,
+    }
+
+
+def _load_telemetry_files(rows: list[dict], session_key: int) -> int:
+    engine = _get_engine()
+    grouped: dict[tuple[int, int], list[dict]] = {}
+    for i, row in enumerate(rows):
+        driver_number = _clean_int(row.get("driver_number"))
+        lap_number = _clean_int(row.get("lap_number"))
+        if driver_number is None or lap_number is None:
+            continue
+        sample = {
+            "distance_m": _clean_float(row.get("distance_m")),
+            "speed_kmh": _clean_float(row.get("speed_kmh")),
+            "throttle_pct": _clean_float(row.get("throttle_pct")),
+            "brake": bool(row.get("brake", False)),
+            "gear": _clean_int(row.get("gear")),
+            "rpm": _clean_float(row.get("rpm")),
+            "drs": _clean_int(row.get("drs")),
+            "x_pos": _clean_float(row.get("x_pos")),
+            "y_pos": _clean_float(row.get("y_pos")),
+            "sample_order": row.get("sample_order", i),
+        }
+        grouped.setdefault((driver_number, lap_number), []).append(sample)
+
+    artifacts = []
+    for (driver_number, lap_number), samples in grouped.items():
+        samples.sort(key=lambda s: (
+            s["distance_m"] is None,
+            s["distance_m"] if s["distance_m"] is not None else 0,
+            s["sample_order"],
+        ))
+        artifacts.append(_write_telemetry_artifact(samples, session_key, driver_number, lap_number))
+
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"), {"sk": session_key})
+        conn.execute(text("DELETE FROM telemetry WHERE session_key = :sk"), {"sk": session_key})
+        if artifacts:
+            conn.execute(text("""
+                INSERT INTO telemetry_artifacts (
+                    session_key, driver_number, lap_number,
+                    storage_key, storage_backend, format,
+                    sample_count, size_bytes, checksum_sha256
+                ) VALUES (
+                    :session_key, :driver_number, :lap_number,
+                    :storage_key, :storage_backend, :format,
+                    :sample_count, :size_bytes, :checksum_sha256
+                )
+            """), artifacts)
+
+    log.info("loader.telemetry_artifacts_loaded", artifacts=len(artifacts), samples=len(rows), session_key=session_key)
+    return len(rows)
+
+
 def load_telemetry(rows: list[dict], session_key: int) -> int:
     if not rows:
         return 0
+    if _telemetry_storage_mode() == "files":
+        return _load_telemetry_files(rows, session_key)
+
     now = datetime.now(timezone.utc)
     engine = _get_engine()
     with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"),
+            {"sk": session_key}
+        )
         conn.execute(
             text("DELETE FROM telemetry WHERE session_key = :sk"),
             {"sk": session_key}

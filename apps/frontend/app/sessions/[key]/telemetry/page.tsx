@@ -18,6 +18,7 @@ import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
 import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
 import CornerInsights from '@/components/analysis/CornerInsights'
 import QualiSpeedPanel from '@/components/telemetry/QualiSpeedPanel'
+import LapStory, { type LapStoryDriver } from '@/components/telemetry/LapStory'
 
 import type { InsightsData } from '@/components/analysis/BrakingAnalysis'
 
@@ -1072,6 +1073,22 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const hoverActive = Boolean(tooltipData?.values.length)
   const comparisonCountLabel = driverData.length > 0 ? `${driverData.length} drivers` : undefined
 
+  const lapStoryDrivers: LapStoryDriver[] = driverData.map(d => {
+    const dn = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
+    const st = dn !== undefined ? sectorTimes.get(dn) : undefined
+    return {
+      abbr: d.abbr,
+      colour: d.colour,
+      speed: d.interp.speed,
+      dist: d.interp.dist,
+      throttle: d.interp.throttle,
+      s1_ms: st?.s1_ms ?? null,
+      s2_ms: st?.s2_ms ?? null,
+      s3_ms: st?.s3_ms ?? null,
+      lapNumber: dn !== undefined ? (telLapNumbers.get(dn) ?? null) : null,
+    }
+  })
+
   const sectorWinners = (() => {
     if (driverData.length < 2) return []
     const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0)
@@ -1445,6 +1462,10 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     </div>
                   </div>
                 </Panel>
+
+                {driverData.length >= 2 && telemetryReady && (
+                  <LapStory drivers={lapStoryDrivers} isMobile={isMobile} />
+                )}
 
                 {driverData.length >= 2 ? (
                   telemetryReady ? (

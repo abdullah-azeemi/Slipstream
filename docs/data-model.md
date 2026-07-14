@@ -132,6 +132,37 @@ Why this table is special:
 - it is much larger than `lap_times`
 - it is used for rich comparison views, not as the default data source for every screen
 - Slipstream intentionally stores it selectively
+- hosted deployments can leave this table empty and serve raw traces from artifacts instead
+
+### `telemetry_artifacts`
+
+Purpose:
+
+- compact metadata pointing to raw telemetry stored outside Postgres
+- lets the API fetch a whole lap trace without keeping every sample row in the database
+
+Important columns:
+
+- `session_key`
+- `driver_number`
+- `lap_number`
+- `storage_key`
+- `storage_backend`
+- `format`
+- `sample_count`
+- `size_bytes`
+- `checksum_sha256`
+
+Current artifact format:
+
+- one compressed `json.gz` file per session/driver/lap
+- path shape: `telemetry/session_<session_key>/driver_<driver_number>/lap_<lap_number>.json.gz`
+
+Why this exists:
+
+- hosted Postgres limits are usually tight
+- raw telemetry is bulky and can be regenerated from public sources
+- AI and product views mostly need summaries, while charts need exact lap traces only on demand
 
 ### `race_results`
 
@@ -228,6 +259,7 @@ These are the tables you can keep for many seasons without much pain.
 Potentially large:
 
 - `telemetry`
+- raw telemetry artifacts outside the database
 
 Slipstream keeps telemetry smaller by storing only the laps that provide the most value for the UI.
 
@@ -238,6 +270,10 @@ Current policy for qualifying:
 - store telemetry for each driver's best `Q3` lap
 
 Not every qualifying lap gets telemetry.
+
+For cheap hosted deployments, set ingestion to `TELEMETRY_STORAGE_MODE=files`.
+That stores artifact metadata in `telemetry_artifacts`, deletes raw rows from
+`telemetry`, and keeps the public API shape unchanged.
 
 ## Which layers use which tables
 

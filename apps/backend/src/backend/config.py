@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # MLflow
     mlflow_tracking_uri: str = "http://localhost:5001"
 
+    # Raw telemetry artifacts. In cheap hosted deployments, Postgres stores
+    # only metadata while compressed lap traces live outside the DB.
+    telemetry_artifact_dir: str = "./telemetry_artifacts"
+
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True
     auto_ingest_on_startup: bool = True
