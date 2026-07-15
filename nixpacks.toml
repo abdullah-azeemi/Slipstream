@@ -1,7 +1,7 @@
 [phases.setup]
 nixPkgs = ["python311", "gcc"]
-nixLibs = ["stdenv.cc.cc.lib"]
-aptPkgs = ["libstdc++6"]
+nixLibs = ["stdenv.cc.cc.lib", "zlib"]
+aptPkgs = ["libstdc++6", "zlib1g", "libgomp1"]
 
 [phases.install]
 cmds = [

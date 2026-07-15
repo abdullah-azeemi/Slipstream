@@ -4,7 +4,7 @@ Requires the model to be trained first: uv run python -m ml.train
 """
 from flask import Blueprint, jsonify, redirect, url_for
 from sqlalchemy import text
-from backend.extensions import engine
+from backend import extensions
 
 predictions_bp = Blueprint("predictions", __name__)
 
@@ -16,7 +16,7 @@ def race_predictions(session_key: int):
     Returns predicted finishing order with win/podium probabilities + SHAP factors.
     """
     # Verify session exists and is qualifying
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         row = conn.execute(text("""
             SELECT session_type, gp_name, year
             FROM sessions WHERE session_key = :sk
@@ -51,7 +51,7 @@ def race_predictions(session_key: int):
             p["feature_streams"] = shap_entry["feature_streams"]
 
     # Add team colours from DB
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         drivers = conn.execute(text("""
             SELECT driver_number, team_colour, team_name
             FROM drivers WHERE session_key = :sk
@@ -78,7 +78,7 @@ def race_predictions(session_key: int):
         "podium_recall": model_metadata.get("cv_podium_recall_mean"),
         "podium_brier": model_metadata.get("cv_podium_brier_mean"),
     }
-    weekend_inputs = compute_weekend_inputs_used(engine, row[1], row[2])
+    weekend_inputs = compute_weekend_inputs_used(extensions.engine, row[1], row[2])
 
     return jsonify({
         "session_key": session_key,
@@ -109,7 +109,7 @@ def race_predictions(session_key: int):
 @predictions_bp.get("/predictions/latest")
 def latest_predictions():
     """Predictions for the most recent qualifying session."""
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         row = conn.execute(text("""
             SELECT session_key FROM sessions
             WHERE session_type = 'Q'
