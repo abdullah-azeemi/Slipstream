@@ -17,9 +17,32 @@ from backend.extensions import engine
 import gzip
 import json
 from pathlib import Path
+import io
 
 telemetry_bp = Blueprint("telemetry", __name__)
 
+def _r2_client():
+    """
+    Return a boto3 client for R2 (Cloudflare's S3-compatible object storage)."""
+    import boto3
+
+    return boto3.client(
+        "s3",
+        endpoint_url = settings.r2_endpoint_url,
+        aws_access_key_id = settings.r2_access_key_id,
+        aws_secret_access_key = settings.r2_secret_access_key,
+        region_name = "auto",
+    )
+
+def _read_parquet_samples(data: bytes)-> list[dict]:
+    """ Read telemetry samples from a Parquet file in memory and return as a list of dicts."""
+    import pyarrow.parquet as pq
+    table = pq.read_table(io.BytesIO(data))
+    return table.to_pylist()
+
+def _read_r2_parquet_artifact(storage_key: str) -> list[dict]:
+    obj = _r2_client().get_object(Bucket=settings.telemetry_artifact_bucket, Key=storage_key)
+    return _read_parquet_samples(obj["Body"].read())
 
 def _get_fastest_lap_number(conn, session_key: int, driver_number: int) -> int | None:
     """Return the lap_number of the driver's fastest clean lap."""
@@ -69,15 +92,26 @@ def _get_telemetry_samples(conn, session_key: int, driver_number: int, lap_numbe
     """), {"sk": session_key, "dn": driver_number, "ln": lap_number}).mappings().first()
     if not artifact:
         return []
-    if artifact["storage_backend"] != "local" or artifact["format"] != "json.gz":
-        return []
 
-    path = Path(settings.telemetry_artifact_dir) / artifact["storage_key"]
-    if not path.exists():
-        return []
-    with gzip.open(path, "rb") as f:
-        payload = json.loads(f.read().decode("utf-8"))
-    return payload.get("samples", [])
+
+    """
+        Read telemetry samples from an artifact file, either local or R2.
+    """
+    if artifact["storage_backend"] == "local" and artifact["format"] == "json.gz":
+        path = Path(settings.telemetry_artifact_dir) / artifact["storage_key"]
+        if not path.exists():
+            return []
+        with gzip.open(path, "rb") as f:
+            payload = json.loads(f.read().decode("utf-8"))
+        return payload.get("samples", [])
+    if artifact["storage_backend"] == "r2" and artifact["format"] == "parquet":
+        path = Path(settings.telemetry_artifact_dir) / artifact["storage_key"]
+        if not path.exists():
+            return []
+        return _read_parquet_samples(path.read_bytes())
+    if artifact["storage_backend"] == "r2" and artifact["format"] == "parquet":
+        return _read_r2_parquet_artifact(artifact["storage_key"])
+    return []
 
 
 def _resolve_telemetry_lap(

@@ -5,9 +5,7 @@ All inputs are plain dicts from fastf1_client (raw FastF1 values).
 This module handles all type conversion: Timedeltas to ms, NaN to None, etc.
 """
 from __future__ import annotations
-import gzip
 import hashlib
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
