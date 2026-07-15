@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
 
+    race_vector_index_dir: str = "./lancedb"
+    race_vector_table: str = "race_intelligence_events"
+
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True
     auto_ingest_on_startup: bool = True

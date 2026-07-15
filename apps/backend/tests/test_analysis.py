@@ -54,8 +54,11 @@ def test_quali_segments_uses_stored_quali_segment(client, db_engine):
             conn.execute(text("DELETE FROM sessions WHERE session_key = :sk"), {"sk": session_key})
 
 
-def test_race_intelligence_returns_derived_evidence(client, db_engine):
+def test_race_intelligence_returns_derived_evidence(client, db_engine, monkeypatch, tmp_path):
     session_key = 99997
+    from backend.config import settings
+
+    monkeypatch.setattr(settings, "race_vector_index_dir", str(tmp_path / "lancedb"))
 
     with db_engine.begin() as conn:
         conn.execute(text("""
@@ -123,6 +126,27 @@ def test_race_intelligence_returns_derived_evidence(client, db_engine):
         assert events_data["event_count"] == 2
         assert {event["event_type"] for event in events_data["events"]} == {"driver_score"}
         assert {event["payload"]["abbreviation"] for event in events_data["events"]} == {"HAM", "RUS"}
+
+        rebuild_response = client.post(
+            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/vector-index/rebuild"
+        )
+        rebuild_data = rebuild_response.get_json()
+
+        assert rebuild_response.status_code == 200
+        assert rebuild_data["indexed_events"] == refresh_data["event_count"]
+
+        search_response = client.get(
+            "/api/v1/analysis/race-intelligence/vector-search"
+            "?q=Hamilton clean pace medium stint&limit=5"
+        )
+        search_data = search_response.get_json()
+
+        assert search_response.status_code == 200
+        assert search_data["count"] > 0
+        assert any(
+            result["event_type"] in {"driver_score", "stint_summary", "insight"}
+            for result in search_data["results"]
+        )
     finally:
         with db_engine.begin() as conn:
             conn.execute(text("DELETE FROM race_intelligence_events WHERE session_key = :sk"), {"sk": session_key})

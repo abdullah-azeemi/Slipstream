@@ -3675,3 +3675,75 @@ def list_race_intelligence_events(session_key: int):
         "event_count": len(events),
         "events": events,
     })
+
+
+@analysis_bp.post("/sessions/<int:session_key>/analysis/race-intelligence/vector-index/rebuild")
+def rebuild_race_intelligence_vector_index(session_key: int):
+    from backend.race_vector_index import rebuild_session_index
+
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+                    SELECT
+                        id,
+                        session_key,
+                        event_type,
+                        event_key,
+                        driver_number,
+                        lap_number,
+                        payload
+                    FROM race_intelligence_events
+                    WHERE session_key = :sk
+                    ORDER BY event_type, event_key
+                """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
+
+    if not rows:
+        return {
+            "error": "No race intelligence events found. Refresh events before rebuilding LanceDB.",
+            "suggested_command": (
+                f"POST /api/v1/sessions/{session_key}/analysis/"
+                "race-intelligence/events/refresh"
+            ),
+        }, 404
+
+    count = rebuild_session_index([dict(row) for row in rows], session_key)
+
+    return jsonify({
+        "session_key": session_key,
+        "indexed_events": count,
+        "index": "lancedb",
+    })
+
+
+@analysis_bp.get("/analysis/race-intelligence/vector-search")
+def search_race_intelligence_vector_index():
+    from backend.race_vector_index import search_similar
+
+    query = request.args.get("q", "").strip()
+    event_type = request.args.get("type")
+    try:
+        limit = int(request.args.get("limit", "8"))
+    except ValueError:
+        return {"error": "limit must be an integer"}, 400
+
+    if not query:
+        return {"error": "q query parameter is required"}, 400
+
+    results = search_similar(
+        query=query,
+        limit=max(1, min(limit, 25)),
+        event_type=event_type,
+    )
+
+    return jsonify({
+        "query": query,
+        "event_type": event_type,
+        "count": len(results),
+        "results": results,
+    })
