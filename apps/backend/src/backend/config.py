@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Raw telemetry artifacts. In cheap hosted deployments, Postgres stores
     # only metadata while compressed lap traces live outside the DB.
     telemetry_artifact_dir: str = "./telemetry_artifacts"
+    telemetry_artifact_backend: str = "local"
+    telemetry_artifact_bucket: str = ""
+    r2_endpoint_url: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
 
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True

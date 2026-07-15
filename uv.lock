@@ -148,6 +148,34 @@ wheels = [
 ]
 
 [[package]]
+name = "boto3"
+version = "1.43.48"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+    { name = "jmespath" },
+    { name = "s3transfer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/bc/6b285efc5a7ebb27762f20d3fa2d78b8ff86d069d8eef343876d03466273/boto3-1.43.48.tar.gz", hash = "sha256:0077b3f38d47034f53ec68f3976f9d9beeabcc0faee7b1d6fa6b666e0852eca7", size = 112674, upload-time = "2026-07-14T19:29:57.742Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/ec/3e4bff3d696121631174471505a7669d9d22c183991b4dcc245101603cec/boto3-1.43.48-py3-none-any.whl", hash = "sha256:5866f8a99877342db130e7236a8048b63d3d8e74c46d4ef101771350019bd3df", size = 140032, upload-time = "2026-07-14T19:29:55.819Z" },
+]
+
+[[package]]
+name = "botocore"
+version = "1.43.48"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jmespath" },
+    { name = "python-dateutil" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6b/69/76c5576654c0982351a821c544042ccd7a25a060776453a3c15e0486e47e/botocore-1.43.48.tar.gz", hash = "sha256:4f60c1072fb529610359cdb6df92c59615d739df3b0a124091d3bbd28f7ea00c", size = 15700978, upload-time = "2026-07-14T19:29:45.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/b0/28d40443ed912260d55cf7a5d377378fc43e384627fd57b632472cbea7bf/botocore-1.43.48-py3-none-any.whl", hash = "sha256:cc9b4e925c1913d662194507f4f9b37aa744dcd2361af31c013672eafe824490", size = 15385380, upload-time = "2026-07-14T19:29:41.826Z" },
+]
+
+[[package]]
 name = "cachetools"
 version = "7.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1196,6 +1224,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "jmespath"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/59/322338183ecda247fb5d1763a6cbe46eff7222eaeebafd9fa65d4bf5cb11/jmespath-1.1.0.tar.gz", hash = "sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d", size = 27377, upload-time = "2026-01-22T16:35:26.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/2f/967ba146e6d58cf6a652da73885f52fc68001525b4197effc174321d70b4/jmespath-1.1.0-py3-none-any.whl", hash = "sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64", size = 20419, upload-time = "2026-01-22T16:35:24.919Z" },
 ]
 
 [[package]]
@@ -2275,83 +2312,6 @@ wheels = [
 ]
 
 [[package]]
-name = "slipstream-backend"
-version = "0.1.0"
-source = { editable = "apps/backend" }
-dependencies = [
-    { name = "alembic" },
-    { name = "celery", extra = ["redis"] },
-    { name = "flask" },
-    { name = "flask-cors" },
-    { name = "flask-socketio" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "redis" },
-    { name = "sqlalchemy" },
-    { name = "structlog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.13" },
-    { name = "celery", extras = ["redis"], specifier = ">=5.3" },
-    { name = "flask", specifier = ">=3.0" },
-    { name = "flask-cors", specifier = ">=6.0.2" },
-    { name = "flask-socketio", specifier = ">=5.3" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-settings", specifier = ">=2.3" },
-    { name = "redis", specifier = ">=5.0" },
-    { name = "sqlalchemy", specifier = ">=2.0" },
-    { name = "structlog", specifier = ">=24.0" },
-]
-
-[[package]]
-name = "slipstream-ingestion"
-version = "0.1.0"
-source = { editable = "packages/ingestion" }
-dependencies = [
-    { name = "fastf1" },
-    { name = "httpx" },
-    { name = "kafka-python-ng" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "structlog" },
-    { name = "tenacity" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastf1", specifier = ">=3.3" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "kafka-python-ng", specifier = ">=2.2" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-settings", specifier = ">=2.3" },
-    { name = "structlog", specifier = ">=24.0" },
-    { name = "tenacity", specifier = ">=8.3" },
-]
-
-[[package]]
-name = "slipstream-stream"
-version = "0.1.0"
-source = { editable = "packages/stream" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "quixstreams" },
-    { name = "structlog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-settings", specifier = ">=2.3" },
-    { name = "quixstreams", specifier = ">=2.6" },
-    { name = "structlog", specifier = ">=24.0" },
-]
-
-[[package]]
 name = "platformdirs"
 version = "4.9.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3259,6 +3219,18 @@ wheels = [
 ]
 
 [[package]]
+name = "s3transfer"
+version = "0.19.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/65/da/4bef7ce7bb989b222aa4785a413896dbec53306dfc59c6ce7d16a7ffbd6a/s3transfer-0.19.1.tar.gz", hash = "sha256:d3d6371dc3f1e5c5427b2b457bcf13bcf87bec334c95aed18642eae61f6926f3", size = 165354, upload-time = "2026-07-10T19:32:04.849Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/23/e84c64ad0e8bc59cd1b2ef98def848deff0ef3456c542afe74d51e9e8c85/s3transfer-0.19.1-py3-none-any.whl", hash = "sha256:d5fd7005ee39307455ad5f310b5ea67f4b1960d7fed5b3671ee50c249de675de", size = 90072, upload-time = "2026-07-10T19:32:03.673Z" },
+]
+
+[[package]]
 name = "scikit-learn"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3473,6 +3445,91 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d3/f9/b4bce2825b39b57760b361e6131a3dacee3d8951c58cb97ad120abb90317/slicer-0.0.8.tar.gz", hash = "sha256:2e7553af73f0c0c2d355f4afcc3ecf97c6f2156fcf4593955c3f56cf6c4d6eb7", size = 14894, upload-time = "2024-03-09T23:35:26.826Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/81/9ef641ff4e12cbcca30e54e72fb0951a2ba195d0cda0ba4100e532d929db/slicer-0.0.8-py3-none-any.whl", hash = "sha256:6c206258543aecd010d497dc2eca9d2805860a0b3758673903456b7df7934dc3", size = 15251, upload-time = "2024-03-09T07:03:07.708Z" },
+]
+
+[[package]]
+name = "slipstream-backend"
+version = "0.1.0"
+source = { editable = "apps/backend" }
+dependencies = [
+    { name = "alembic" },
+    { name = "boto3" },
+    { name = "celery", extra = ["redis"] },
+    { name = "flask" },
+    { name = "flask-cors" },
+    { name = "flask-socketio" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "redis" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.13" },
+    { name = "boto3", specifier = ">=1.34" },
+    { name = "celery", extras = ["redis"], specifier = ">=5.3" },
+    { name = "flask", specifier = ">=3.0" },
+    { name = "flask-cors", specifier = ">=6.0.2" },
+    { name = "flask-socketio", specifier = ">=5.3" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
+    { name = "pyarrow", specifier = ">=16.0" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.3" },
+    { name = "redis", specifier = ">=5.0" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "structlog", specifier = ">=24.0" },
+]
+
+[[package]]
+name = "slipstream-ingestion"
+version = "0.1.0"
+source = { editable = "packages/ingestion" }
+dependencies = [
+    { name = "boto3" },
+    { name = "fastf1" },
+    { name = "httpx" },
+    { name = "kafka-python-ng" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "structlog" },
+    { name = "tenacity" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.34" },
+    { name = "fastf1", specifier = ">=3.3" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "kafka-python-ng", specifier = ">=2.2" },
+    { name = "pyarrow", specifier = ">=16.0" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.3" },
+    { name = "structlog", specifier = ">=24.0" },
+    { name = "tenacity", specifier = ">=8.3" },
+]
+
+[[package]]
+name = "slipstream-stream"
+version = "0.1.0"
+source = { editable = "packages/stream" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "quixstreams" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.3" },
+    { name = "quixstreams", specifier = ">=2.6" },
+    { name = "structlog", specifier = ">=24.0" },
 ]
 
 [[package]]

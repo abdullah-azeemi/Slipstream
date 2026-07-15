@@ -37,8 +37,5 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
-# Claude.md
-CLAUDE.md
-agent.md
-ml-readme.md 
-pitwall-ml-performance-flow.png
+# Agent files
+docs/agent

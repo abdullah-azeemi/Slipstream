@@ -785,11 +785,11 @@ def build_feature_matrix() -> pd.DataFrame:
             SELECT
                 year,
                 gp_name,
-                date_start,
+                MIN(date_start) AS date_start,
                 MAX(CASE WHEN session_type = 'Q'  THEN session_key END) AS quali_key,
                 MAX(CASE WHEN session_type = 'R'  THEN session_key END) AS race_key
             FROM sessions
-            GROUP BY year, gp_name, date_start
+            GROUP BY year, gp_name
             HAVING
                 MAX(CASE WHEN session_type = 'Q' THEN session_key END) IS NOT NULL AND
                 MAX(CASE WHEN session_type = 'R' THEN session_key END) IS NOT NULL
@@ -823,6 +823,8 @@ def build_feature_matrix() -> pd.DataFrame:
         )
 
     df = pd.DataFrame(all_rows)
+    if df.empty:
+        df = pd.DataFrame(columns=FEATURE_COLS + [TARGET_COL, "abbreviation", "year", "driver_number"])
     log.info("feature.matrix_built", shape=df.shape, features=FEATURE_COLS)
     return df
 

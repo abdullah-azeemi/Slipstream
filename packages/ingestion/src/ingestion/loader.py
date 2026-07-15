@@ -277,7 +277,18 @@ def _telemetry_storage_mode() -> str:
 
 
 def _telemetry_storage_key(session_key: int, driver_number: int, lap_number: int) -> str:
-    return f"telemetry/session_{session_key}/driver_{driver_number}/lap_{lap_number}.json.gz"
+    return f"telemetry/session_{session_key}/driver_{driver_number}/lap_{lap_number}.parquet"
+
+def _r2_client():
+    import boto3
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.r2_endpoint_url,
+        aws_access_key_id=settings.r2_access_key_id,
+        aws_secret_access_key=settings.r2_secret_access_key,
+        region_name="auto",
+    )
 
 
 def _write_telemetry_artifact(
@@ -286,33 +297,42 @@ def _write_telemetry_artifact(
     driver_number: int,
     lap_number: int,
 ) -> dict:
+    import io
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
     storage_key = _telemetry_storage_key(session_key, driver_number, lap_number)
-    path = Path(settings.telemetry_artifact_dir) / storage_key
-    path.parent.mkdir(parents=True, exist_ok=True)
+    table = pa.Table.from_pylist(rows)
+    buf = io.BytesIO()
+    pq.write_table(table, buf, compression="zstd")
+    data = buf.getvalue()
+    digest = hashlib.sha256(data).hexdigest()
 
-    payload = {
-        "session_key": session_key,
-        "driver_number": driver_number,
-        "lap_number": lap_number,
-        "samples": rows,
-    }
-    raw = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
-    with gzip.open(path, "wb") as f:
-        f.write(raw)
+    if settings.telemetry_artifact_backend == "r2":
+        _r2_client().put_object(
+            Bucket=settings.telemetry_artifact_bucket,
+            Key= storage_key,
+            Body=data,
+            ContentType="application/vnd.apache.parquet",
+        )
+        storage_backend = "r2"
+    else:
+        path = Path(settings.telemetry_artifact_dir) / storage_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        storage_backend = "local"
 
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
     return {
         "session_key": session_key,
         "driver_number": driver_number,
         "lap_number": lap_number,
         "storage_key": storage_key,
-        "storage_backend": "local",
-        "format": "json.gz",
+        "storage_backend": storage_backend,
+        "format": "parquet",
         "sample_count": len(rows),
-        "size_bytes": path.stat().st_size,
+        "size_bytes": len(data),
         "checksum_sha256": digest,
     }
-
 
 def _load_telemetry_files(rows: list[dict], session_key: int) -> int:
     engine = _get_engine()

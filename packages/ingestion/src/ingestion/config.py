@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # outside Postgres and keep only metadata in the DB.
     telemetry_storage_mode: str = "database"
     telemetry_artifact_dir: str = "./telemetry_artifacts"
+    telemetry_artifact_backend: str = "local"
+    telemetry_artifact_bucket: str = ""
+    r2_endpoint_url: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
