@@ -715,8 +715,8 @@ def compute_weekend_inputs_used(engine, gp_name: str, year: int) -> dict:
         rows = conn.execute(
             text("""
             SELECT
-                session_type,
-                session_key,
+                s.session_type,
+                s.session_key,
                 COUNT(l.lap_number) AS lap_count,
                 MAX(s.date_start) AS date_start
             FROM sessions s
@@ -725,7 +725,7 @@ def compute_weekend_inputs_used(engine, gp_name: str, year: int) -> dict:
               AND s.year = :year
               AND s.session_type IN ('FP1', 'SQ', 'S', 'SS', 'Q')
             GROUP BY s.session_type, s.session_key
-            ORDER BY date_start ASC NULLS LAST
+            ORDER BY MAX(s.date_start) ASC NULLS LAST
         """),
             {"gp_name": gp_name, "year": year},
         ).mappings().all()
