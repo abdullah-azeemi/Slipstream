@@ -124,6 +124,20 @@ CREATE TABLE IF NOT EXISTS race_results (
     PRIMARY KEY (session_key, driver_number)
 );
 
+CREATE TABLE IF NOT EXISTS race_intelligence_events (
+    id              SERIAL PRIMARY KEY,
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    event_type      TEXT NOT NULL,
+    event_key       TEXT NOT NULL,
+    driver_number   INTEGER,
+    lap_number      INTEGER,
+    payload         JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_race_intelligence_event
+        UNIQUE (session_key, event_type, event_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_lap_times_session_driver
     ON lap_times (session_key, driver_number);
 CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
@@ -132,6 +146,10 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_session_driver
     ON telemetry (session_key, driver_number);
 CREATE INDEX IF NOT EXISTS idx_telemetry_artifacts_session_driver
     ON telemetry_artifacts (session_key, driver_number);
+CREATE INDEX IF NOT EXISTS idx_race_intelligence_events_session_type
+    ON race_intelligence_events (session_key, event_type);
+CREATE INDEX IF NOT EXISTS idx_race_intelligence_events_driver
+    ON race_intelligence_events (session_key, driver_number);
 """
 
 
@@ -170,6 +188,7 @@ def _create_tables(db_engine):
     # Tear down tables after the full test suite finishes.
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS race_intelligence_events CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS race_results CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry_artifacts CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry CASCADE;"))

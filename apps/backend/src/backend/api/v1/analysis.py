@@ -6,6 +6,8 @@ Practice   → long runs, tyre deg rate
 Race       → lap evolution, stint pace, position changes, sector stints
 """
 
+import json
+
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from backend.extensions import engine
@@ -2916,8 +2918,7 @@ def _stint_phase(index: int, total: int) -> str:
         return "middle"
     return "closing"
 
-@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence")
-def race_intelligence(session_key: int):
+def _build_race_intelligence_payload(session_key: int) -> dict | None:
     """
     Deterministic race-state summary for AI/report generation.
 
@@ -2941,7 +2942,7 @@ def race_intelligence(session_key: int):
             .first()
         )
         if not session:
-            return {"error": "Session not found"}, 404
+            return None
 
         driver_rows = (
             conn.execute(
@@ -3481,30 +3482,196 @@ def race_intelligence(session_key: int):
             "evidence": candidate,
         })
 
-    return jsonify(
-        {
-            "session": dict(session),
-            "driver_states": driver_states,
-            "stint_summaries": stint_summaries,
-            "compound_pace": compound_pace,
-            "stint_phase_summaries": stint_phase_summaries,
-            "battle_gaps": battle_gaps[-50:],
-            "undercut_candidates": undercut_candidates,
-            "driver_scores": driver_scores,
-            "insights": insights,
-            "metadata": {
-                "source": "lap_times",
-                "method": "deterministic_rules",
-                "llm_used": False,
-                "features": [
-                    "clean_pace",
-                    "stint_degradation",
-                    "compound_pace",
-                    "stint_phase_dropoff",
-                    "battle_gaps",
-                    "undercut_pressure",
-                    "driver_scores",
-                ],
-            },
-        }
-    )
+    return {
+        "session": dict(session),
+        "driver_states": driver_states,
+        "stint_summaries": stint_summaries,
+        "compound_pace": compound_pace,
+        "stint_phase_summaries": stint_phase_summaries,
+        "battle_gaps": battle_gaps[-50:],
+        "undercut_candidates": undercut_candidates,
+        "driver_scores": driver_scores,
+        "insights": insights,
+        "metadata": {
+            "source": "lap_times",
+            "method": "deterministic_rules",
+            "llm_used": False,
+            "features": [
+                "clean_pace",
+                "stint_degradation",
+                "compound_pace",
+                "stint_phase_dropoff",
+                "battle_gaps",
+                "undercut_pressure",
+                "driver_scores",
+            ],
+        },
+    }
+
+
+def _race_intelligence_events(payload: dict) -> list[dict]:
+    session_key = payload["session"]["session_key"]
+    events: list[dict] = []
+
+    def add_event(
+        event_type: str,
+        event_key: str,
+        event_payload: dict,
+        driver_number: int | None = None,
+        lap_number: int | None = None,
+    ) -> None:
+        events.append({
+            "session_key": session_key,
+            "event_type": event_type,
+            "event_key": event_key,
+            "driver_number": driver_number,
+            "lap_number": lap_number,
+            "payload": json.dumps(event_payload, sort_keys=True),
+        })
+
+    for item in payload["driver_states"]:
+        add_event(
+            "driver_state",
+            f"driver_{item['driver_number']}",
+            item,
+            driver_number=item["driver_number"],
+        )
+
+    for item in payload["driver_scores"]:
+        add_event(
+            "driver_score",
+            f"driver_{item['driver_number']}",
+            item,
+            driver_number=item["driver_number"],
+        )
+
+    for item in payload["stint_summaries"]:
+        add_event(
+            "stint_summary",
+            f"driver_{item['driver_number']}_stint_{item['stint']}_{item['compound']}",
+            item,
+            driver_number=item["driver_number"],
+            lap_number=item["start_lap"],
+        )
+
+    for item in payload["compound_pace"]:
+        add_event(
+            "compound_pace",
+            f"compound_{item['compound']}",
+            item,
+        )
+
+    for item in payload["battle_gaps"]:
+        add_event(
+            "battle_gap",
+            f"lap_{item['lap_number']}_{item['ahead']}_{item['behind']}",
+            item,
+            driver_number=item["behind_driver_number"],
+            lap_number=item["lap_number"],
+        )
+
+    for item in payload["undercut_candidates"]:
+        add_event(
+            "undercut_candidate",
+            f"lap_{item['lap_number']}_{item['ahead']}_{item['behind']}",
+            item,
+            lap_number=item["lap_number"],
+        )
+
+    for item in payload["insights"]:
+        add_event(
+            "insight",
+            item["id"],
+            item,
+        )
+
+    return events
+
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence")
+def race_intelligence(session_key: int):
+    payload = _build_race_intelligence_payload(session_key)
+    if payload is None:
+        return {"error": "Session not found"}, 404
+    return jsonify(payload)
+
+
+@analysis_bp.post("/sessions/<int:session_key>/analysis/race-intelligence/events/refresh")
+def refresh_race_intelligence_events(session_key: int):
+    payload = _build_race_intelligence_payload(session_key)
+    if payload is None:
+        return {"error": "Session not found"}, 404
+
+    events = _race_intelligence_events(payload)
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM race_intelligence_events WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        if events:
+            conn.execute(
+                text("""
+                    INSERT INTO race_intelligence_events (
+                        session_key, event_type, event_key,
+                        driver_number, lap_number, payload
+                    ) VALUES (
+                        :session_key, :event_type, :event_key,
+                        :driver_number, :lap_number, CAST(:payload AS JSONB)
+                    )
+                """),
+                events,
+            )
+
+    return jsonify({
+        "session_key": session_key,
+        "event_count": len(events),
+        "event_types": sorted({event["event_type"] for event in events}),
+    })
+
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence/events")
+def list_race_intelligence_events(session_key: int):
+    event_type = request.args.get("type")
+    params = {"sk": session_key}
+    event_filter = ""
+    if event_type:
+        event_filter = "AND event_type = :event_type"
+        params["event_type"] = event_type
+
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text(f"""
+                    SELECT
+                        id,
+                        session_key,
+                        event_type,
+                        event_key,
+                        driver_number,
+                        lap_number,
+                        payload,
+                        created_at,
+                        updated_at
+                    FROM race_intelligence_events
+                    WHERE session_key = :sk
+                      {event_filter}
+                    ORDER BY event_type, lap_number NULLS LAST, event_key
+                """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+
+    events = []
+    for row in rows:
+        event = dict(row)
+        event["created_at"] = event["created_at"].isoformat() if event["created_at"] else None
+        event["updated_at"] = event["updated_at"].isoformat() if event["updated_at"] else None
+        events.append(event)
+
+    return jsonify({
+        "session_key": session_key,
+        "event_count": len(events),
+        "events": events,
+    })

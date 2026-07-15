@@ -105,8 +105,27 @@ def test_race_intelligence_returns_derived_evidence(client, db_engine):
         assert data["driver_scores"][0]["abbreviation"] == "HAM"
         assert any(i["id"] == "compound_pace_reference" for i in data["insights"])
         assert any(g["ahead"] == "HAM" and g["behind"] == "RUS" for g in data["battle_gaps"])
+
+        refresh = client.post(f"/api/v1/sessions/{session_key}/analysis/race-intelligence/events/refresh")
+        refresh_data = refresh.get_json()
+
+        assert refresh.status_code == 200
+        assert refresh_data["event_count"] > 0
+        assert "driver_score" in refresh_data["event_types"]
+        assert "stint_summary" in refresh_data["event_types"]
+
+        events_response = client.get(
+            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/events?type=driver_score"
+        )
+        events_data = events_response.get_json()
+
+        assert events_response.status_code == 200
+        assert events_data["event_count"] == 2
+        assert {event["event_type"] for event in events_data["events"]} == {"driver_score"}
+        assert {event["payload"]["abbreviation"] for event in events_data["events"]} == {"HAM", "RUS"}
     finally:
         with db_engine.begin() as conn:
+            conn.execute(text("DELETE FROM race_intelligence_events WHERE session_key = :sk"), {"sk": session_key})
             conn.execute(text("DELETE FROM lap_times WHERE session_key = :sk"), {"sk": session_key})
             conn.execute(text("DELETE FROM drivers WHERE session_key = :sk"), {"sk": session_key})
             conn.execute(text("DELETE FROM sessions WHERE session_key = :sk"), {"sk": session_key})
