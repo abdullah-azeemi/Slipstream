@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
-from backend.extensions import engine
+from backend import extensions
 
 sessions_bp = Blueprint("sessions", __name__)
 
@@ -26,7 +26,7 @@ def list_sessions():
     so the home page hero shows the most recent qualifying.
     """
     try:
-        with engine.connect() as conn:
+        with extensions.engine.connect() as conn:
             rows = (
                 conn.execute(
                     text("""
@@ -61,7 +61,7 @@ def list_sessions():
 
 @sessions_bp.get("/sessions/<int:session_key>")
 def get_session(session_key: int):
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         row = (
             conn.execute(
                 text("""
@@ -115,7 +115,7 @@ def race_results(session_key: int):
     takes each driver's position on their final lap as finishing position.
     Falls back to total laps completed + cumulative time if position is null.
     """
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         # Check if position data exists
         has_position = conn.execute(
             text("""

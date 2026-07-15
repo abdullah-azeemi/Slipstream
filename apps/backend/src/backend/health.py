@@ -9,7 +9,7 @@ the service is alive and its dependencies are reachable.
 from flask import Blueprint, jsonify
 from sqlalchemy import text
 
-from backend.extensions import engine
+from backend import extensions
 
 health_bp = Blueprint("health", __name__)
 
@@ -19,7 +19,7 @@ def health():
     # Check database connectivity
     db_status = "ok"
     try:
-        with engine.connect() as conn:
+        with extensions.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
         db_status = "unreachable"

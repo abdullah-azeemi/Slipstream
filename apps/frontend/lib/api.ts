@@ -2,7 +2,7 @@ import type {
   Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus
 } from '@/types/f1'
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
 
 class APIError extends Error {
   constructor(public status: number, message: string) {
