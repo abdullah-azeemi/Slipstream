@@ -52,3 +52,61 @@ def test_quali_segments_uses_stored_quali_segment(client, db_engine):
             conn.execute(text("DELETE FROM lap_times WHERE session_key = :sk"), {"sk": session_key})
             conn.execute(text("DELETE FROM drivers WHERE session_key = :sk"), {"sk": session_key})
             conn.execute(text("DELETE FROM sessions WHERE session_key = :sk"), {"sk": session_key})
+
+
+def test_race_intelligence_returns_derived_evidence(client, db_engine):
+    session_key = 99997
+
+    with db_engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO sessions (
+                session_key, year, gp_name, country, session_type, session_name
+            ) VALUES (
+                :sk, 2024, 'Evidence Grand Prix', 'Testland', 'R', 'Race'
+            )
+        """), {"sk": session_key})
+
+        conn.execute(text("""
+            INSERT INTO drivers (
+                driver_number, session_key, full_name, abbreviation, team_name, team_colour
+            ) VALUES
+                (44, :sk, 'Lewis Hamilton', 'HAM', 'Mercedes', '27F4D2'),
+                (63, :sk, 'George Russell', 'RUS', 'Mercedes', '27F4D2')
+        """), {"sk": session_key})
+
+        conn.execute(text("""
+            INSERT INTO lap_times (
+                session_key, driver_number, lap_number, lap_time_ms,
+                compound, tyre_life_laps, deleted, recorded_at,
+                stint, position, pit_in_time_ms, pit_out_time_ms
+            ) VALUES
+                (:sk, 44, 1, 90000, 'MEDIUM', 1, false, NOW(), 1, 1, NULL, NULL),
+                (:sk, 44, 2, 90200, 'MEDIUM', 2, false, NOW(), 1, 1, NULL, NULL),
+                (:sk, 44, 3, 90400, 'MEDIUM', 3, false, NOW(), 1, 1, NULL, NULL),
+                (:sk, 44, 4, 90600, 'MEDIUM', 4, false, NOW(), 1, 1, NULL, NULL),
+                (:sk, 63, 1, 90500, 'MEDIUM', 1, false, NOW(), 1, 2, NULL, NULL),
+                (:sk, 63, 2, 90700, 'MEDIUM', 2, false, NOW(), 1, 2, NULL, NULL),
+                (:sk, 63, 3, 90900, 'MEDIUM', 3, false, NOW(), 1, 2, NULL, NULL),
+                (:sk, 63, 4, 91100, 'MEDIUM', 4, false, NOW(), 1, 2, NULL, NULL)
+        """), {"sk": session_key})
+
+    try:
+        response = client.get(f"/api/v1/sessions/{session_key}/analysis/race-intelligence")
+        data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["metadata"]["llm_used"] is False
+        assert "compound_pace" in data
+        assert "stint_phase_summaries" in data
+        assert "battle_gaps" in data
+        assert "driver_scores" in data
+        assert data["compound_pace"][0]["compound"] == "MEDIUM"
+        assert data["compound_pace"][0]["lap_count"] == 8
+        assert data["driver_scores"][0]["abbreviation"] == "HAM"
+        assert any(i["id"] == "compound_pace_reference" for i in data["insights"])
+        assert any(g["ahead"] == "HAM" and g["behind"] == "RUS" for g in data["battle_gaps"])
+    finally:
+        with db_engine.begin() as conn:
+            conn.execute(text("DELETE FROM lap_times WHERE session_key = :sk"), {"sk": session_key})
+            conn.execute(text("DELETE FROM drivers WHERE session_key = :sk"), {"sk": session_key})
+            conn.execute(text("DELETE FROM sessions WHERE session_key = :sk"), {"sk": session_key})

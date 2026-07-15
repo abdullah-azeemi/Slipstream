@@ -2864,3 +2864,647 @@ def quali_speed(session_key: int):
         "lap_progression": lap_progression,
         "insights":        insights,
     })
+
+
+# ── Race intelligence: deterministic AI-ready evidence layer ────────────────
+
+def _linear_slope(points: list[tuple[float, float]]) -> float | None:
+    """Return y-per-x slope for a small set of points, or None if unavailable."""
+    if len(points) < 4:
+        return None
+
+    n = len(points)
+    sx = sum(p[0] for p in points)
+    sy = sum(p[1] for p in points)
+    sxx = sum(p[0] * p[0] for p in points)
+    sxy = sum(p[0] * p[1] for p in points)
+    denom = n * sxx - sx * sx
+    if denom == 0:
+        return None
+    return (n * sxy - sx * sy) / denom
+
+
+def _round_or_none(value, digits: int = 1):
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+def _avg(values: list[float]) -> float | None:
+    clean = [float(v) for v in values if v is not None]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
+def _median(values: list[float]) -> float | None:
+    clean = sorted(float(v) for v in values if v is not None)
+    if not clean:
+        return None
+    mid = len(clean) // 2
+    if len(clean) % 2:
+        return clean[mid]
+    return (clean[mid - 1] + clean[mid]) / 2
+
+
+def _stint_phase(index: int, total: int) -> str:
+    if total <= 3:
+        return "short"
+    pct = index / max(total - 1, 1)
+    if pct < 0.34:
+        return "opening"
+    if pct < 0.67:
+        return "middle"
+    return "closing"
+
+@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence")
+def race_intelligence(session_key: int):
+    """
+    Deterministic race-state summary for AI/report generation.
+
+    This endpoint does not call an LLM. It produces evidence-grounded features:
+    clean pace, degradation, stint summaries, position movement, volatility,
+    pit-stop counts, and rule-based insight cards.
+    """
+    from backend.api.v1.strategy import _resolve
+
+    with engine.connect() as conn:
+        session = (
+            conn.execute(
+                text("""
+                    SELECT session_key, year, gp_name, session_type, session_name
+                    FROM sessions
+                    WHERE session_key = :sk
+                """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .first()
+        )
+        if not session:
+            return {"error": "Session not found"}, 404
+
+        driver_rows = (
+            conn.execute(
+                text("""
+                    WITH clean_laps AS (
+                        SELECT *
+                        FROM lap_times
+                        WHERE session_key = :sk
+                          AND lap_time_ms IS NOT NULL
+                          AND deleted = FALSE
+                          AND pit_in_time_ms IS NULL
+                          AND pit_out_time_ms IS NULL
+                    ),
+                    first_pos AS (
+                        SELECT DISTINCT ON (driver_number)
+                            driver_number,
+                            position AS first_position
+                        FROM lap_times
+                        WHERE session_key = :sk
+                          AND position IS NOT NULL
+                        ORDER BY driver_number, lap_number ASC
+                    ),
+                    final_pos AS (
+                        SELECT DISTINCT ON (driver_number)
+                            driver_number,
+                            position AS final_position
+                        FROM lap_times
+                        WHERE session_key = :sk
+                          AND position IS NOT NULL
+                        ORDER BY driver_number, lap_number DESC
+                    ),
+                    pit_counts AS (
+                        SELECT
+                            driver_number,
+                            COUNT(*) FILTER (WHERE pit_in_time_ms IS NOT NULL) AS pit_stops
+                        FROM lap_times
+                        WHERE session_key = :sk
+                        GROUP BY driver_number
+                    ),
+                    compound_use AS (
+                        SELECT
+                            driver_number,
+                            STRING_AGG(DISTINCT compound, ',' ORDER BY compound) AS compounds
+                        FROM lap_times
+                        WHERE session_key = :sk
+                          AND compound IS NOT NULL
+                        GROUP BY driver_number
+                    ),
+                    pace AS (
+                        SELECT
+                            driver_number,
+                            COUNT(*) AS clean_laps,
+                            AVG(lap_time_ms) AS avg_clean_ms,
+                            MIN(lap_time_ms) AS best_lap_ms,
+                            STDDEV_POP(lap_time_ms) AS pace_stddev_ms
+                        FROM clean_laps
+                        GROUP BY driver_number
+                    )
+                    SELECT
+                        d.driver_number,
+                        d.abbreviation,
+                        d.full_name,
+                        d.team_name,
+                        d.team_colour,
+                        COALESCE(p.clean_laps, 0) AS clean_laps,
+                        p.avg_clean_ms,
+                        p.best_lap_ms,
+                        p.pace_stddev_ms,
+                        fp.first_position,
+                        lp.final_position,
+                        CASE
+                            WHEN fp.first_position IS NOT NULL
+                             AND lp.final_position IS NOT NULL
+                            THEN fp.first_position - lp.final_position
+                            ELSE NULL
+                        END AS positions_gained,
+                        COALESCE(pc.pit_stops, 0) AS pit_stops,
+                        cu.compounds
+                    FROM drivers d
+                    LEFT JOIN pace p ON p.driver_number = d.driver_number
+                    LEFT JOIN first_pos fp ON fp.driver_number = d.driver_number
+                    LEFT JOIN final_pos lp ON lp.driver_number = d.driver_number
+                    LEFT JOIN pit_counts pc ON pc.driver_number = d.driver_number
+                    LEFT JOIN compound_use cu ON cu.driver_number = d.driver_number
+                    WHERE d.session_key = :sk
+                    ORDER BY
+                        lp.final_position ASC NULLS LAST,
+                        p.avg_clean_ms ASC NULLS LAST
+                """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
+
+        lap_rows = (
+            conn.execute(
+                text("""
+                    SELECT
+                        l.driver_number,
+                        d.abbreviation,
+                        d.team_name,
+                        d.team_colour,
+                        l.lap_number,
+                        l.lap_time_ms,
+                        l.compound,
+                        COALESCE(l.stint, 1) AS stint,
+                        l.tyre_life_laps
+                    FROM lap_times l
+                    JOIN drivers d
+                      ON d.session_key = l.session_key
+                     AND d.driver_number = l.driver_number
+                    WHERE l.session_key = :sk
+                      AND l.lap_time_ms IS NOT NULL
+                      AND l.deleted = FALSE
+                      AND l.pit_in_time_ms IS NULL
+                      AND l.pit_out_time_ms IS NULL
+                    ORDER BY l.driver_number, COALESCE(l.stint, 1), l.lap_number
+                """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
+
+        track_rows = (
+            conn.execute(
+                text("""
+                    SELECT
+                        l.driver_number,
+                        d.abbreviation,
+                        d.team_name,
+                        d.team_colour,
+                        l.lap_number,
+                        l.lap_time_ms,
+                        l.position,
+                        l.compound,
+                        COALESCE(l.stint, 1) AS stint,
+                        l.tyre_life_laps,
+                        l.pit_in_time_ms,
+                        l.pit_out_time_ms
+                    FROM lap_times l
+                    JOIN drivers d
+                      ON d.session_key = l.session_key
+                     AND d.driver_number = l.driver_number
+                    WHERE l.session_key = :sk
+                      AND l.deleted = FALSE
+                    ORDER BY l.driver_number, l.lap_number
+                """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
+
+    driver_states = []
+    for r in driver_rows:
+        state = dict(r)
+        compounds = state.pop("compounds", None)
+        state["team_colour"] = _resolve(state.get("team_colour"), state.get("team_name"))
+        state["compounds"] = sorted(compounds.split(",")) if compounds else []
+        state["avg_clean_ms"] = _round_or_none(state["avg_clean_ms"])
+        state["best_lap_ms"] = _round_or_none(state["best_lap_ms"])
+        state["pace_stddev_ms"] = _round_or_none(state["pace_stddev_ms"])
+        driver_states.append(state)
+
+    stint_groups: dict[tuple[int, int, str], dict] = {}
+    for r in lap_rows:
+        compound = r["compound"] or "UNKNOWN"
+        key = (r["driver_number"], r["stint"], compound)
+        if key not in stint_groups:
+            stint_groups[key] = {
+                "driver_number": r["driver_number"],
+                "abbreviation": r["abbreviation"],
+                "team_name": r["team_name"],
+                "team_colour": _resolve(r["team_colour"], r["team_name"]),
+                "stint": r["stint"],
+                "compound": compound,
+                "laps": [],
+            }
+        stint_groups[key]["laps"].append(
+            {
+                "lap_number": r["lap_number"],
+                "lap_time_ms": float(r["lap_time_ms"]),
+                "tyre_life_laps": r["tyre_life_laps"],
+            }
+        )
+
+    stint_summaries = []
+    for stint in stint_groups.values():
+        laps = stint["laps"]
+        lap_times = [lap["lap_time_ms"] for lap in laps]
+        points = [(idx + 1, lap["lap_time_ms"]) for idx, lap in enumerate(laps)]
+        deg_slope = _linear_slope(points)
+        stint_summaries.append(
+            {
+                "driver_number": stint["driver_number"],
+                "abbreviation": stint["abbreviation"],
+                "team_name": stint["team_name"],
+                "team_colour": stint["team_colour"],
+                "stint": stint["stint"],
+                "compound": stint["compound"],
+                "start_lap": laps[0]["lap_number"],
+                "end_lap": laps[-1]["lap_number"],
+                "lap_count": len(laps),
+                "avg_lap_ms": round(sum(lap_times) / len(lap_times), 1),
+                "best_lap_ms": round(min(lap_times), 1),
+                "degradation_ms_per_lap": _round_or_none(deg_slope),
+            }
+        )
+
+    pace_rank = [d for d in driver_states if d["avg_clean_ms"] is not None]
+    pace_rank.sort(key=lambda d: d["avg_clean_ms"])
+
+    stint_summaries.sort(key=lambda s: (s["driver_number"], s["stint"], s["start_lap"]))
+
+    driver_by_number = {d["driver_number"]: d for d in driver_states}
+
+    compound_groups: dict[str, list[float]] = {}
+    for r in lap_rows:
+        compound = r["compound"] or "UNKNOWN"
+        compound_groups.setdefault(compound, []).append(float(r["lap_time_ms"]))
+
+    compound_pace = []
+    for compound, times in compound_groups.items():
+        compound_pace.append({
+            "compound": compound,
+            "lap_count": len(times),
+            "avg_lap_ms": _round_or_none(_avg(times)),
+            "median_lap_ms": _round_or_none(_median(times)),
+            "best_lap_ms": _round_or_none(min(times)),
+        })
+    compound_pace.sort(
+        key=lambda c: c["median_lap_ms"] if c["median_lap_ms"] is not None else 999999999
+    )
+
+    stint_phase_summaries = []
+    for stint in stint_groups.values():
+        laps = stint["laps"]
+        phase_groups: dict[str, list[float]] = {}
+        for idx, lap in enumerate(laps):
+            phase = _stint_phase(idx, len(laps))
+            phase_groups.setdefault(phase, []).append(lap["lap_time_ms"])
+
+        for phase, times in phase_groups.items():
+            if phase == "short":
+                continue
+            stint_phase_summaries.append({
+                "driver_number": stint["driver_number"],
+                "abbreviation": stint["abbreviation"],
+                "team_colour": stint["team_colour"],
+                "stint": stint["stint"],
+                "compound": stint["compound"],
+                "phase": phase,
+                "lap_count": len(times),
+                "avg_lap_ms": _round_or_none(_avg(times)),
+            })
+
+    cumulative_by_driver: dict[int, float] = {}
+    lap_snapshots: dict[int, list[dict]] = {}
+
+    for r in sorted(track_rows, key=lambda x: (x["driver_number"], x["lap_number"])):
+        dn = r["driver_number"]
+        if r["lap_time_ms"] is not None:
+            cumulative_by_driver[dn] = cumulative_by_driver.get(dn, 0.0) + float(r["lap_time_ms"])
+
+        lap_snapshots.setdefault(r["lap_number"], []).append({
+            "driver_number": dn,
+            "abbreviation": r["abbreviation"],
+            "team_colour": _resolve(r["team_colour"], r["team_name"]),
+            "lap_number": r["lap_number"],
+            "position": r["position"],
+            "compound": r["compound"],
+            "stint": r["stint"],
+            "tyre_life_laps": r["tyre_life_laps"],
+            "cumulative_ms": cumulative_by_driver.get(dn),
+        })
+
+    battle_gaps = []
+    for lap_number, cars in lap_snapshots.items():
+        ordered = [c for c in cars if c["position"] is not None and c["cumulative_ms"] is not None]
+        ordered.sort(key=lambda c: c["position"])
+
+        for ahead, behind in zip(ordered, ordered[1:]):
+            gap_ms = behind["cumulative_ms"] - ahead["cumulative_ms"]
+            if 0 < gap_ms <= 2000:
+                battle_gaps.append({
+                    "lap_number": lap_number,
+                    "ahead": ahead["abbreviation"],
+                    "behind": behind["abbreviation"],
+                    "ahead_driver_number": ahead["driver_number"],
+                    "behind_driver_number": behind["driver_number"],
+                    "position_ahead": ahead["position"],
+                    "gap_ms": round(gap_ms, 1),
+                    "gap_s": round(gap_ms / 1000.0, 3),
+                    "behind_compound": behind["compound"],
+                    "behind_tyre_life_laps": behind["tyre_life_laps"],
+                })
+
+    battle_gaps.sort(key=lambda b: (b["lap_number"], b["position_ahead"]))
+
+    undercut_candidates = []
+    seen_pairs = set()
+
+    for battle in reversed(battle_gaps):
+        pair = (battle["ahead_driver_number"], battle["behind_driver_number"])
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        ahead_state = driver_by_number.get(battle["ahead_driver_number"])
+        behind_state = driver_by_number.get(battle["behind_driver_number"])
+        if not ahead_state or not behind_state:
+            continue
+        if ahead_state["avg_clean_ms"] is None or behind_state["avg_clean_ms"] is None:
+            continue
+
+        pace_advantage_ms = ahead_state["avg_clean_ms"] - behind_state["avg_clean_ms"]
+        if pace_advantage_ms >= 250:
+            undercut_candidates.append({
+                "lap_number": battle["lap_number"],
+                "ahead": battle["ahead"],
+                "behind": battle["behind"],
+                "gap_s": battle["gap_s"],
+                "pace_advantage_ms": round(pace_advantage_ms, 1),
+                "signal": "behind_car_faster_in_close_air",
+            })
+
+        if len(undercut_candidates) >= 5:
+            break
+
+    driver_scores = []
+    for d in driver_states:
+        score = 50.0
+
+        if d["positions_gained"] is not None:
+            score += d["positions_gained"] * 2.5
+
+        if d["pace_stddev_ms"] is not None:
+            score -= min(d["pace_stddev_ms"] / 250.0, 12.0)
+
+        driver_stints = [
+            s for s in stint_summaries
+            if s["driver_number"] == d["driver_number"]
+            and s["degradation_ms_per_lap"] is not None
+        ]
+        if driver_stints:
+            avg_deg = _avg([s["degradation_ms_per_lap"] for s in driver_stints])
+            if avg_deg is not None:
+                score -= max(avg_deg, 0) / 100.0
+
+        if d["avg_clean_ms"] is not None and pace_rank:
+            leader_ms = pace_rank[0]["avg_clean_ms"]
+            score -= max((d["avg_clean_ms"] - leader_ms) / 250.0, 0)
+
+        driver_scores.append({
+            "driver_number": d["driver_number"],
+            "abbreviation": d["abbreviation"],
+            "team_colour": d["team_colour"],
+            "score": round(max(0.0, min(100.0, score)), 1),
+            "inputs": {
+                "avg_clean_ms": d["avg_clean_ms"],
+                "pace_stddev_ms": d["pace_stddev_ms"],
+                "positions_gained": d["positions_gained"],
+                "pit_stops": d["pit_stops"],
+            },
+        })
+
+    driver_scores.sort(key=lambda d: d["score"], reverse=True)
+
+    insights = []
+
+    if len(pace_rank) >= 2:
+        leader = pace_rank[0]
+        second = pace_rank[1]
+        gap = second["avg_clean_ms"] - leader["avg_clean_ms"]
+        insights.append(
+            {
+                "id": "clean_pace_leader",
+                "tier": "CRITICAL" if gap >= 500 else "NOTABLE",
+                "category": "PACE",
+                "title": f"{leader['abbreviation']} has strongest clean-air pace",
+                "detail": (
+                    f"{leader['abbreviation']} averages {leader['avg_clean_ms']:.1f} ms on clean laps, "
+                    f"{gap:.1f} ms faster than {second['abbreviation']}."
+                ),
+                "evidence": {
+                    "driver": leader["abbreviation"],
+                    "avg_clean_ms": leader["avg_clean_ms"],
+                    "next_best": second["abbreviation"],
+                    "gap_ms": round(gap, 1),
+                },
+            }
+        )
+
+    movers = [d for d in driver_states if d["positions_gained"] is not None]
+    if movers:
+        best_mover = max(movers, key=lambda d: d["positions_gained"])
+        if best_mover["positions_gained"] > 0:
+            insights.append(
+                {
+                    "id": "position_gain",
+                    "tier": "NOTABLE",
+                    "category": "RACECRAFT",
+                    "title": f"{best_mover['abbreviation']} gained {best_mover['positions_gained']} positions",
+                    "detail": (
+                        f"{best_mover['abbreviation']} moved from P{best_mover['first_position']} "
+                        f"to P{best_mover['final_position']}, indicating strong race execution."
+                    ),
+                    "evidence": {
+                        "first_position": best_mover["first_position"],
+                        "final_position": best_mover["final_position"],
+                        "positions_gained": best_mover["positions_gained"],
+                    },
+                }
+            )
+
+    deg_candidates = [
+        s for s in stint_summaries
+        if s["degradation_ms_per_lap"] is not None and s["lap_count"] >= 5
+    ]
+    if deg_candidates:
+        worst_deg = max(deg_candidates, key=lambda s: s["degradation_ms_per_lap"])
+        best_deg = min(deg_candidates, key=lambda s: s["degradation_ms_per_lap"])
+        if worst_deg["degradation_ms_per_lap"] - best_deg["degradation_ms_per_lap"] >= 150:
+            insights.append(
+                {
+                    "id": "tyre_degradation_split",
+                    "tier": "CRITICAL",
+                    "category": "TYRES",
+                    "title": f"{worst_deg['abbreviation']} shows the highest degradation",
+                    "detail": (
+                        f"{worst_deg['abbreviation']} is losing {worst_deg['degradation_ms_per_lap']:.1f} ms/lap "
+                        f"on the {worst_deg['compound']} stint, compared with "
+                        f"{best_deg['abbreviation']} at {best_deg['degradation_ms_per_lap']:.1f} ms/lap."
+                    ),
+                    "evidence": {
+                        "worst": worst_deg,
+                        "best": best_deg,
+                    },
+                }
+            )
+
+    volatile = [
+        d for d in driver_states
+        if d["pace_stddev_ms"] is not None and d["clean_laps"] >= 5
+    ]
+    if volatile:
+        most_volatile = max(volatile, key=lambda d: d["pace_stddev_ms"])
+        if most_volatile["pace_stddev_ms"] >= 900:
+            insights.append(
+                {
+                    "id": "pace_volatility",
+                    "tier": "INFO",
+                    "category": "CONSISTENCY",
+                    "title": f"{most_volatile['abbreviation']} has the least stable lap profile",
+                    "detail": (
+                        f"{most_volatile['abbreviation']} has {most_volatile['pace_stddev_ms']:.1f} ms "
+                        f"clean-lap standard deviation, which can indicate traffic, tyre drop-off, "
+                        f"or inconsistent balance."
+                    ),
+                    "evidence": {
+                        "driver": most_volatile["abbreviation"],
+                        "pace_stddev_ms": most_volatile["pace_stddev_ms"],
+                        "clean_laps": most_volatile["clean_laps"],
+                    },
+                }
+            )
+
+    ordered_by_position = [
+        d for d in driver_states
+        if d["final_position"] is not None and d["avg_clean_ms"] is not None
+    ]
+    ordered_by_position.sort(key=lambda d: d["final_position"])
+    for ahead, behind in zip(ordered_by_position, ordered_by_position[1:]):
+        pace_advantage = ahead["avg_clean_ms"] - behind["avg_clean_ms"]
+        if pace_advantage >= 300:
+            insights.append(
+                {
+                    "id": "undercut_candidate",
+                    "tier": "NOTABLE",
+                    "category": "STRATEGY",
+                    "title": f"{behind['abbreviation']} has undercut pressure on {ahead['abbreviation']}",
+                    "detail": (
+                        f"{behind['abbreviation']} is behind on track but averages "
+                        f"{pace_advantage:.1f} ms/lap faster on clean laps. "
+                        f"That is a strategy pressure signal if the gap is pit-window relevant."
+                    ),
+                    "evidence": {
+                        "ahead": ahead["abbreviation"],
+                        "behind": behind["abbreviation"],
+                        "pace_advantage_ms": round(pace_advantage, 1),
+                    },
+                }
+            )
+            break
+
+    if compound_pace:
+        best_compound = compound_pace[0]
+        insights.append({
+            "id": "compound_pace_reference",
+            "tier": "INFO",
+            "category": "TYRES",
+            "title": f"{best_compound['compound']} has the strongest median pace",
+            "detail": (
+                f"{best_compound['compound']} shows a {best_compound['median_lap_ms']:.1f} ms "
+                f"median clean-lap pace across {best_compound['lap_count']} laps."
+            ),
+            "evidence": best_compound,
+        })
+
+    if battle_gaps:
+        latest_battle = battle_gaps[-1]
+        insights.append({
+            "id": "closest_recent_battle",
+            "tier": "NOTABLE",
+            "category": "RACE_STATE",
+            "title": f"{latest_battle['behind']} is within {latest_battle['gap_s']}s of {latest_battle['ahead']}",
+            "detail": (
+                f"On lap {latest_battle['lap_number']}, {latest_battle['behind']} was "
+                f"{latest_battle['gap_s']}s behind {latest_battle['ahead']}."
+            ),
+            "evidence": latest_battle,
+        })
+
+    if undercut_candidates:
+        candidate = undercut_candidates[0]
+        insights.append({
+            "id": "undercut_pressure_evidence",
+            "tier": "CRITICAL",
+            "category": "STRATEGY",
+            "title": f"{candidate['behind']} has undercut pressure on {candidate['ahead']}",
+            "detail": (
+                f"{candidate['behind']} is {candidate['gap_s']}s behind but has "
+                f"{candidate['pace_advantage_ms']} ms/lap clean-pace advantage."
+            ),
+            "evidence": candidate,
+        })
+
+    return jsonify(
+        {
+            "session": dict(session),
+            "driver_states": driver_states,
+            "stint_summaries": stint_summaries,
+            "compound_pace": compound_pace,
+            "stint_phase_summaries": stint_phase_summaries,
+            "battle_gaps": battle_gaps[-50:],
+            "undercut_candidates": undercut_candidates,
+            "driver_scores": driver_scores,
+            "insights": insights,
+            "metadata": {
+                "source": "lap_times",
+                "method": "deterministic_rules",
+                "llm_used": False,
+                "features": [
+                    "clean_pace",
+                    "stint_degradation",
+                    "compound_pace",
+                    "stint_phase_dropoff",
+                    "battle_gaps",
+                    "undercut_pressure",
+                    "driver_scores",
+                ],
+            },
+        }
+    )
