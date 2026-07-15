@@ -1,5 +1,6 @@
 [phases.setup]
 nixPkgs = ["python311", "gcc"]
+aptPkgs = ["libstdc++6"]
 
 [phases.install]
 cmds = [
