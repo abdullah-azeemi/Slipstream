@@ -185,6 +185,32 @@ Typical uses:
 - results displays
 - ML targets and validation
 
+### `race_intelligence_events`
+
+Purpose:
+
+- event storage for the Race Intelligence feature
+- stores derived analysis events (driver scores, stint summaries, battle gaps, insights, etc.)
+
+Important columns:
+
+- `session_key`
+- `event_type`
+- `event_key`
+- `driver_number`
+- `lap_number`
+- `payload` (JSONB)
+
+Typical uses:
+
+- Race Intelligence frontend page
+- vector-search retrieval for AI/report generation
+
+Notes:
+
+- populated on demand via `POST /sessions/:key/analysis/race-intelligence/events/refresh`
+- indexed in LanceDB for semantic search
+
 ## Important concepts
 
 ### Clean vs deleted laps
@@ -251,6 +277,7 @@ Mostly compact:
 - `drivers`
 - `lap_times`
 - `race_results`
+- `race_intelligence_events`
 
 These are the tables you can keep for many seasons without much pain.
 
@@ -285,6 +312,7 @@ Mostly uses:
 - `drivers`
 - `lap_times`
 - `telemetry` when traces are needed
+- `race_intelligence_events` for the Race Intelligence feature
 
 ### ML
 

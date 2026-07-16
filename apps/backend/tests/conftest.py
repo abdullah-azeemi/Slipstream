@@ -158,7 +158,12 @@ def app():
     """
     Create a Flask app configured for testing.
     scope="session" means this runs once for the entire test suite.
+
+    settings.testing is set BEFORE create_app() so the auto-ingest
+    scheduler guard in __init__.py skips starting the background thread.
     """
+    settings.testing = True
+    settings.auto_ingest_enabled = False
     test_app = create_app()
     test_app.config["TESTING"] = True
     return test_app

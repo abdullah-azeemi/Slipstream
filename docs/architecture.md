@@ -34,8 +34,9 @@ Path: [apps/frontend](/Users/abdullahmusharaf/Desktop/F1/Slipstream/apps/fronten
 
 Responsibilities:
 
-- render session lists and session detail pages
+- render session lists, session detail pages, and overview pages
 - show telemetry overlays, race analysis, practice analysis, and schedule views
+- host the Race Intelligence page (driver scores, battle gaps, stint insights)
 - call backend API routes
 - host the emerging predictions UI
 
@@ -63,7 +64,7 @@ Important route groups:
 - `drivers`
 - `laps`
 - `telemetry`
-- `analysis`
+- `analysis` (includes `race-intelligence`, `quali-segments`, etc.)
 - `strategy`
 - `schedule`
 - `predictions`
