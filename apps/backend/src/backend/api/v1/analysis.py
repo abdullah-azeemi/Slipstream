@@ -6,8 +6,6 @@ Practice   → long runs, tyre deg rate
 Race       → lap evolution, stint pace, position changes, sector stints
 """
 
-import json
-
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from backend.extensions import engine
@@ -2918,7 +2916,8 @@ def _stint_phase(index: int, total: int) -> str:
         return "middle"
     return "closing"
 
-def _build_race_intelligence_payload(session_key: int) -> dict | None:
+@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence")
+def race_intelligence(session_key: int):
     """
     Deterministic race-state summary for AI/report generation.
 
@@ -2942,7 +2941,7 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
             .first()
         )
         if not session:
-            return None
+            return {"error": "Session not found"}, 404
 
         driver_rows = (
             conn.execute(
@@ -3069,33 +3068,15 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
         )
 
         track_rows = (
-            conn.execute(
-                text("""
-                    SELECT
-                        l.driver_number,
-                        d.abbreviation,
-                        d.team_name,
-                        d.team_colour,
-                        l.lap_number,
-                        l.lap_time_ms,
-                        l.position,
-                        l.compound,
-                        COALESCE(l.stint, 1) AS stint,
-                        l.tyre_life_laps,
-                        l.pit_in_time_ms,
-                        l.pit_out_time_ms
-                    FROM lap_times l
-                    JOIN drivers d
-                      ON d.session_key = l.session_key
-                     AND d.driver_number = l.driver_number
-                    WHERE l.session_key = :sk
-                      AND l.deleted = FALSE
-                    ORDER BY l.driver_number, l.lap_number
-                """),
+            conn.execute(text("""
+                SELECT l.driver_number, d.abbreviation, d.team_name, d.team_colour, l.lap_number, l.lap_time_ms, l.position, l.compound,  COALESCE(l.stint, 1) AS stint, l.tyre_life_laps, l.pit_in_time_ms, l.pit_out_time_ms
+                FROM lap_times l 
+                JOIN drivers d ON d.session_key = l.session_key AND d.driver_number = l.driver_number
+                WHERE l.session_key = :sk
+                AND l.deleted = FALSE
+                ORDER BY l.driver_number, l.lap_number """), 
                 {"sk": session_key},
-            )
-            .mappings()
-            .all()
+            ).mappings().all()
         )
 
     driver_states = []
@@ -3154,11 +3135,7 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
             }
         )
 
-    pace_rank = [d for d in driver_states if d["avg_clean_ms"] is not None]
-    pace_rank.sort(key=lambda d: d["avg_clean_ms"])
-
     stint_summaries.sort(key=lambda s: (s["driver_number"], s["stint"], s["start_lap"]))
-
     driver_by_number = {d["driver_number"]: d for d in driver_states}
 
     compound_groups: dict[str, list[float]] = {}
@@ -3175,9 +3152,7 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
             "median_lap_ms": _round_or_none(_median(times)),
             "best_lap_ms": _round_or_none(min(times)),
         })
-    compound_pace.sort(
-        key=lambda c: c["median_lap_ms"] if c["median_lap_ms"] is not None else 999999999
-    )
+    compound_pace.sort(key=lambda c: c["median_lap_ms"] if c["median_lap_ms"] is not None else 999999999)
 
     stint_phase_summaries = []
     for stint in stint_groups.values():
@@ -3245,9 +3220,10 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
     battle_gaps.sort(key=lambda b: (b["lap_number"], b["position_ahead"]))
 
     undercut_candidates = []
+    latest_battles = list(reversed(battle_gaps))
     seen_pairs = set()
 
-    for battle in reversed(battle_gaps):
+    for battle in latest_battles:
         pair = (battle["ahead_driver_number"], battle["behind_driver_number"])
         if pair in seen_pairs:
             continue
@@ -3273,6 +3249,9 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
 
         if len(undercut_candidates) >= 5:
             break
+
+    pace_rank = [d for d in driver_states if d["avg_clean_ms"] is not None]
+    pace_rank.sort(key=lambda d: d["avg_clean_ms"])
 
     driver_scores = []
     for d in driver_states:
@@ -3313,30 +3292,7 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
 
     driver_scores.sort(key=lambda d: d["score"], reverse=True)
 
-    insights = []
-
-    if len(pace_rank) >= 2:
-        leader = pace_rank[0]
-        second = pace_rank[1]
-        gap = second["avg_clean_ms"] - leader["avg_clean_ms"]
-        insights.append(
-            {
-                "id": "clean_pace_leader",
-                "tier": "CRITICAL" if gap >= 500 else "NOTABLE",
-                "category": "PACE",
-                "title": f"{leader['abbreviation']} has strongest clean-air pace",
-                "detail": (
-                    f"{leader['abbreviation']} averages {leader['avg_clean_ms']:.1f} ms on clean laps, "
-                    f"{gap:.1f} ms faster than {second['abbreviation']}."
-                ),
-                "evidence": {
-                    "driver": leader["abbreviation"],
-                    "avg_clean_ms": leader["avg_clean_ms"],
-                    "next_best": second["abbreviation"],
-                    "gap_ms": round(gap, 1),
-                },
-            }
-        )
+    insights: list[dict] = []
 
     movers = [d for d in driver_states if d["positions_gained"] is not None]
     if movers:
@@ -3440,286 +3396,58 @@ def _build_race_intelligence_payload(session_key: int) -> dict | None:
             )
             break
 
-    if compound_pace:
-        best_compound = compound_pace[0]
-        insights.append({
-            "id": "compound_pace_reference",
-            "tier": "INFO",
-            "category": "TYRES",
-            "title": f"{best_compound['compound']} has the strongest median pace",
-            "detail": (
-                f"{best_compound['compound']} shows a {best_compound['median_lap_ms']:.1f} ms "
-                f"median clean-lap pace across {best_compound['lap_count']} laps."
-            ),
-            "evidence": best_compound,
-        })
-
-    if battle_gaps:
-        latest_battle = battle_gaps[-1]
-        insights.append({
-            "id": "closest_recent_battle",
-            "tier": "NOTABLE",
-            "category": "RACE_STATE",
-            "title": f"{latest_battle['behind']} is within {latest_battle['gap_s']}s of {latest_battle['ahead']}",
-            "detail": (
-                f"On lap {latest_battle['lap_number']}, {latest_battle['behind']} was "
-                f"{latest_battle['gap_s']}s behind {latest_battle['ahead']}."
-            ),
-            "evidence": latest_battle,
-        })
-
-    if undercut_candidates:
-        candidate = undercut_candidates[0]
-        insights.append({
-            "id": "undercut_pressure_evidence",
-            "tier": "CRITICAL",
-            "category": "STRATEGY",
-            "title": f"{candidate['behind']} has undercut pressure on {candidate['ahead']}",
-            "detail": (
-                f"{candidate['behind']} is {candidate['gap_s']}s behind but has "
-                f"{candidate['pace_advantage_ms']} ms/lap clean-pace advantage."
-            ),
-            "evidence": candidate,
-        })
-
-    return {
-        "session": dict(session),
-        "driver_states": driver_states,
-        "stint_summaries": stint_summaries,
-        "compound_pace": compound_pace,
-        "stint_phase_summaries": stint_phase_summaries,
-        "battle_gaps": battle_gaps[-50:],
-        "undercut_candidates": undercut_candidates,
-        "driver_scores": driver_scores,
-        "insights": insights,
-        "metadata": {
-            "source": "lap_times",
-            "method": "deterministic_rules",
-            "llm_used": False,
-            "features": [
-                "clean_pace",
-                "stint_degradation",
-                "compound_pace",
-                "stint_phase_dropoff",
-                "battle_gaps",
-                "undercut_pressure",
-                "driver_scores",
-            ],
-        },
-    }
+    return jsonify(
+        {
+            "session": dict(session),
+            "driver_states": driver_states,
+            "stint_summaries": stint_summaries,
+            "compound_pace": compound_pace,
+            "stint_phase_summaries": stint_phase_summaries,
+            "battle_gaps": battle_gaps,
+            "undercut_candidates": undercut_candidates,
+            "driver_scores": driver_scores,
+            "insights": insights,
+            "metadata": {
+                "source": "lap_times",
+                "method": "deterministic_rules",
+                "llm_used": False,
+            },
+        }
+    )
 
 
-def _race_intelligence_events(payload: dict) -> list[dict]:
-    session_key = payload["session"]["session_key"]
-    events: list[dict] = []
-
-    def add_event(
-        event_type: str,
-        event_key: str,
-        event_payload: dict,
-        driver_number: int | None = None,
-        lap_number: int | None = None,
-    ) -> None:
-        events.append({
-            "session_key": session_key,
-            "event_type": event_type,
-            "event_key": event_key,
-            "driver_number": driver_number,
-            "lap_number": lap_number,
-            "payload": json.dumps(event_payload, sort_keys=True),
-        })
-
-    for item in payload["driver_states"]:
-        add_event(
-            "driver_state",
-            f"driver_{item['driver_number']}",
-            item,
-            driver_number=item["driver_number"],
-        )
-
-    for item in payload["driver_scores"]:
-        add_event(
-            "driver_score",
-            f"driver_{item['driver_number']}",
-            item,
-            driver_number=item["driver_number"],
-        )
-
-    for item in payload["stint_summaries"]:
-        add_event(
-            "stint_summary",
-            f"driver_{item['driver_number']}_stint_{item['stint']}_{item['compound']}",
-            item,
-            driver_number=item["driver_number"],
-            lap_number=item["start_lap"],
-        )
-
-    for item in payload["compound_pace"]:
-        add_event(
-            "compound_pace",
-            f"compound_{item['compound']}",
-            item,
-        )
-
-    for item in payload["battle_gaps"]:
-        add_event(
-            "battle_gap",
-            f"lap_{item['lap_number']}_{item['ahead']}_{item['behind']}",
-            item,
-            driver_number=item["behind_driver_number"],
-            lap_number=item["lap_number"],
-        )
-
-    for item in payload["undercut_candidates"]:
-        add_event(
-            "undercut_candidate",
-            f"lap_{item['lap_number']}_{item['ahead']}_{item['behind']}",
-            item,
-            lap_number=item["lap_number"],
-        )
-
-    for item in payload["insights"]:
-        add_event(
-            "insight",
-            item["id"],
-            item,
-        )
-
-    return events
-
-
-@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence")
-def race_intelligence(session_key: int):
-    payload = _build_race_intelligence_payload(session_key)
-    if payload is None:
-        return {"error": "Session not found"}, 404
-    return jsonify(payload)
-
-
-@analysis_bp.post("/sessions/<int:session_key>/analysis/race-intelligence/events/refresh")
-def refresh_race_intelligence_events(session_key: int):
-    payload = _build_race_intelligence_payload(session_key)
-    if payload is None:
-        return {"error": "Session not found"}, 404
-
-    events = _race_intelligence_events(payload)
-    with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM race_intelligence_events WHERE session_key = :sk"),
-            {"sk": session_key},
-        )
-        if events:
-            conn.execute(
-                text("""
-                    INSERT INTO race_intelligence_events (
-                        session_key, event_type, event_key,
-                        driver_number, lap_number, payload
-                    ) VALUES (
-                        :session_key, :event_type, :event_key,
-                        :driver_number, :lap_number, CAST(:payload AS JSONB)
-                    )
-                """),
-                events,
-            )
-
-    return jsonify({
-        "session_key": session_key,
-        "event_count": len(events),
-        "event_types": sorted({event["event_type"] for event in events}),
-    })
-
-
-@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence/events")
-def list_race_intelligence_events(session_key: int):
-    event_type = request.args.get("type")
-    params = {"sk": session_key}
-    event_filter = ""
-    if event_type:
-        event_filter = "AND event_type = :event_type"
-        params["event_type"] = event_type
-
-    with engine.connect() as conn:
-        rows = (
-            conn.execute(
-                text(f"""
-                    SELECT
-                        id,
-                        session_key,
-                        event_type,
-                        event_key,
-                        driver_number,
-                        lap_number,
-                        payload,
-                        created_at,
-                        updated_at
-                    FROM race_intelligence_events
-                    WHERE session_key = :sk
-                      {event_filter}
-                    ORDER BY event_type, lap_number NULLS LAST, event_key
-                """),
-                params,
-            )
-            .mappings()
-            .all()
-        )
-
-    events = []
-    for row in rows:
-        event = dict(row)
-        event["created_at"] = event["created_at"].isoformat() if event["created_at"] else None
-        event["updated_at"] = event["updated_at"].isoformat() if event["updated_at"] else None
-        events.append(event)
-
-    return jsonify({
-        "session_key": session_key,
-        "event_count": len(events),
-        "events": events,
-    })
-
-
-@analysis_bp.post("/sessions/<int:session_key>/analysis/race-intelligence/vector-index/rebuild")
-def rebuild_race_intelligence_vector_index(session_key: int):
+@analysis_bp.get("/sessions/<int:session_key>/analysis/race-intelligence/vector-index/rebuild")
+def rebuild_race_vector_index(session_key: int):
     from backend.race_vector_index import rebuild_session_index
 
     with engine.connect() as conn:
         rows = (
             conn.execute(
                 text("""
-                    SELECT
-                        id,
-                        session_key,
-                        event_type,
-                        event_key,
-                        driver_number,
-                        lap_number,
-                        payload
+                    SELECT id, session_key, event_type, event_key, driver_number, lap_number, text, payload
                     FROM race_intelligence_events
                     WHERE session_key = :sk
-                    ORDER BY event_type, event_key
-                """),
-                {"sk": session_key},
-            )
-            .mappings()
-            .all()
+                    ORDER BY event_type, event_key"""),
+                    {"sk": session_key}
+            ).mappings().all()
         )
 
     if not rows:
-        return {
-            "error": "No race intelligence events found. Refresh events before rebuilding LanceDB.",
+        return jsonify({
+            "error": "No race intelligence evnets found for this session",
             "suggested_command": (
                 f"POST /api/v1/sessions/{session_key}/analysis/"
                 "race-intelligence/events/refresh"
-            ),
-        }, 404
-
-    count = rebuild_session_index([dict(row) for row in rows], session_key)
+            )
+        }), 404
+    
+    count = rebuild_session_index([dict(r) for r in rows], session_key)
 
     return jsonify({
         "session_key": session_key,
         "indexed_events": count,
         "index": "lancedb",
     })
-
 
 @analysis_bp.get("/analysis/race-intelligence/vector-search")
 def search_race_intelligence_vector_index():
@@ -3730,17 +3458,12 @@ def search_race_intelligence_vector_index():
     try:
         limit = int(request.args.get("limit", "8"))
     except ValueError:
-        return {"error": "limit must be an integer"}, 400
-
+        return jsonify({"error": "Invalid limit parameter"}), 400
+    
     if not query:
-        return {"error": "q query parameter is required"}, 400
-
-    results = search_similar(
-        query=query,
-        limit=max(1, min(limit, 25)),
-        event_type=event_type,
-    )
-
+        return jsonify({"error": "Query parameter 'q' is required"}), 400
+    
+    results = search_similar(query=query, limit=max(1, min(limit, 25)), event_type=event_type)
     return jsonify({
         "query": query,
         "event_type": event_type,

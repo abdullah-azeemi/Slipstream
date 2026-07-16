@@ -161,3 +161,138 @@ export interface DriverTelemetryStats {
   avg_brake_point_pct: number | null
   drs_open_pct:        number | null
 }
+
+export interface RaceIntelligenceSession {
+  session_key: number
+  year: number
+  gp_name: string
+  session_type: string
+  session_name: string
+}
+
+export interface DriverState{
+  driver_number: number
+  abbreviation: string
+  team_name: string | null
+  team_color: string | null
+  clean_laps: number
+  avg_clean_ms: number | null
+  pace_stddev_ms: number | null
+  first_position: number | null
+  final_position: number | null
+  positions_gained: number | null
+  pit_stops: number
+  compounds: string[]
+}
+export interface StintSummary{
+  driver_number: number
+  abbreviation: string
+  team_name: string | null
+  team_colour: string | null
+  stint: number
+  compound: string
+  start_lap: number
+  end_lap: number
+  lap_count: number
+  avg_lap_ms: number
+  best_lap_ms: number
+  degradation_ms_per_lap: number | null
+}
+export interface CompoundPace{
+  compound: string
+  lap_count: number
+  avg_lap_ms: number | null
+  median_lap_ms: number | null
+  best_lap_ms: number | null
+}
+
+export interface BattleGap {
+  lap_number: number
+  ahead: string
+  behind: string
+  ahead_driver_number: number
+  behind_driver_number: number
+  position_ahead: number
+  gap_ms: number
+  gap_s: number
+  behind_compound: string | null
+  behind_tyre_life_laps: number | null
+}
+
+export interface UndercutCandidate {
+  lap_number: number
+  ahead: string
+  behind: string
+  gap_s: number
+  pace_advantage_ms: number
+  signal: string
+}
+
+export interface DriverScore {
+  driver_number: number
+  abbreviation: string
+  team_colour: string | null
+  score: number
+  inputs: {
+    avg_clean_ms: number | null
+    pace_stddev_ms: number | null
+    positions_gained: number | null
+    pit_stops: number
+  }
+}
+export interface RaceInsight {
+  id: string
+  tier: 'CRITICAL' | 'NOTABLE' | 'INFO'
+  category: string
+  title: string
+  detail: string
+  evidence: Record<string, unknown>
+}
+
+export interface RaceIntelligenceMetadata {
+  source: string
+  method: string
+  llm_used: boolean
+  features: string[]
+}
+
+export interface RaceIntelligenceResponse {
+  session: RaceIntelligenceSession
+  driver_states: DriverState[]
+  stint_summaries: StintSummary[]
+  compound_pace: CompoundPace[]
+  stint_phase_summaries: StintPhaseSummary[]
+  battle_gaps: BattleGap[]
+  undercut_candidates: UndercutCandidate[]
+  driver_scores: DriverScore[]
+  insights: RaceInsight[]
+  metadata: RaceIntelligenceMetadata
+}
+export interface StintPhaseSummary {
+  driver_number: number
+  abbreviation: string
+  team_colour: string | null
+  stint: number
+  compound: string
+  phase: string
+  lap_count: number
+  avg_lap_ms: number | null
+}
+
+export interface RaceIntelligenceEvent {
+  id: number
+  session_key: number
+  event_type: string
+  event_key: string
+  driver_number: number | null
+  lap_number: number | null
+  payload: Record<string, unknown>
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface RaceIntelligenceEventsResponse {
+  session_key: number
+  event_count: number
+  events: RaceIntelligenceEvent[]
+}
