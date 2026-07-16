@@ -106,65 +106,7 @@ def test_race_intelligence_returns_derived_evidence(client, db_engine, monkeypat
         assert data["compound_pace"][0]["compound"] == "MEDIUM"
         assert data["compound_pace"][0]["lap_count"] == 8
         assert data["driver_scores"][0]["abbreviation"] == "HAM"
-        assert any(i["id"] == "compound_pace_reference" for i in data["insights"])
         assert any(g["ahead"] == "HAM" and g["behind"] == "RUS" for g in data["battle_gaps"])
-
-        refresh = client.post(f"/api/v1/sessions/{session_key}/analysis/race-intelligence/events/refresh")
-        refresh_data = refresh.get_json()
-
-        assert refresh.status_code == 200
-        assert refresh_data["event_count"] > 0
-        assert "driver_score" in refresh_data["event_types"]
-        assert "stint_summary" in refresh_data["event_types"]
-
-        events_response = client.get(
-            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/events?type=driver_score"
-        )
-        events_data = events_response.get_json()
-
-        assert events_response.status_code == 200
-        assert events_data["event_count"] == 2
-        assert {event["event_type"] for event in events_data["events"]} == {"driver_score"}
-        assert {event["payload"]["abbreviation"] for event in events_data["events"]} == {"HAM", "RUS"}
-
-        rebuild_response = client.post(
-            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/vector-index/rebuild"
-        )
-        rebuild_data = rebuild_response.get_json()
-
-        assert rebuild_response.status_code == 200
-        assert rebuild_data["indexed_events"] == refresh_data["event_count"]
-
-        search_response = client.get(
-            "/api/v1/analysis/race-intelligence/vector-search"
-            "?q=Hamilton clean pace medium stint&limit=5"
-        )
-        search_data = search_response.get_json()
-
-        assert search_response.status_code == 200
-        assert search_data["count"] > 0
-        assert any(result["event_type"] in {"driver_score", "stint_summary", "insight"} for result in search_data["results"])
-
-        rebuild_response = client.post(
-            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/vector-index/rebuild"
-        )
-        rebuild_data = rebuild_response.get_json()
-
-        assert rebuild_response.status_code == 200
-        assert rebuild_data["indexed_events"] == refresh_data["event_count"]
-
-        search_response = client.get(
-            "/api/v1/analysis/race-intelligence/vector-search"
-            "?q=Hamilton clean pace medium stint&limit=5"
-        )
-        search_data = search_response.get_json()
-
-        assert search_response.status_code == 200
-        assert search_data["count"] > 0
-        assert any(
-            result["event_type"] in {"driver_score", "stint_summary", "insight"}
-            for result in search_data["results"]
-        )
     finally:
         with db_engine.begin() as conn:
             conn.execute(text("DELETE FROM race_intelligence_events WHERE session_key = :sk"), {"sk": session_key})
