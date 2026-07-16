@@ -143,6 +143,24 @@ def test_race_intelligence_returns_derived_evidence(client, db_engine, monkeypat
 
         assert search_response.status_code == 200
         assert search_data["count"] > 0
+        assert any(result["event_type"] in {"driver_score", "stint_summary", "insight"} for result in search_data["results"])
+
+        rebuild_response = client.post(
+            f"/api/v1/sessions/{session_key}/analysis/race-intelligence/vector-index/rebuild"
+        )
+        rebuild_data = rebuild_response.get_json()
+
+        assert rebuild_response.status_code == 200
+        assert rebuild_data["indexed_events"] == refresh_data["event_count"]
+
+        search_response = client.get(
+            "/api/v1/analysis/race-intelligence/vector-search"
+            "?q=Hamilton clean pace medium stint&limit=5"
+        )
+        search_data = search_response.get_json()
+
+        assert search_response.status_code == 200
+        assert search_data["count"] > 0
         assert any(
             result["event_type"] in {"driver_score", "stint_summary", "insight"}
             for result in search_data["results"]

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { CalendarDays, Clock3, Flag, Radio, Thermometer, Wind, Droplets } from 'lucide-react'
+import { CalendarDays, Clock3, Flag, Radio, Thermometer, Wind, Droplets, BrainCircuit } from 'lucide-react'
 
 import CountdownTimer from '@/components/schedule/CountdownTimer'
 import { api } from '@/lib/api'
@@ -1367,6 +1367,46 @@ export default async function SessionOverviewPage({ params }: { params: Promise<
               </div>
             )
           ))}
+        </div>
+
+        <div style={{ marginTop: 16, borderTop: '1px solid rgba(226,232,240,0.72)', paddingTop: 16 }}>
+          <Link
+            href={`/sessions/${currentSessions[0]?.session_key}/race-intelligence`}
+            className="session-overview-action-link"
+            style={{
+              textDecoration: 'none',
+              background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(241,245,251,0.98) 100%)',
+              border: '1px solid rgba(204,218,236,0.92)',
+              borderRadius: 18,
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              color: '#14233C',
+              boxShadow: '0 12px 28px rgba(24,39,75,0.06)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10, background: '#FFFFFF',
+                border: '1px solid rgba(214,224,238,0.88)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#8B5CF6',
+              }}>
+                <BrainCircuit size={16} />
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: 14 }}>
+                  Race Intelligence
+                </div>
+                <div style={{ marginTop: 2, fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#94A3B8' }}>
+                  Performance scores, battles & insights
+                </div>
+              </div>
+            </div>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, color: '#94A3B8' }}>→</span>
+          </Link>
         </div>
       </section>
 
