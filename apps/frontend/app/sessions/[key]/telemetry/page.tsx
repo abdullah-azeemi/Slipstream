@@ -19,8 +19,17 @@ import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
 import CornerInsights from '@/components/analysis/CornerInsights'
 import QualiSpeedPanel from '@/components/telemetry/QualiSpeedPanel'
 import LapStory, { type LapStoryDriver } from '@/components/telemetry/LapStory'
-
+import dynamic from 'next/dynamic'
 import type { InsightsData } from '@/components/analysis/BrakingAnalysis'
+
+const LapTimeDistribution = dynamic(() => import('@/components/analysis/LapTimeDistribution'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ padding: 20, border: '1px solid #D9E3EF', borderRadius: 18, background: '#FFFFFF' }}>
+      <div style={{ fontSize: 11, color: '#7D8BA2', fontFamily: 'Inter, sans-serif' }}>Loading lap data...</div>
+    </div>
+  ),
+})
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -1374,7 +1383,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         </div>
 
         {/* Race mode */}
-        {isRaceSession(sessionType) && <RaceAnalysis sessionKey={sessionKey} sessionName={sessionName} drivers={driverList} />}
+        {isRaceSession(sessionType) && (
+          <>
+            <RaceAnalysis sessionKey={sessionKey} sessionName={sessionName} drivers={driverList} />
+            <div style={{ marginTop: 24 }}>
+              <LapTimeDistribution sessionKey={sessionKey} />
+            </div>
+          </>
+        )}
 
         {/* Practice mode */}
         {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} session={session} drivers={driverList} />}
@@ -1802,6 +1818,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             </CollapsibleSection>
           </div>
         )}
+
       </div>
 
       <style>{`@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }`}</style>
