@@ -101,11 +101,13 @@ export default function RacingLineOverlay({
 } : {
     sessionKey: number;
     drivers: string[];
-    driverData: Record<string, DriverRenderData>;
+    driverData: DriverRenderData[];
     compact?: boolean;
 }) {
     const [compareData, setCompareData] = useState<CompareStats | null>(null)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [loading, setLoading] = useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [error, setError] = useState<string | null>(null)
     const [selectedCorner, setSelectedCorner] = useState<number>(0)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -300,7 +302,7 @@ export default function RacingLineOverlay({
     ctx.fillRect(legendX + 32, legendY - 4, 48, 8)
 
     // ── Scale bar ───────────────────────────────────────────────
-    const metresPerPx = (maxX - minX) / (trackW * scale) * (corner?.drivers ? 1 : 1) || 1
+    const metresPerPx = (maxX - minX) / (trackW * scale) || 1
     // Actually compute the scale: we know the physical distance in metres
     // between two x-axis points, and the pixel distance on screen
     const scaleMetres = 5 // show 5m scale

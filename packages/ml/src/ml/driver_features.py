@@ -277,9 +277,6 @@ def compute_weather_features(engine: Engine, season: int) -> dict[int, dict]:
     return result
 
 
-# Merge & upsert
-
-
 def merge_features(*feature_dicts: dict[int, dict]) -> list[dict]:
     """Merge multiple per-driver feature dicts into a flat list of rows."""
     merged: dict[int, dict] = {}
@@ -298,14 +295,16 @@ UPSERT_SQL = text("""
         avg_positions_gained, quali_to_race_delta, dnf_rate,
         lap_time_consistency, avg_speed_trap,
         max_speed_capability, braking_aggression, drs_usage_pct,
-        wet_pace_delta
+        wet_pace_delta,
+        throttle_instability, kerb_confidence, track_limits_rate
     ) VALUES (
         :driver_number, :season, :full_name, :abbreviation, :team_name,
         :avg_finish_position, :finish_position_stddev, :podium_rate, :win_rate,
         :avg_positions_gained, :quali_to_race_delta, :dnf_rate,
         :lap_time_consistency, :avg_speed_trap,
         :max_speed_capability, :braking_aggression, :drs_usage_pct,
-        :wet_pace_delta
+        :wet_pace_delta,
+        :throttle_instability, :kerb_confidence, :track_limits_rate
     )
     ON CONFLICT (driver_number, season)
     DO UPDATE SET
@@ -325,6 +324,9 @@ UPSERT_SQL = text("""
         braking_aggression = EXCLUDED.braking_aggression,
         drs_usage_pct = EXCLUDED.drs_usage_pct,
         wet_pace_delta = EXCLUDED.wet_pace_delta,
+        throttle_instability = EXCLUDED.throttle_instability,
+        kerb_confidence = EXCLUDED.kerb_confidence,
+        track_limits_rate = EXCLUDED.track_limits_rate,
         computed_at = NOW()
 """)
 
@@ -346,6 +348,9 @@ UPSERT_COLUMNS = [
     "braking_aggression",
     "drs_usage_pct",
     "wet_pace_delta",
+    "throttle_instability",
+    "kerb_confidence",
+    "track_limits_rate",
 ]
 
 
@@ -365,8 +370,6 @@ def upsert_features(engine: Engine, rows: list[dict], season: int) -> int:
 
 
 # Helping functions
-
-
 def _float(value) -> float | None:
     """Safely convert a SQL result to float, returning None for NULL/NaN."""
     if value is None:

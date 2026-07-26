@@ -38,6 +38,9 @@ FEATURE_COLS = [
     "braking_aggression",
     "drs_usage_pct",
     "wet_pace_delta",
+    "throttle_instability",
+    "kerb_confidence",
+    "track_limits_rate",
 ]
 
 
@@ -50,7 +53,8 @@ def load_features(engine: Engine) -> pd.DataFrame:
             avg_positions_gained, quali_to_race_delta, dnf_rate,
             lap_time_consistency, avg_speed_trap,
             max_speed_capability, braking_aggression, drs_usage_pct,
-            wet_pace_delta
+            wet_pace_delta,
+            throttle_instability, kerb_confidence, track_limits_rate
         FROM driver_features
         ORDER BY driver_number, season
     """)

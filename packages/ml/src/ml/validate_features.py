@@ -34,6 +34,9 @@ FEATURE_COLS = [
     "braking_aggression",
     "drs_usage_pct",
     "wet_pace_delta",
+    "throttle_instability",
+    "kerb_confidence",
+    "track_limits_rate",
 ]
 
 ICC_MIN_THRESHOLD = 0.5
@@ -48,7 +51,8 @@ def load_features(engine: Engine) -> pd.DataFrame:
                 avg_finish_position, finish_position_stddev, podium_rate, win_rate,
                 avg_positions_gained, quali_to_race_delta, dnf_rate,
                 lap_time_consistency, avg_speed_trap,
-                max_speed_capability, braking_aggression, drs_usage_pct, wet_pace_delta
+                max_speed_capability, braking_aggression, drs_usage_pct, wet_pace_delta,
+                throttle_instability, kerb_confidence, track_limits_rate
             FROM driver_features
             ORDER BY driver_number, season
     """)
