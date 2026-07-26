@@ -53,6 +53,7 @@ Phase 4    Interpretability layer     Ridge regression + correlation: label embe
 
 Phase 5    Archetype clustering       KMeans/HDBSCAN on embeddings -> named driver types
                                        ("Late braker", "Tyre whisperer", etc.)
+                                       ✅ DONE — KMeans k=4, feature-z-score naming, archetype column.
 
 Phase 6    Circuit embeddings         Mirror of driver embeddings, learned from lap/telemetry
                                        shape instead of hand-coded is_street_circuit flags.

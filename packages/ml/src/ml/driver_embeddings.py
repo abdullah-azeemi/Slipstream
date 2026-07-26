@@ -114,10 +114,10 @@ def compute_embeddings(df: pd.DataFrame) -> dict:
 UPSERT_SQL = text("""
     INSERT INTO driver_embeddings (
         driver_number, season, abbreviation, team_name,
-        embedding, pca_explained_variance, pca_loadings, axis_labels
+        embedding, pca_explained_variance, pca_loadings, axis_labels, archetype
     ) VALUES (
         :driver_number, :season, :abbreviation, :team_name,
-        :embedding, :pca_explained_variance, :pca_loadings, :axis_labels
+        :embedding, :pca_explained_variance, :pca_loadings, :axis_labels, :archetype
     )
     ON CONFLICT (driver_number, season)
     DO UPDATE SET
@@ -127,6 +127,7 @@ UPSERT_SQL = text("""
         pca_explained_variance = EXCLUDED.pca_explained_variance,
         pca_loadings = EXCLUDED.pca_loadings,
         axis_labels = EXCLUDED.axis_labels,
+        archetype = EXCLUDED.archetype,
         computed_at = NOW()
 """)
 
@@ -137,6 +138,7 @@ def upsert_embeddings(
     explained_variance: list,
     loadings: dict,
     axis_labels: dict | None = None,
+    archetype: str | None = None,
 ) -> int:
     """Write embeddings to database. Returns count of rows written."""
     with engine.begin() as conn:
@@ -152,6 +154,7 @@ def upsert_embeddings(
                     "pca_explained_variance": explained_variance,
                     "pca_loadings": json.dumps(loadings),
                     "axis_labels": json.dumps(axis_labels) if axis_labels else None,
+                    "archetype": archetype,
                 },
             )
     count = len(embeddings_df)
