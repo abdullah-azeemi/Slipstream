@@ -3,6 +3,7 @@ Drivers API endpoints.
 
 GET /api/v1/sessions/<key>/drivers                → all drivers
 GET /api/v1/sessions/<key>/drivers/<num>/compare  → head-to-head stats
+GET /api/v1/drivers/<num>/profile                 → driver profile (ML data)
 """
 from flask import Blueprint, jsonify
 from sqlalchemy import text
@@ -108,3 +109,110 @@ def compare_drivers(session_key: int):
 
 
     return jsonify(results)
+
+
+@drivers_bp.get("/drivers/<int:driver_number>/profile")
+def driver_profile(driver_number: int):
+    """
+    Full driver profile for the ML driver page.
+    Returns: driver info, features, embeddings, all embeddings for scatter,
+    lap times by compound, recent results.
+    """
+    from flask import request
+    year = request.args.get("year", 2024, type=int)
+
+    result = {
+        "driver": None,
+        "features": None,
+        "embedding": None,
+        "all_embeddings": [],
+        "compound_laps": [],
+        "recent_results": [],
+    }
+
+    with engine.connect() as conn:
+        # Driver info
+        driver = conn.execute(text("""
+            SELECT
+                d.driver_number,
+                d.full_name,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour
+            FROM drivers d
+            JOIN sessions s ON s.session_key = d.session_key
+            WHERE d.driver_number = :num
+            ORDER BY s.date_start DESC
+            LIMIT 1
+        """), {"num": driver_number}).mappings().first()
+
+        if driver:
+            result["driver"] = dict(driver)
+
+        # Features
+        features = conn.execute(text("""
+            SELECT * FROM driver_features
+            WHERE driver_number = :num AND season = :year
+        """), {"num": driver_number, "year": year}).mappings().first()
+        if features:
+            result["features"] = dict(features)
+
+        # Embedding
+        embedding = conn.execute(text("""
+            SELECT * FROM driver_embeddings
+            WHERE driver_number = :num AND season = :year
+        """), {"num": driver_number, "year": year}).mappings().first()
+        if embedding:
+            result["embedding"] = dict(embedding)
+
+        # All embeddings for scatter plot
+        all_emb = conn.execute(text("""
+            SELECT
+                de.driver_number,
+                de.season,
+                de.embedding,
+                de.archetype,
+                d.full_name,
+                d.abbreviation,
+                d.team_colour
+            FROM driver_embeddings de
+            JOIN drivers d ON d.driver_number = de.driver_number
+            WHERE de.season = :year
+        """), {"year": year}).mappings().all()
+        result["all_embeddings"] = [dict(r) for r in all_emb]
+
+        # Lap times by compound for violin plot
+        compound_laps = conn.execute(text("""
+            SELECT
+                lt.driver_number,
+                lt.compound,
+                lt.lap_time_ms
+            FROM lap_times lt
+            JOIN sessions s ON s.session_key = lt.session_key
+            WHERE lt.driver_number = :num
+              AND s.session_type = 'R'
+              AND lt.deleted = FALSE
+              AND lt.lap_time_ms IS NOT NULL
+              AND lt.compound IN ('SOFT', 'MEDIUM', 'HARD')
+        """), {"num": driver_number}).mappings().all()
+        result["compound_laps"] = [dict(r) for r in compound_laps]
+
+        # Recent race results
+        recent = conn.execute(text("""
+            SELECT
+                s.gp_name,
+                s.date_start,
+                rr.position,
+                rr.grid_position,
+                rr.points,
+                rr.status
+            FROM race_results rr
+            JOIN sessions s ON s.session_key = rr.session_key
+            WHERE rr.driver_number = :num
+              AND s.session_type = 'R'
+            ORDER BY s.date_start DESC
+            LIMIT 5
+        """), {"num": driver_number}).mappings().all()
+        result["recent_results"] = [dict(r) for r in recent]
+
+    return jsonify(result)

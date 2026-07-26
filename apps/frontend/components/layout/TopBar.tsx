@@ -15,6 +15,11 @@ export default function TopBar() {
       active: pathname === '/dashboard',
     },
     {
+      name: 'Drivers',
+      href: '/drivers/1',
+      active: pathname.startsWith('/drivers'),
+    },
+    {
       name: 'Latest Weekend',
       href: '/sessions/latest',
       active: pathname === '/sessions/latest' || pathname.endsWith('/overview'),
