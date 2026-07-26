@@ -114,10 +114,10 @@ def compute_embeddings(df: pd.DataFrame) -> dict:
 UPSERT_SQL = text("""
     INSERT INTO driver_embeddings (
         driver_number, season, abbreviation, team_name,
-        embedding, pca_explained_variance, pca_loadings
+        embedding, pca_explained_variance, pca_loadings, axis_labels
     ) VALUES (
         :driver_number, :season, :abbreviation, :team_name,
-        :embedding, :pca_explained_variance, :pca_loadings
+        :embedding, :pca_explained_variance, :pca_loadings, :axis_labels
     )
     ON CONFLICT (driver_number, season)
     DO UPDATE SET
@@ -126,6 +126,7 @@ UPSERT_SQL = text("""
         embedding = EXCLUDED.embedding,
         pca_explained_variance = EXCLUDED.pca_explained_variance,
         pca_loadings = EXCLUDED.pca_loadings,
+        axis_labels = EXCLUDED.axis_labels,
         computed_at = NOW()
 """)
 
@@ -135,6 +136,7 @@ def upsert_embeddings(
     embeddings_df: pd.DataFrame,
     explained_variance: list,
     loadings: dict,
+    axis_labels: dict | None = None,
 ) -> int:
     """Write embeddings to database. Returns count of rows written."""
     with engine.begin() as conn:
@@ -149,6 +151,7 @@ def upsert_embeddings(
                     "embedding": row["embedding"],
                     "pca_explained_variance": explained_variance,
                     "pca_loadings": json.dumps(loadings),
+                    "axis_labels": json.dumps(axis_labels) if axis_labels else None,
                 },
             )
     count = len(embeddings_df)

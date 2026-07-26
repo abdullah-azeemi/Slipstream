@@ -45,9 +45,11 @@ Phase 2    Driver profile page        app/drivers/[id]/page.tsx  (needs Plotly.j
 
 Phase 3    Kerb-usage telemetry       Track-limits signal from steering/throttle spikes,
                                        feeds back into Phase 0 feature store
+                                       ✅ DONE — throttle_instability, kerb_confidence, track_limits_rate added.
 
 Phase 4    Interpretability layer     Ridge regression + correlation: label embedding axes
                                        (aggression, tyre mgmt, etc.) against known traits
+                                       ✅ DONE — Pearson correlation + feature group mapping, axis_labels column.
 
 Phase 5    Archetype clustering       KMeans/HDBSCAN on embeddings -> named driver types
                                        ("Late braker", "Tyre whisperer", etc.)
