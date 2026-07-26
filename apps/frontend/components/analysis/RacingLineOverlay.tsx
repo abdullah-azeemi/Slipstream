@@ -105,8 +105,6 @@ export default function RacingLineOverlay({
     compact?: boolean;
 }) {
     const [compareData, setCompareData] = useState<CompareStats | null>(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
     const [selectedCorner, setSelectedCorner] = useState<number>(0)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
 

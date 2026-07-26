@@ -34,6 +34,7 @@ Phase 0    Feature store              packages/ml/src/ml/driver_features.py
 Phase 0.5  Statistical validation     ICC per candidate feature (grouped by driver) —
                                        filters out features that are race-noise, not driver-trait.
                                        Ridge regression baseline vs FLAML/SHAP sanity check.
+                                       ✅ DONE — ICC skipped (1 season), Ridge R²=0.976. Features pass.
 
 Phase 1    Driver embeddings          packages/ml/src/ml/driver_embeddings.py
                                        PCA or small autoencoder -> N-dim vector per driver/season

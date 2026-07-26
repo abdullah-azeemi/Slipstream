@@ -74,6 +74,11 @@ def compute_icc_per_feature(df: pd.DataFrame) -> dict[str, float]:
 
     n_drivers = df_valid["driver_number"].nunique()
     n_total = len(df_valid)
+
+    if n_drivers == 0 or n_total < 3:
+        logger.warning("icc_skip_all", reason="not_enough_multi_season_drivers")
+        return {col: None for col in FEATURE_COLS}
+
     k_avg = n_total / n_drivers
 
     logger.info(
@@ -118,9 +123,8 @@ def ridge_baseline(df: pd.DataFrame) -> dict:
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import make_pipeline
 
-    df_clean = df.dropna(subset=FEATURE_COLS + ["avg_finish_position"])
-
-    X = df_clean[FEATURE_COLS].values
+    df_clean = df.dropna(subset=["avg_finish_position"]).copy()
+    X = df_clean[FEATURE_COLS].fillna(0).infer_objects(copy=False).values
     y = df_clean["avg_finish_position"].values
 
     model = make_pipeline(StandardScaler(), Ridge(alpha=1.0))
