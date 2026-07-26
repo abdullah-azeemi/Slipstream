@@ -58,10 +58,16 @@ Phase 5    Archetype clustering       KMeans/HDBSCAN on embeddings -> named driv
 Phase 6    Circuit embeddings         Mirror of driver embeddings, learned from lap/telemetry
                                        shape instead of hand-coded is_street_circuit flags.
                                        Enriches race_predictor.pkl directly.
+                                       ✅ DONE — circuit_embeddings table, PCA 7→3 dims,
+                                       6 circuit features.
 
 Phase 7    Overtake probability +     Row-level classifiers (gap_ms, tyre_delta, DRS -> overtake;
            pit-strategy archetype +   stint data -> strategy type; Isolation Forest -> anomalous
            anomaly detection          laps, generalizes existing is_outlier flag)
+                                       ✅ DONE — 3 classifiers writing to ml_predictions:
+                                       overtake_prob (LogisticRegression),
+                                       strategy_archetype (LogisticRegression),
+                                       anomaly_lap (IsolationForest).
 
 Phase 8    Embedding-as-feature       Concatenate driver embedding vector onto the existing 22
                                        features before FLAML training -> race_predictor.pkl v2
