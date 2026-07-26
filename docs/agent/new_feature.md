@@ -39,6 +39,7 @@ Phase 0.5  Statistical validation     ICC per candidate feature (grouped by driv
 Phase 1    Driver embeddings          packages/ml/src/ml/driver_embeddings.py
                                        PCA or small autoencoder -> N-dim vector per driver/season
                                        new table: driver_embeddings
+                                       ✅ DONE — PCA 13→5 dims, variance explained, loadings for interpretability.
 
 Phase 2    Driver profile page        app/drivers/[id]/page.tsx  (needs Plotly.js — see blockers)
 
