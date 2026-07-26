@@ -10,6 +10,7 @@ interface DriverEmb {
   abbreviation: string
   full_name: string
   team_colour: string | null
+  archetype?: string | null
 }
 
 function tc(colour: string | null): string {
@@ -44,6 +45,12 @@ export default function DriverScatter({
   const nearestNums = new Set(nearest.map(d => d.driver_number))
   const far = others.filter(d => !nearestNums.has(d.driver_number))
 
+  // Get axis labels from embeddings
+  const axisLabels = {
+    x: 'PC1 — Driving Style',
+    y: 'PC2 — Performance Profile',
+  }
+
   const traces: Plotly.Data[] = [
     // Far drivers — small, muted, coloured by team
     {
@@ -53,17 +60,17 @@ export default function DriverScatter({
       y: far.map(d => d.embedding[1]),
       text: far.map(d => d.abbreviation),
       textposition: 'top center',
-      textfont: { size: 8, color: far.map(d => tc(d.team_colour)), family: 'JetBrains Mono' },
-      hovertemplate: '%{text}<extra></extra>',
+      textfont: { size: 9, color: far.map(d => `${tc(d.team_colour)}90`), family: 'JetBrains Mono' },
+      hovertemplate: far.map(d => `<b>${d.full_name}</b><br>${d.archetype || 'Unknown'}<extra></extra>`),
       marker: {
-        size: 6,
+        size: 7,
         color: far.map(d => tc(d.team_colour)),
-        opacity: 0.3,
-        line: { color: '#fff', width: 0.5 },
+        opacity: 0.25,
+        line: { color: '#fff', width: 1 },
       },
       showlegend: false,
     },
-    // Nearest neighbours — medium, bordered
+    // Nearest neighbours — medium, bordered, with team colours
     {
       type: 'scatter',
       mode: 'text+markers',
@@ -71,29 +78,29 @@ export default function DriverScatter({
       y: nearest.map(d => d.embedding[1]),
       text: nearest.map(d => d.abbreviation),
       textposition: 'top center',
-      textfont: { size: 9, color: nearest.map(d => tc(d.team_colour)), family: 'JetBrains Mono' },
-      hovertemplate: '%{text}<extra>Similar</extra>',
+      textfont: { size: 10, color: nearest.map(d => tc(d.team_colour)), family: 'JetBrains Mono, monospace', weight: 700 },
+      hovertemplate: nearest.map(d => `<b>${d.full_name}</b><br>Similarity: ${((1 - d.dist) * 100).toFixed(0)}%<extra>Similar</extra>`),
       marker: {
-        size: 9,
-        color: '#fff',
-        line: { color: nearest.map(d => tc(d.team_colour)), width: 2 },
+        size: 11,
+        color: nearest.map(d => `${tc(d.team_colour)}20`),
+        line: { color: nearest.map(d => tc(d.team_colour)), width: 2.5 },
       },
       showlegend: false,
     },
   ]
 
   if (selected) {
-    // Connection lines
+    // Connection lines — team colour
     traces.push({
       type: 'scatter',
       mode: 'lines',
       x: nearest.flatMap(d => [selected.embedding[0], d.embedding[0], null]),
       y: nearest.flatMap(d => [selected.embedding[1], d.embedding[1], null]),
-      line: { color: '#E2E8F0', width: 1, dash: 'dot' },
+      line: { color: `${colour}30`, width: 1.5, dash: 'dot' },
       hoverinfo: 'skip',
       showlegend: false,
     })
-    // Selected — big, team colour, with glow
+    // Selected — big, team colour, prominent
     traces.push({
       type: 'scatter',
       mode: 'text+markers',
@@ -101,10 +108,10 @@ export default function DriverScatter({
       y: [selected.embedding[1]],
       text: [selected.abbreviation],
       textposition: 'top center',
-      textfont: { size: 11, color: colour, family: 'JetBrains Mono' },
-      hovertemplate: '%{text}<extra>You</extra>',
+      textfont: { size: 12, color: colour, family: 'JetBrains Mono, monospace', weight: 900 },
+      hovertemplate: `<b>${selected.full_name}</b><extra>Selected</extra>`,
       marker: {
-        size: 16,
+        size: 18,
         color: colour,
         line: { color: '#fff', width: 3 },
         symbol: 'circle',
@@ -114,21 +121,21 @@ export default function DriverScatter({
   }
 
   return (
-    <div style={{ width: '100%', height: 240 }}>
+    <div style={{ width: '100%', height: 320 }}>
       <Plot
         data={traces}
         layout={{
           xaxis: {
             gridcolor: '#F8FAFC', zeroline: true, zerolinecolor: '#E2E8F0', zerolinewidth: 1,
             showticklabels: false, showgrid: true, gridwidth: 1,
-            title: { text: 'PC1 — Pace', font: { size: 9, color: '#94A3B8', family: 'JetBrains Mono' } },
+            title: { text: axisLabels.x, font: { size: 10, color: '#94A3B8', family: 'Space Grotesk, sans-serif' } },
           },
           yaxis: {
             gridcolor: '#F8FAFC', zeroline: true, zerolinecolor: '#E2E8F0', zerolinewidth: 1,
             showticklabels: false, showgrid: true, gridwidth: 1,
-            title: { text: 'PC2 — Racecraft', font: { size: 9, color: '#94A3B8', family: 'JetBrains Mono' } },
+            title: { text: axisLabels.y, font: { size: 10, color: '#94A3B8', family: 'Space Grotesk, sans-serif' } },
           },
-          margin: { t: 12, b: 40, l: 40, r: 12 },
+          margin: { t: 12, b: 44, l: 44, r: 12 },
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'transparent',
           font: { family: 'Inter, sans-serif' },

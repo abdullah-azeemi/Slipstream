@@ -3,8 +3,9 @@ import DriverProfile from '@/components/driver/DriverProfile'
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 async function fetchDriverProfile(driverNumber: number) {
+  const currentYear = new Date().getFullYear()
   try {
-    const res = await fetch(`${BASE}/api/v1/drivers/${driverNumber}/profile?year=2024`, {
+    const res = await fetch(`${BASE}/api/v1/drivers/${driverNumber}/profile?year=${currentYear}`, {
       next: { revalidate: 60 },
     })
     if (!res.ok) return null
@@ -20,9 +21,15 @@ async function fetchDriverImages() {
       next: { revalidate: 3600 },
     }).then(r => r.json())
     if (!Array.isArray(data)) return {}
-    const map: Record<number, string> = {}
-    data.forEach((d: { driver_number: number; headshot_url: string }) => {
-      if (d.driver_number && d.headshot_url) map[d.driver_number] = d.headshot_url
+    const map: Record<number, { headshot_url: string; team_name: string | null; team_colour: string | null }> = {}
+    data.forEach((d: { driver_number: number; headshot_url: string; team_name: string | null; team_colour: string | null }) => {
+      if (d.driver_number) {
+        map[d.driver_number] = {
+          headshot_url: d.headshot_url ?? null,
+          team_name: d.team_name ?? null,
+          team_colour: d.team_colour ?? null,
+        }
+      }
     })
     return map
   } catch {
@@ -46,7 +53,7 @@ export default async function DriverPage({
     )
   }
 
-  const [profile, images] = await Promise.all([
+  const [profile, latestDrivers] = await Promise.all([
     fetchDriverProfile(driverNumber),
     fetchDriverImages(),
   ])
@@ -59,10 +66,17 @@ export default async function DriverPage({
     )
   }
 
+  // Override team info with latest OpenF1 data if available
+  const latestInfo = latestDrivers[driverNumber]
+  if (latestInfo) {
+    if (latestInfo.team_name) profile.driver.team_name = latestInfo.team_name
+    if (latestInfo.team_colour) profile.driver.team_colour = latestInfo.team_colour
+  }
+
   return (
     <DriverProfile
       profile={profile}
-      headshotUrl={images[driverNumber] ?? null}
+      headshotUrl={latestInfo?.headshot_url ?? null}
     />
   )
 }

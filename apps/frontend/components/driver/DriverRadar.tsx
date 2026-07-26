@@ -17,13 +17,23 @@ export default function DriverRadar({
   const r = [...values, values[0]]
 
   return (
-    <div style={{ width: '100%', height: 240 }}>
+    <div style={{ width: '100%', height: 300 }}>
       <Plot
         data={[
-          // Background reference ring
+          // Background reference ring — team colour tinted
           {
             type: 'scatterpolar',
-            r: [1, 1, 1, 1, 1, 1],
+            r: Array(theta.length).fill(1),
+            theta,
+            mode: 'lines',
+            line: { color: `${colour}18`, width: 1.5 },
+            hoverinfo: 'skip',
+            showlegend: false,
+          },
+          // 75% reference
+          {
+            type: 'scatterpolar',
+            r: Array(theta.length).fill(0.75),
             theta,
             mode: 'lines',
             line: { color: '#F1F5F9', width: 1 },
@@ -33,23 +43,37 @@ export default function DriverRadar({
           // 50% reference
           {
             type: 'scatterpolar',
-            r: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            r: Array(theta.length).fill(0.5),
             theta,
             mode: 'lines',
             line: { color: '#F1F5F9', width: 1, dash: 'dot' },
             hoverinfo: 'skip',
             showlegend: false,
           },
-          // Actual data
+          // 25% reference
+          {
+            type: 'scatterpolar',
+            r: Array(theta.length).fill(0.25),
+            theta,
+            mode: 'lines',
+            line: { color: '#F8FAFC', width: 1 },
+            hoverinfo: 'skip',
+            showlegend: false,
+          },
+          // Actual data — filled area
           {
             type: 'scatterpolar',
             r,
             theta,
             fill: 'toself',
-            fillcolor: `${colour}14`,
-            line: { color: colour, width: 2.5 },
-            marker: { size: 5, color: colour, line: { color: '#fff', width: 1 } },
-            hovertemplate: '%{theta}: %{r:.0%}<extra></extra>',
+            fillcolor: `${colour}18`,
+            line: { color: colour, width: 2.5, shape: 'spline' },
+            marker: {
+              size: 7,
+              color: colour,
+              line: { color: '#fff', width: 2 },
+            },
+            hovertemplate: '<b>%{theta}</b><br>%{r:.0%}<extra></extra>',
             showlegend: false,
           },
         ]}
@@ -57,7 +81,7 @@ export default function DriverRadar({
           polar: {
             radialaxis: {
               visible: true,
-              range: [0, 1.05],
+              range: [0, 1.08],
               showticklabels: false,
               gridcolor: '#E2E8F0',
               gridwidth: 1,
@@ -68,12 +92,12 @@ export default function DriverRadar({
               gridwidth: 1,
               linecolor: '#E2E8F0',
               linewidth: 1,
-              tickfont: { family: 'Inter, sans-serif', size: 9, color: '#475569', weight: 600 },
+              tickfont: { family: 'Space Grotesk, sans-serif', size: 10, color: '#475569', weight: 600 },
             },
             bgcolor: 'transparent',
           },
           showlegend: false,
-          margin: { t: 24, b: 24, l: 40, r: 40 },
+          margin: { t: 28, b: 28, l: 48, r: 48 },
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'transparent',
         }}

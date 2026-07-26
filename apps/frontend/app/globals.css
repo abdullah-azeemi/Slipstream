@@ -317,6 +317,13 @@ main.landing {
   .predictions-dropdown-container { width: 100% !important; margin-top: 8px !important; }
   .predictions-dropdown-button { width: 100% !important; justify-content: space-between !important; }
   .predictions-dropdown-menu { width: 100% !important; right: auto !important; left: 0 !important; }
+
+  /* Driver Profile */
+  .driver-hero-inner { flex-direction: column !important; text-align: center !important; gap: 16px !important; }
+  .driver-stats-row { justify-content: center !important; }
+  .driver-grid-row1 { grid-template-columns: 1fr !important; }
+  .driver-grid-row2 { grid-template-columns: 1fr !important; }
+  .driver-watermark-number { display: none !important; }
 }
 
 @media (max-width: 480px) {
@@ -325,4 +332,6 @@ main.landing {
     display: none !important;
   }
   .layout-wrapper { padding: 8px 8px 24px; }
+  .driver-stats-row { gap: 8px !important; }
+  .driver-stats-row > div { min-width: 60px !important; padding: 8px 10px !important; }
 }

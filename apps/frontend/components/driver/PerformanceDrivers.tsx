@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 interface Embedding {
   embedding: number[]
   pca_loadings: Record<string, { feature: string; weight: number }[]>
@@ -19,6 +21,13 @@ export default function PerformanceDrivers({
   embedding: Embedding | null
   features: Features | null
 }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 100)
+    return () => clearTimeout(timer)
+  }, [])
+
   const bars: { label: string; value: number; colour: string }[] = []
 
   if (embedding?.axis_labels) {
@@ -36,9 +45,9 @@ export default function PerformanceDrivers({
 
   if (features) {
     const featureBars = [
-      { key: 'kerb_confidence', label: 'Kerb' },
-      { key: 'throttle_instability', label: 'Throttle' },
-      { key: 'track_limits_rate', label: 'Limits' },
+      { key: 'kerb_confidence', label: 'Kerb Confidence' },
+      { key: 'throttle_instability', label: 'Throttle Control' },
+      { key: 'track_limits_rate', label: 'Track Limits' },
     ]
     featureBars.forEach(fb => {
       const val = features[fb.key]
@@ -51,48 +60,76 @@ export default function PerformanceDrivers({
   if (bars.length === 0) {
     bars.push(
       { label: 'Braking', value: 0.85, colour: COLOURS[0] },
-      { label: 'Tyres', value: 0.72, colour: COLOURS[1] },
-      { label: 'Speed', value: 0.78, colour: COLOURS[2] },
-      { label: 'Exit', value: 0.91, colour: COLOURS[3] },
+      { label: 'Tyre Mgmt', value: 0.72, colour: COLOURS[1] },
+      { label: 'Top Speed', value: 0.78, colour: COLOURS[2] },
+      { label: 'Corner Exit', value: 0.91, colour: COLOURS[3] },
     )
   }
 
   const topBars = bars.slice(0, 6)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {topBars.map((bar, i) => {
         const pct = Math.round(bar.value * 100)
         return (
           <div key={i}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
               <span style={{
-                fontSize: 9, fontWeight: 700, color: '#475569',
+                fontSize: 10, fontWeight: 700, color: '#475569',
                 textTransform: 'uppercase', letterSpacing: '0.04em',
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: 'Space Grotesk, sans-serif',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: bar.colour, flexShrink: 0,
+                  boxShadow: `0 0 6px ${bar.colour}40`,
+                }} />
                 {bar.label}
               </span>
               <span style={{
-                fontSize: 11, fontWeight: 800, color: bar.colour,
+                fontSize: 12, fontWeight: 800, color: bar.colour,
                 fontFamily: 'JetBrains Mono, monospace',
               }}>
-                {pct}
+                {pct}%
               </span>
             </div>
             <div style={{
-              width: '100%', height: 6, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden',
+              width: '100%', height: 8, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden',
+              position: 'relative',
             }}>
               <div style={{
-                width: `${pct}%`, height: '100%', borderRadius: 3,
-                background: bar.colour,
-                transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: `0 0 8px ${bar.colour}30`,
-              }} />
+                width: mounted ? `${pct}%` : '0%',
+                height: '100%', borderRadius: 4,
+                background: `linear-gradient(90deg, ${bar.colour}, ${bar.colour}CC)`,
+                transition: `width 1.2s cubic-bezier(0.16, 1, 0.3, 1) ${i * 100}ms`,
+                boxShadow: `0 0 10px ${bar.colour}30`,
+                position: 'relative',
+              }}>
+                {/* Shimmer effect */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)',
+                  borderRadius: 4,
+                  animationName: mounted ? 'barShimmer' : 'none',
+                  animationDuration: '2s',
+                  animationTimingFunction: 'ease-in-out',
+                  animationIterationCount: 'infinite',
+                  animationDelay: `${i * 200 + 1200}ms`,
+                  opacity: 0.5,
+                }} />
+              </div>
             </div>
           </div>
         )
       })}
+      <style>{`
+        @keyframes barShimmer {
+          0%, 100% { transform: translateX(-100%); }
+          50% { transform: translateX(200%); }
+        }
+      `}</style>
     </div>
   )
 }
