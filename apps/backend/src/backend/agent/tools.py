@@ -103,3 +103,106 @@ def resolve_driver(inp: types.ResolveDriverInput) -> types.ResolvedDriver:
         full_name=row["full_name"],
         team_name=row["team_name"],
     )
+
+
+def _derive_pit_stops(laps: list[dict]) -> list[types.PitStop]:
+    """
+    Derive pit stops from a list of lap dictionaries.
+    """
+    stops: list[types.PitStop] = []
+    for i, lap in enumerate(laps):
+        if lap["pit_in_time_ms"] is None:
+            continue
+
+        pit_in_lap = lap["lap_number"]
+
+        pit_out_lap = None
+        for following in laps[i + 1 :]:
+            if following["pit_out_time_ms"] is not None:
+                pit_out_lap = following["lap_number"]
+                break
+        if pit_out_lap is None:
+            pit_out_lap = pit_in_lap + 1
+
+        compound_before = next(
+            (p["compound"] for p in reversed(laps[:i]) if p["compound"]), None
+        )
+        compound_after = next(
+            (p["compound"] for p in laps[i + 1 :] if p["compound"]), None
+        )
+
+        stops.append(
+            types.PitStop(
+                stop_index=len(stops) + 1,
+                pit_in_lap=pit_in_lap,
+                pit_out_lap=pit_out_lap,
+                compound_before=compound_before,
+                compound_after=compound_after,
+            )
+        )
+    return stops
+
+
+def find_pit_stops(inp: types.FindPitStopsInput) -> types.PitStopsResult:
+    """Detect pit stops for one driver in one session."""
+    with extensions.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+                    SELECT lap_number, pit_in_time_ms, pit_out_time_ms, compound
+                    FROM lap_times
+                    WHERE session_key = :sk
+                      AND driver_number = :dn
+                      AND deleted = FALSE
+                    ORDER BY lap_number ASC
+                """),
+                {"sk": inp.session_key, "dn": inp.driver_number},
+            )
+            .mappings()
+            .all()
+        )
+
+    stops = _derive_pit_stops([dict(r) for r in rows])
+    return types.PitStopsResult(driver_number=inp.driver_number, pit_stops=tuple(stops))
+
+
+def get_lap_telemetry_artifacts(
+    inp: types.GetLapTelemetryArtifactsInput,
+) -> types.LapTelemetryResult:
+    """
+    Return artifact metadata (not raw samples) for the requested laps.
+    This proves telemetry exists before we compute speed from it.
+    """
+    if not inp.lap_numbers:
+        raise types.DataError("lap_numbers is required to load telemetry artifacts")
+
+    with extensions.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+                    SELECT
+                        session_key, driver_number, lap_number,
+                        storage_key, storage_backend, format,
+                        sample_count, size_bytes, checksum_sha256
+                    FROM telemetry_artifacts
+                    WHERE session_key = :sk
+                      AND driver_number = :dn
+                      AND lap_number = ANY(:laps)
+                    ORDER BY lap_number ASC
+                """),
+                {
+                    "sk": inp.session_key,
+                    "dn": inp.driver_number,
+                    "laps": list(inp.lap_numbers),
+                },
+            )
+            .mappings()
+            .all()
+        )
+
+    artifacts = tuple(types.TelemetryArtifact(**dict(r)) for r in rows)
+    return types.LapTelemetryResult(
+        session_key=inp.session_key,
+        driver_number=inp.driver_number,
+        artifacts=artifacts,
+    )
