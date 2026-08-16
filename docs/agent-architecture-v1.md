@@ -1,8 +1,38 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-16
+Last updated: 2026-08-17
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
+
+## Implementation Status
+
+Live progress log. Each lesson is a small, reviewed, committed step. Work proceeds in the order below with the student coding each file by hand.
+
+### Completed
+
+- L1 — Agent package skeleton.
+  - Files: `apps/backend/src/backend/agent/__init__.py`, `apps/backend/src/backend/agent/types.py`
+  - Typed contracts (dataclasses + enums) for all inputs/outputs and `AgentError` / `NotFoundError` / `DataError`.
+  - Commit `ebd9a4f` "feat(agent): add typed tool contracts"
+- L2 — First read-only tools.
+  - Files: `apps/backend/src/backend/agent/tools.py` (`resolve_session`, `resolve_driver`)
+  - Deterministic parameterized SQL against `sessions` / `drivers`; `NotFoundError` on miss.
+  - Commit `36b1492` "feat(agent): add resolve_session and resolve_driver read-only tools"
+- L3 — Pit stop detection + artifact metadata.
+  - Files: `tools.py` (`find_pit_stops`, `get_lap_telemetry_artifacts`), pure `_derive_pit_stops` helper, `apps/backend/tests/test_agent_tools.py`
+  - Gather-in-SQL / derive-in-Python separation; DB-free unit tests.
+  - Commit `276e5ca` "feat(agent): add pit stop and telemetry artifact tools"
+- L4 — Speed computation + evidence gate.
+  - Files: `tools.py` (`compute_speed_window`, `verify_evidence`, plus `_mean`, `_read_artifact_speed_samples`, `_assess`), `apps/backend/tests/test_agent_evidence.py`
+  - Computes telemetry-sample-mean speed before/after a stop; refusal on missing/unsupported data.
+  - Commit `ee63b07` "feat(agent): add speed window computation and evidence verification"
+
+Current test state: 43 passing (backend suite).
+
+### Next
+
+- L5 — Orchestrator (`apps/backend/src/backend/agent/orchestrator.py`): hardcoded demo flow chaining the tools into `run()` producing the structured answer for the Verstappen pit-stop question, no LLM.
+- Then L6+ per the Implementation Plan section below.
 
 ## How To Use This Document
 
@@ -999,7 +1029,7 @@ This is how the future world-model path begins without pretending the first chat
 
 ## Recommended Next Step
 
-Before coding, decide these five v1 constants:
+The read-only tool layer (L1–L4) is done and committed. The five v1 constants below are still open but not blocking the orchestrator (the demo flow can use local defaults until decide later):
 
 1. Free daily agent question limit.
 2. Admin Clerk user id or admin email.
@@ -1007,12 +1037,42 @@ Before coding, decide these five v1 constants:
 4. Default OpenRouter final-answer model.
 5. Default pit-stop comparison window, such as 3 laps before and 3 laps after.
 
-After that, implement in this order:
+Implement in this order (see Implementation Status for what is done):
 
-1. Clerk route protection for `/agent`.
-2. Flask Clerk JWT verification.
-3. Minimal user/agent tables.
-4. Read-only tools without LLM.
-5. One hardcoded demo query flow.
-6. OpenRouter planner/composer.
-7. Evidence cards and trace UI.
+1. [done] Typed tool contracts.
+2. [done] Read-only tools without LLM (`resolve_session`, `resolve_driver`, `find_pit_stops`, `get_lap_telemetry_artifacts`, `compute_speed_window`, `verify_evidence`).
+3. Orchestrator: one hardcoded demo query flow (no LLM).
+4. Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
+5. Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
+6. OpenRouter adapter, then planner/composer.
+7. Clerk route protection for `/agent`.
+8. Flask Clerk JWT verification.
+9. Evidence cards and trace UI.
+
+## Session Handoff (compact log)
+
+Teaching-mode build: the student types every file by hand, then the mentor checks, fixes, writes tests, and commits. One lesson per commit.
+
+### Established conventions (do not break)
+
+- Tools live in `apps/backend/src/backend/agent/tools.py`; contracts in `types.py`; SQL uses `text()` + bound params (`:name`), never f-strings.
+- Every tool takes one frozen input dataclass, returns one frozen output dataclass.
+- Errors are typed: `NotFoundError` = gone, `DataError` = unusable/unsupported. Verifier refusal paths use `DataError`.
+- Rule of thumb: SQL gathers, pure Python derives. Pure helpers (e.g. `_derive_pit_stops(rows)`), take `list[dict]` and no DB, so they are DB-free unit-testable.
+- Determinism: `ORDER BY` everywhere, `round(x, 2)` for numbers, one query per tool where possible (single `ANY(:laps)` instead of repeated lookups).
+- Dev DB (docker `make up`) currently has only 2024 British GP Qualifying session 9554, 20 drivers, 0 lap rows, and no `telemetry_artifacts` table — integration tests seed their own data in a test DB instead.
+- `extensions.engine` is only set inside `create_app()`; standalone scripts must `create_engine(settings.db_url)` first, and pytest integration tests must depend on the `app` fixture.
+- House quality commands: `uv run ruff check`, `uv run ruff format --check`, `uv run pytest apps/backend/tests/`.
+
+### Mentoring notes (bugs caught this session)
+
+- `gzip.open(path, "rt")` reads text; `.read().decode()` then fails — use `"rb"`.
+- Don't default mutable values to `[]` in dataclasses — `field(default_factory=list)` (here, tuples with `()`).
+- `conn.execute(...).first() is not None` is the cheap existence check.
+- Typo `extensions` vs `extentions` and a renamed input field (`name_or_abbreviation`) both caused runtime crashes — always grep `ruff check` + `py_compile` after hand-typing.
+
+### Decided v1 values used so far
+
+- Metric: `TELEMETRY_SAMPLE_MEAN` only (`compute_speed_window` refuses others with `DataError: unsupported metric`).
+- Pit stop signal: `pit_in_time_ms IS NOT NULL` = entry lap, first later lap with `pit_out_time_ms IS NOT NULL` = exit lap (fallback: entry + 1).
+- Speed delta positive = faster after the stop.
