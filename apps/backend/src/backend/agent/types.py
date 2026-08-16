@@ -11,7 +11,7 @@ from enum import Enum
 
 
 class Intent(str, Enum):
-    """ The categories of the question, v1 agent knows how to answer that. """
+    """The categories of the question, v1 agent knows how to answer that."""
 
     PIT_STOP_SPEED_DELTA = "pit_stop_speed_delta"
     UNSUPPORTED = "unsupported"
@@ -35,10 +35,24 @@ class ToolName(str, Enum):
     COMPUTE_SPEED_WINDOW = "compute_speed_window"
     VERIFY_EVIDENCE = "verify_evidence"
 
+
+class AgentError(Exception):
+    """Base class for all agent pipeline failures."""
+
+
+class NotFoundError(AgentError):
+    """Raised when a tool cannot find the requested data."""
+
+
+class DataError(AgentError):
+    """Raised when data exists but is unusable (e.g. missing columns)."""
+
+
 # Tool Inputs ---------------------
 @dataclass(frozen=True)
 class ResolveSessionInput:
-    """ A human friendly session name, e.g. "2023 Bahrain GP FP1" or "2023 Bahrain GP Sprint". """
+    """A human friendly session name, e.g. "2023 Bahrain GP FP1" or "2023 Bahrain GP Sprint"."""
+
     year: int
     gp_name: str
     session_type: SessionType = SessionType.RACE
@@ -52,7 +66,8 @@ class ResolveSessionInput:
 
 @dataclass(frozen=True)
 class ResolveDriverInput:
-    """ Resolve "HAM" , "Lewis Hamilton", "44" to a session specific driver. """
+    """Resolve "HAM" , "Lewis Hamilton", "44" to a session specific driver."""
+
     name_or_abbreviation: str
     session_key: int
 
