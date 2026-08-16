@@ -34,6 +34,11 @@ Use this page as the starting point if you are contributing, deploying, or tryin
 - [concepts/qualifying-telemetry.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/concepts/qualifying-telemetry.md)
   Why `Q1/Q2/Q3` telemetry is special, how `quali_segment` works, how pinned laps flow through the stack, and how the corner/braking comparison panels interpret segment-best laps.
 
+## Agent
+
+- [agent-architecture-v1.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/agent-architecture-v1.md)
+  Planning and teaching document for Clerk-gated, usage-limited race-data agent orchestration over Postgres, Cloudflare R2 telemetry artifacts, LanceDB race events, and OpenRouter.
+
 ## Launch and operations
 
 - [release-checklist.md](/Users/abdullahmusharaf/Desktop/F1/Pitwall/docs/release-checklist.md)
