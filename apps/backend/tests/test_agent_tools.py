@@ -1,6 +1,11 @@
 """Unit tests for the pure (DB-free) agent tool helpers."""
 
-from backend.agent import tools
+import gzip
+import json
+from pathlib import Path
+
+from backend.agent import tools, types
+from backend.config import settings
 
 
 def _lap(lap_number, pit_in=None, pit_out=None, compound=None):
@@ -65,3 +70,153 @@ def test_derive_pit_stops_missing_pit_out_defaults_to_next_lap():
 def test_derive_pit_stops_no_pit_laps_returns_empty():
     laps = [_lap(1, compound="SOFT"), _lap(2, compound="SOFT")]
     assert tools._derive_pit_stops(laps) == []
+
+
+# ── _mean ─────────────────────────────────────────────────────────────────────
+
+
+def test_mean_averages_values():
+    assert tools._mean([100.0, 200.0, 300.0]) == 200.0
+
+
+def test_mean_empty_returns_zero():
+    assert tools._mean([]) == 0.0
+
+
+# ── _read_artifact_speed_samples ──────────────────────────────────────────────
+
+
+def _write_json_gz_artifact(path: Path, samples: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wb") as f:
+        f.write(
+            json.dumps(
+                {
+                    "session_key": 1,
+                    "driver_number": 1,
+                    "lap_number": 1,
+                    "samples": samples,
+                }
+            ).encode("utf-8")
+        )
+
+
+def test_read_artifact_speed_samples_json_gz(monkeypatch, tmp_path):
+    artifact = types.TelemetryArtifact(
+        session_key=1,
+        driver_number=1,
+        lap_number=1,
+        storage_key="telemetry/session_1/driver_1/lap_1.json.gz",
+        storage_backend="local",
+        format="json.gz",
+        sample_count=3,
+        size_bytes=100,
+        checksum_sha256="x",
+    )
+    _write_json_gz_artifact(
+        Path(tmp_path) / artifact.storage_key,
+        [
+            {"speed_kmh": 200.0},
+            {"speed_kmh": 220.0},
+            {"speed_kmh": None},
+        ],
+    )
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+
+    speeds = tools._read_artifact_speed_samples(artifact)
+
+    assert speeds == [200.0, 220.0]
+
+
+def test_read_artifact_speed_samples_missing_file_raises(monkeypatch, tmp_path):
+    artifact = types.TelemetryArtifact(
+        session_key=1,
+        driver_number=1,
+        lap_number=999,
+        storage_key="nonexistent.json.gz",
+        storage_backend="local",
+        format="json.gz",
+        sample_count=0,
+        size_bytes=0,
+        checksum_sha256="x",
+    )
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+
+    try:
+        tools._read_artifact_speed_samples(artifact)
+    except types.DataError as exc:
+        assert "not found" in str(exc)
+    else:
+        raise AssertionError("expected DataError for missing artifact file")
+
+
+def test_read_artifact_speed_samples_unsupported_raises():
+    artifact = types.TelemetryArtifact(
+        session_key=1,
+        driver_number=1,
+        lap_number=1,
+        storage_key="x.parquet",
+        storage_backend="r2",
+        format="json.gz",
+        sample_count=0,
+        size_bytes=0,
+        checksum_sha256="x",
+    )
+    try:
+        tools._read_artifact_speed_samples(artifact)
+    except types.DataError as exc:
+        assert "unsupported" in str(exc)
+    else:
+        raise AssertionError("expected DataError for unsupported artifact")
+
+
+# ── _assess ───────────────────────────────────────────────────────────────────
+
+
+def test_assess_all_passing_returns_passed():
+    checks = [
+        types.EvidenceCheck("a", True),
+        types.EvidenceCheck("b", True),
+    ]
+    result = tools._assess(checks)
+    assert result.passed is True
+    assert result.refusal_reason is None
+    assert len(result.checks) == 2
+
+
+def test_assess_one_failure_returns_refusal():
+    checks = [
+        types.EvidenceCheck("a", True),
+        types.EvidenceCheck("b", False, detail="missing telemetry"),
+    ]
+    result = tools._assess(checks)
+    assert result.passed is False
+    assert "b: missing telemetry" in result.refusal_reason
+
+
+# ── compute_speed_window refusal paths (no DB needed) ─────────────────────────
+
+
+def test_compute_speed_window_rejects_unsupported_metric():
+    inp = types.ComputeSpeedWindowInput(
+        session_key=1,
+        driver_number=1,
+        before_laps=(1, 2),
+        metric=types.SpeedMetric.LAP_TIME_DERIVED,
+    )
+    try:
+        tools.compute_speed_window(inp)
+    except types.DataError as exc:
+        assert "unsupported metric" in str(exc)
+    else:
+        raise AssertionError("expected DataError for unsupported metric")
+
+
+def test_compute_speed_window_rejects_empty_windows():
+    inp = types.ComputeSpeedWindowInput(session_key=1, driver_number=1)
+    try:
+        tools.compute_speed_window(inp)
+    except types.DataError as exc:
+        assert "cannot both be empty" in str(exc)
+    else:
+        raise AssertionError("expected DataError for empty windows")

@@ -8,8 +8,15 @@ Rules:
 """
 
 from __future__ import annotations
+import gzip
+import io
+import json
+from pathlib import Path
+
 from sqlalchemy import text
+
 from backend import extensions
+from backend.config import settings
 from backend.agent import types
 
 
@@ -206,3 +213,188 @@ def get_lap_telemetry_artifacts(
         driver_number=inp.driver_number,
         artifacts=artifacts,
     )
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _read_artifact_speed_samples(artifact: types.TelemetryArtifact) -> list[float]:
+    """Read speed kmph values from a telemtry artifact (local file or S3) and return them as a list of floats."""
+
+    if artifact.storage_backend == "local" and artifact.format == "json.gz":
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        with gzip.open(path, "rb") as f:
+            payload = json.loads(f.read().decode("utf-8"))
+        speeds = [
+            float(s["speed_kmh"])
+            for s in payload.get("samples", [])
+            if s.get("speed_kmh") is not None
+        ]
+
+    elif artifact.storage_backend == "local" and artifact.format == "parquet":
+        import pyarrow.parquet as pq
+
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        table = pq.read_parquet(path)
+        speeds = [
+            float(v) for v in table.column("speed_kmh").to_pylist() if v is not None
+        ]
+
+    elif artifact.storage_backend == "r2" and artifact.format == "parquet":
+        import boto3
+        import pyarrow.parquet as pq
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=settings.r2_endpoint_url,
+            aws_access_key_id=settings.r2_access_key_id,
+            aws_secret_access_key=settings.r2_secret_access_key,
+            region_name="auto",
+        )
+        obj = client.get_object(
+            Bucket=settings.telemetry_artifact_bucket,
+            Key=artifact.storage_key,
+        )
+        table = pq.read_table(io.BytesIO(obj["Body"].read()))
+        speeds = [
+            float(v) for v in table.column("speed_kmh").to_pylist() if v is not None
+        ]
+
+    else:
+        raise types.DataError(
+            f"unsupported artifact: {artifact.storage_backend}/{artifact.format}"
+        )
+
+    return speeds
+
+
+def compute_speed_window(inp: types.ComputeSpeedWindowInput) -> types.SpeedWindowResult:
+    """
+    Average telemetry speed before and after a given lap window for a driver in a session.
+    """
+    if inp.metric is not types.SpeedMetric.TELEMETRY_SAMPLE_MEAN:
+        raise types.DataError(f"unsupported metric: {inp.metric}")
+    if not inp.before_laps and not inp.after_laps:
+        raise types.DataError("before_laps and after_laps cannot both be empty")
+
+    laps_needed = tuple(sorted(set(inp.before_laps) | set(inp.after_laps)))
+    artifacts = get_lap_telemetry_artifacts(
+        types.GetLapTelemetryArtifactsInput(
+            session_key=inp.session_key,
+            driver_number=inp.driver_number,
+            lap_numbers=laps_needed,
+        )
+    ).artifacts
+    by_lap = {a.lap_number: a for a in artifacts}
+
+    def _window_mean(lap_window: tuple[int, ...]) -> tuple[float, int]:
+        missing = [ln for ln in lap_window if ln not in by_lap]
+        if missing:
+            raise types.DataError(f"no telemetry artifact for laps {missing}")
+        flat = [
+            v for lap in lap_window for v in _read_artifact_speed_samples(by_lap[lap])
+        ]
+        if not flat:
+            raise types.DataError("telemetry artifacts contain zero speed samples")
+        return _mean(flat), len(flat)
+
+    before_avg, before_count = (
+        _window_mean(tuple(inp.before_laps)) if inp.before_laps else (None, 0)
+    )
+    after_avg, after_count = (
+        _window_mean(tuple(inp.after_laps)) if inp.after_laps else (None, 0)
+    )
+
+    delta = None
+    if before_avg is not None and after_avg is not None:
+        delta = round(after_avg - before_avg, 2)
+
+    return types.SpeedWindowResult(
+        session_key=inp.session_key,
+        driver_number=inp.driver_number,
+        metric=inp.metric,
+        before_laps=inp.before_laps,
+        after_laps=inp.after_laps,
+        before_avg_speed_kmh=round(before_avg, 2) if before_avg is not None else None,
+        after_avg_speed_kmh=round(after_avg, 2) if after_avg is not None else None,
+        delta_kmh=delta,
+        sample_count_before=before_count,
+        sample_count_after=after_count,
+    )
+
+
+def _assess(checks: list[types.EvidenceCheck]) -> types.VerifyEvidenceResult:
+    """Pure verdict: any failed check becomes a refusal with a readable reason."""
+    failed = [c for c in checks if not c.passed]
+    if not failed:
+        return types.VerifyEvidenceResult(passed=True, checks=tuple(checks))
+    reasons = "; ".join(f"{c.name}: {c.detail or 'failed'}" for c in failed)
+    return types.VerifyEvidenceResult(
+        passed=False,
+        checks=tuple(checks),
+        refusal_reason=reasons,
+    )
+
+
+def verify_evidence(inp: types.VerifyEvidenceInput) -> types.VerifyEvidenceResult:
+    """Check the evidence exists before we trust the computed answer.
+
+    required_tool_names is reserved for the planner trace (Lesson 5+).
+    """
+    checks: list[types.EvidenceCheck] = []
+
+    with extensions.engine.connect() as conn:
+        session_found = (
+            conn.execute(
+                text("SELECT 1 FROM sessions WHERE session_key = :sk LIMIT 1"),
+                {"sk": inp.session_key},
+            ).first()
+            is not None
+        )
+        checks.append(
+            types.EvidenceCheck(
+                "session_exists", session_found, detail=f"session {inp.session_key}"
+            )
+        )
+
+        driver_found = (
+            conn.execute(
+                text(
+                    "SELECT 1 FROM drivers WHERE session_key = :sk AND driver_number = :dn LIMIT 1"
+                ),
+                {"sk": inp.session_key, "dn": inp.driver_number},
+            ).first()
+            is not None
+        )
+        checks.append(
+            types.EvidenceCheck(
+                "driver_exists", driver_found, detail=f"driver {inp.driver_number}"
+            )
+        )
+
+    if inp.required_laps:
+        artifacts = get_lap_telemetry_artifacts(
+            types.GetLapTelemetryArtifactsInput(
+                session_key=inp.session_key,
+                driver_number=inp.driver_number,
+                lap_numbers=inp.required_laps,
+            )
+        ).artifacts
+        found_laps = {a.lap_number for a in artifacts}
+        missing = sorted(set(inp.required_laps) - found_laps)
+        checks.append(
+            types.EvidenceCheck(
+                "artifacts_cover_required_laps",
+                not missing,
+                detail=f"missing laps {missing}"
+                if missing
+                else "all required laps present",
+            )
+        )
+
+    return _assess(checks)
