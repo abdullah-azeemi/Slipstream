@@ -75,6 +75,7 @@ def create_app() -> Flask:
     from backend.api.v1.predictions import predictions_bp
     from backend.api.v1.schedule import schedule_bp
     from backend.health import health_bp
+    from backend.api.v1.agent import agent_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(sessions_bp, url_prefix="/api/v1")
@@ -85,6 +86,7 @@ def create_app() -> Flask:
     app.register_blueprint(analysis_bp, url_prefix="/api/v1")
     app.register_blueprint(predictions_bp, url_prefix="/api/v1")
     app.register_blueprint(schedule_bp, url_prefix="/api/v1")
+    app.register_blueprint(agent_bp, url_prefix="/api/v1")
 
     @app.errorhandler(404)
     def not_found(e):
@@ -95,7 +97,12 @@ def create_app() -> Flask:
         log.exception("unhandled_exception", error=str(e))
         return {"error": "Internal server error", "code": 500}, 500
 
-    if settings.auto_ingest_enabled and not settings.testing and not settings.debug and not app.debug:
+    if (
+        settings.auto_ingest_enabled
+        and not settings.testing
+        and not settings.debug
+        and not app.debug
+    ):
         _start_auto_ingest_scheduler()
 
     log.info("app.created", debug=settings.debug or app.debug)

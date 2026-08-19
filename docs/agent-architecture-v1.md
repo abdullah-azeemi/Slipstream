@@ -31,13 +31,17 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Hardcoded demo flow (no LLM): classify -> execute -> verify -> compose; every tool call recorded as a `ToolCallRecord` in the trace; typed refusals instead of invented numbers.
   - Deviation from this doc: the hardcoded demo plan targets 2026 Monaco GP Race / Carlos Sainz (not Verstappen) until the LLM planner lands in L6+.
   - Tests: `apps/backend/tests/test_agent_orchestrator.py` — happy path (215.0/255.0 km/h, +40.0 delta, 6-tool trace), missing-artifact refusal, unsupported-question.
+- L6 — Agent HTTP endpoint.
+  - Files: `apps/backend/src/backend/api/v1/agent.py` (`agent_bp`, `POST /agent/query`), registered in `__init__.py` under `/api/v1`.
+  - Thin endpoint: validate JSON body -> `orchestrator.run(question)` -> structlog tool-trace lines (`agent.tool_call`) + run summary -> `jsonify(asdict(answer))`.
+  - Tests: `apps/backend/tests/test_agent_api.py` — happy path over HTTP, empty-body 400, unsupported-question 200.
 
-Current test state: 46 passing (backend suite).
+Current test state: 49 passing (backend suite).
 
 ### Next
 
-- L6 — Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging (per Recommended Next Step order below).
-- Then L7+ per the Implementation Plan section below.
+- L7 — Minimal user/agent tables (`users`, `agent_conversations`, `agent_messages`, `agent_runs`, `agent_tool_calls`) via Alembic migration (per Recommended Next Step order below).
+- Then L8+ per the Implementation Plan section below.
 
 ## How To Use This Document
 
@@ -1047,7 +1051,7 @@ Implement in this order (see Implementation Status for what is done):
 1. [done] Typed tool contracts.
 2. [done] Read-only tools without LLM (`resolve_session`, `resolve_driver`, `find_pit_stops`, `get_lap_telemetry_artifacts`, `compute_speed_window`, `verify_evidence`).
 3. [done] Orchestrator: one hardcoded demo query flow (no LLM).
-4. Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
+4. [done] Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
 5. Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
 6. OpenRouter adapter, then planner/composer.
 7. Clerk route protection for `/agent`.
