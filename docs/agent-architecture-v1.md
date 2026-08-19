@@ -30,13 +30,12 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Files: `orchestrator.py` (`_classify`, `_execute` with inner `record` trace wrapper, `_compose`, `run`); new `Plan`, `ToolCallRecord`, `AgentAnswer` contracts in `types.py`.
   - Hardcoded demo flow (no LLM): classify -> execute -> verify -> compose; every tool call recorded as a `ToolCallRecord` in the trace; typed refusals instead of invented numbers.
   - Deviation from this doc: the hardcoded demo plan targets 2026 Monaco GP Race / Carlos Sainz (not Verstappen) until the LLM planner lands in L6+.
-  - Commit pending (orchestrator tests are the immediate next step).
+  - Tests: `apps/backend/tests/test_agent_orchestrator.py` — happy path (215.0/255.0 km/h, +40.0 delta, 6-tool trace), missing-artifact refusal, unsupported-question.
 
-Current test state: 43 passing (backend suite); L5 orchestrator tests pending.
+Current test state: 46 passing (backend suite).
 
 ### Next
 
-- L5 tests — orchestrator integration tests (`apps/backend/tests/test_agent_orchestrator.py`), then commit L5.
 - L6 — Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging (per Recommended Next Step order below).
 - Then L7+ per the Implementation Plan section below.
 
