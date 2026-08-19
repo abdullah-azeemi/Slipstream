@@ -26,13 +26,19 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Files: `tools.py` (`compute_speed_window`, `verify_evidence`, plus `_mean`, `_read_artifact_speed_samples`, `_assess`), `apps/backend/tests/test_agent_evidence.py`
   - Computes telemetry-sample-mean speed before/after a stop; refusal on missing/unsupported data.
   - Commit `ee63b07` "feat(agent): add speed window computation and evidence verification"
+- L5 — Orchestrator.
+  - Files: `orchestrator.py` (`_classify`, `_execute` with inner `record` trace wrapper, `_compose`, `run`); new `Plan`, `ToolCallRecord`, `AgentAnswer` contracts in `types.py`.
+  - Hardcoded demo flow (no LLM): classify -> execute -> verify -> compose; every tool call recorded as a `ToolCallRecord` in the trace; typed refusals instead of invented numbers.
+  - Deviation from this doc: the hardcoded demo plan targets 2026 Monaco GP Race / Carlos Sainz (not Verstappen) until the LLM planner lands in L6+.
+  - Commit pending (orchestrator tests are the immediate next step).
 
-Current test state: 43 passing (backend suite).
+Current test state: 43 passing (backend suite); L5 orchestrator tests pending.
 
 ### Next
 
-- L5 — Orchestrator (`apps/backend/src/backend/agent/orchestrator.py`): hardcoded demo flow chaining the tools into `run()` producing the structured answer for the Verstappen pit-stop question, no LLM.
-- Then L6+ per the Implementation Plan section below.
+- L5 tests — orchestrator integration tests (`apps/backend/tests/test_agent_orchestrator.py`), then commit L5.
+- L6 — Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging (per Recommended Next Step order below).
+- Then L7+ per the Implementation Plan section below.
 
 ## How To Use This Document
 
@@ -1041,7 +1047,7 @@ Implement in this order (see Implementation Status for what is done):
 
 1. [done] Typed tool contracts.
 2. [done] Read-only tools without LLM (`resolve_session`, `resolve_driver`, `find_pit_stops`, `get_lap_telemetry_artifacts`, `compute_speed_window`, `verify_evidence`).
-3. Orchestrator: one hardcoded demo query flow (no LLM).
+3. [done] Orchestrator: one hardcoded demo query flow (no LLM).
 4. Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
 5. Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
 6. OpenRouter adapter, then planner/composer.

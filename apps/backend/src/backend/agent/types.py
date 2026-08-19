@@ -187,3 +187,46 @@ class VerifyEvidenceResult:
     passed: bool
     checks: tuple[EvidenceCheck, ...] = ()
     refusal_reason: str | None = None
+
+
+# Orchestrator
+
+
+@dataclass(frozen=True)
+class Plan:
+    """The structured plan produced by the planner . v1 is only rule based."""
+
+    intent: Intent
+    question: str
+    session_selector: ResolveSessionInput | None = None
+    driver_selector: str | None = None
+    laps_before: int = 3
+    laps_after: int = 3
+
+
+@dataclass(frozen=True)
+class ToolCallRecord:
+    """One record of a tool call, produced by the orchestrator and consumed by the executor."""
+
+    tool_name: ToolName
+    status: str  # "ok" or "error"
+    input_summary: str
+    output_summary: str | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+
+
+@dataclass(frozen=True)
+class AgentAnswer:
+    """The final answer produced by the orchestrator, after executing the plan."""
+
+    question: str
+    intent: Intent
+    answer: str
+    refusals: tuple[str, ...] = ()
+    session: ResolvedSession | None = None
+    driver: ResolvedDriver | None = None
+    pit_stop: PitStop | None = None
+    speed_window: SpeedWindowResult | None = None
+    evidence: VerifyEvidenceResult | None = None
+    trace: tuple[ToolCallRecord, ...] = ()
