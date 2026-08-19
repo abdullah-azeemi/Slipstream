@@ -35,13 +35,17 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Files: `apps/backend/src/backend/api/v1/agent.py` (`agent_bp`, `POST /agent/query`), registered in `__init__.py` under `/api/v1`.
   - Thin endpoint: validate JSON body -> `orchestrator.run(question)` -> structlog tool-trace lines (`agent.tool_call`) + run summary -> `jsonify(asdict(answer))`.
   - Tests: `apps/backend/tests/test_agent_api.py` — happy path over HTTP, empty-body 400, unsupported-question 200.
+- L7 — Minimal user/agent tables.
+  - Files: `apps/backend/migrations/versions/0019_add_agent_tables.py` (`users`, `agent_conversations`, `agent_messages`, `agent_runs`, `agent_tool_calls`); synced `0013`–`0018` from `ml-driver-feature` so the branch migration chain matches the dev DB (was at `0018`).
+  - JSONB for tool-call input/output summaries (never raw telemetry blobs); FKs model ownership; downgrade is the exact reverse.
+  - Verified: `alembic upgrade head`, table listing, `downgrade -1` + re-upgrade round-trip.
 
 Current test state: 49 passing (backend suite).
 
 ### Next
 
-- L7 — Minimal user/agent tables (`users`, `agent_conversations`, `agent_messages`, `agent_runs`, `agent_tool_calls`) via Alembic migration (per Recommended Next Step order below).
-- Then L8+ per the Implementation Plan section below.
+- L8 — Persist agent runs + tool-call traces to the new tables (`agent_runs`, `agent_tool_calls`) from the `POST /api/v1/agent/query` handler, per Recommended Next Step order below.
+- Then L9+ per the Implementation Plan section below.
 
 ## How To Use This Document
 
@@ -1052,7 +1056,7 @@ Implement in this order (see Implementation Status for what is done):
 2. [done] Read-only tools without LLM (`resolve_session`, `resolve_driver`, `find_pit_stops`, `get_lap_telemetry_artifacts`, `compute_speed_window`, `verify_evidence`).
 3. [done] Orchestrator: one hardcoded demo query flow (no LLM).
 4. [done] Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
-5. Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
+5. [done] Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
 6. OpenRouter adapter, then planner/composer.
 7. Clerk route protection for `/agent`.
 8. Flask Clerk JWT verification.
