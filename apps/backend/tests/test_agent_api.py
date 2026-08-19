@@ -136,6 +136,30 @@ def _insert_artifacts(db_engine, tmp_path):
 def _cleanup(db_engine):
     with db_engine.begin() as conn:
         conn.execute(
+            text(
+                """
+                DELETE FROM agent_tool_calls
+                WHERE run_id IN (
+                    SELECT id FROM agent_runs
+                    WHERE user_id IN (
+                        SELECT id FROM users WHERE clerk_user_id = 'demo-user'
+                    )
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                DELETE FROM agent_runs
+                WHERE user_id IN (
+                    SELECT id FROM users WHERE clerk_user_id = 'demo-user'
+                )
+                """
+            )
+        )
+        conn.execute(text("DELETE FROM users WHERE clerk_user_id = 'demo-user'"))
+        conn.execute(
             text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"),
             {"sk": SESSION_KEY},
         )
@@ -191,3 +215,74 @@ def test_agent_query_unsupported(client):
     body = resp.get_json()
     assert body["intent"] == "unsupported"
     assert body["refusals"] == ["unsupported question"]
+
+
+def test_agent_query_persists_run_and_tool_calls(
+    app, client, db_engine, monkeypatch, tmp_path
+):
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    _insert_artifacts(db_engine, tmp_path)
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+
+    try:
+        resp = client.post(
+            "/api/v1/agent/query",
+            json={
+                "question": "On which lap did Sainz pit and what was his avg speed before and after?"
+            },
+        )
+        assert resp.status_code == 200
+
+        with db_engine.connect() as conn:
+            run = conn.execute(
+                text(
+                    """
+                    SELECT r.status, r.error, r.completed_at IS NOT NULL AS has_completed,
+                           COUNT(t.id) AS tool_count
+                    FROM agent_runs r
+                    LEFT JOIN agent_tool_calls t ON t.run_id = r.id
+                    GROUP BY r.id
+                    ORDER BY r.id DESC
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            assert run is not None
+            assert run.status == "completed"
+            assert run.error is None
+            assert run.has_completed
+            assert run.tool_count == 6
+
+            call = conn.execute(
+                text(
+                    """
+                    SELECT tool_name, status, duration_ms, input_json, output_summary_json
+                    FROM agent_tool_calls
+                    ORDER BY id ASC
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            assert call.tool_name == "resolve_session"
+            assert call.status == "ok"
+            assert call.duration_ms is not None
+            assert call.input_json["summary"]
+            assert call.output_summary_json["summary"]
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_persists_refused_run(client, db_engine):
+    resp = client.post("/api/v1/agent/query", json={"question": "What is the weather?"})
+    assert resp.status_code == 200
+
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT status, error FROM agent_runs ORDER BY id DESC LIMIT 1")
+        ).first()
+        assert row is not None
+        assert row.status == "refused"
+        assert row.error == "unsupported question"
+
+    _cleanup(db_engine)

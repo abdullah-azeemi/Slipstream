@@ -39,13 +39,17 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Files: `apps/backend/migrations/versions/0019_add_agent_tables.py` (`users`, `agent_conversations`, `agent_messages`, `agent_runs`, `agent_tool_calls`); synced `0013`–`0018` from `ml-driver-feature` so the branch migration chain matches the dev DB (was at `0018`).
   - JSONB for tool-call input/output summaries (never raw telemetry blobs); FKs model ownership; downgrade is the exact reverse.
   - Verified: `alembic upgrade head`, table listing, `downgrade -1` + re-upgrade round-trip.
+- L8 — Persist runs + tool-call traces.
+  - Files: `apps/backend/src/backend/agent/persistence.py` (`ensure_user`, `_insert_tool_call`, `persist_run`); endpoint `agent.py` now records `started_at`, persists, and logs `run_id`.
+  - No Clerk auth yet, so runs attach to a seeded `demo-user` row (`INSERT ... ON CONFLICT (clerk_user_id) DO NOTHING`); run + trace inserts share one `engine.begin()` transaction; JSONB written as `json.dumps(...)` strings (matches `race_vector_index.py` convention — psycopg can't adapt a dict param in a raw `text()` statement).
+  - Tests: `test_agent_api.py` — happy path persists a `completed` run + 6 tool-call rows; unsupported question persists a `refused` run.
 
-Current test state: 49 passing (backend suite).
+Current test state: 51 passing (backend suite).
 
 ### Next
 
-- L8 — Persist agent runs + tool-call traces to the new tables (`agent_runs`, `agent_tool_calls`) from the `POST /api/v1/agent/query` handler, per Recommended Next Step order below.
-- Then L9+ per the Implementation Plan section below.
+- L9 — OpenRouter adapter (`apps/backend/src/backend/agent/llm.py`), per Recommended Next Step item 6. Needs v1 constants #3/#4 (routing + final-answer model names) and an OpenRouter key.
+- Then L10+ per the Implementation Plan section below.
 
 ## How To Use This Document
 

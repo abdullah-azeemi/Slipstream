@@ -1,10 +1,11 @@
 """Agent API endpoint exposing the rule based orchestrator"""
 
 from dataclasses import asdict
+from datetime import datetime
 import structlog
 from flask import Blueprint, jsonify, request
 
-from backend.agent import orchestrator
+from backend.agent import orchestrator, persistence
 
 log = structlog.get_logger()
 agent_bp = Blueprint("agent", __name__)
@@ -22,7 +23,9 @@ def agent_query():
             {"error": "question is required and must be a non-empty string"}
         ), 400
 
+    started_at = datetime.now().astimezone()
     answer = orchestrator.run(question.strip())
+    run_id = persistence.persist_run(answer, started_at)
     for call in answer.trace:
         log.info(
             "agent.tool_call",
@@ -34,6 +37,7 @@ def agent_query():
 
     log.info(
         "agent.run",
+        run_id=run_id,
         intent=answer.intent.value,
         refused=bool(answer.refusals),
         refusals=list(answer.refusals),

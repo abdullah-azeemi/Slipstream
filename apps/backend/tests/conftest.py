@@ -7,6 +7,7 @@ automatically available to all test files without importing them.
 The test suite creates its own tables in the connected database,
 seeds minimal data, and tears everything down afterwards.
 """
+
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -138,6 +139,59 @@ CREATE TABLE IF NOT EXISTS race_intelligence_events (
         UNIQUE (session_key, event_type, event_key)
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL PRIMARY KEY,
+    clerk_user_id   TEXT NOT NULL,
+    email           TEXT,
+    name            TEXT,
+    avatar_url      TEXT,
+    plan            TEXT,
+    role            TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at    TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_clerk_user_id ON users (clerk_user_id);
+
+CREATE TABLE IF NOT EXISTS agent_conversations (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    title       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES agent_conversations(id),
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id                  SERIAL PRIMARY KEY,
+    conversation_id     INTEGER REFERENCES agent_conversations(id),
+    user_id             INTEGER NOT NULL REFERENCES users(id),
+    status              TEXT NOT NULL,
+    model               TEXT,
+    started_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at        TIMESTAMPTZ,
+    cost_estimate_usd   NUMERIC,
+    error               TEXT
+);
+
+CREATE TABLE IF NOT EXISTS agent_tool_calls (
+    id                    SERIAL PRIMARY KEY,
+    run_id                INTEGER NOT NULL REFERENCES agent_runs(id),
+    tool_name             TEXT NOT NULL,
+    input_json            JSONB,
+    output_summary_json   JSONB,
+    status                TEXT NOT NULL,
+    duration_ms           INTEGER,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_lap_times_session_driver
     ON lap_times (session_key, driver_number);
 CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
@@ -193,6 +247,11 @@ def _create_tables(db_engine):
     # Tear down tables after the full test suite finishes.
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS agent_runs CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS agent_messages CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS agent_conversations CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS users CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS race_intelligence_events CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS race_results CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry_artifacts CASCADE;"))
@@ -210,7 +269,8 @@ def seed_session(db_engine, _create_tables):
     The session_key 99999 is obviously fake — easy to identify in the DB.
     """
     with db_engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO sessions (
                 session_key, year, gp_name, country,
                 session_type, session_name
@@ -219,18 +279,22 @@ def seed_session(db_engine, _create_tables):
                 'Q', 'Qualifying'
             )
             ON CONFLICT (session_key) DO NOTHING
-        """))
+        """)
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO drivers (
                 driver_number, session_key, full_name, abbreviation, team_name, team_colour
             ) VALUES
                 (44, 99999, 'Lewis Hamilton', 'HAM', 'Mercedes', '27F4D2'),
                 (63, 99999, 'George Russell',  'RUS', 'Mercedes', '27F4D2')
             ON CONFLICT DO NOTHING
-        """))
+        """)
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO lap_times (
                 session_key, driver_number, lap_number,
                 lap_time_ms, s1_ms, s2_ms, s3_ms,
@@ -241,9 +305,10 @@ def seed_session(db_engine, _create_tables):
                 (99999, 63, 1, 91000, 28500, 36500, 26000, 'SOFT', false, false, NOW()),
                 (99999, 63, 2, 87000, 27000, 34500, 25500, 'SOFT', true,  false, NOW())
             ON CONFLICT DO NOTHING
-        """))
+        """)
+        )
 
-    yield 99999   # yield the session_key to tests that need it
+    yield 99999  # yield the session_key to tests that need it
 
     # Cleanup after ALL tests finish
     with db_engine.begin() as conn:
