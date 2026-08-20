@@ -2,6 +2,7 @@
 Backend configuration via pydantic-settings.
 Reads from environment variables. Falls back to .env file locally.
 """
+
 from __future__ import annotations
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,6 +34,12 @@ class Settings(BaseSettings):
 
     race_vector_index_dir: str = "./lancedb"
     race_vector_table: str = "race_intelligence_events"
+
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_routing_model: str = "openai/gpt-4o-mini"
+    openrouter_final_model: str = "openai/gpt-4o-mini"
+    openrouter_timeout_seconds: int = 30
 
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True

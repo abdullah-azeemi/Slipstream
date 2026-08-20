@@ -17,8 +17,7 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
 - L2 — First read-only tools.
   - Files: `apps/backend/src/backend/agent/tools.py` (`resolve_session`, `resolve_driver`)
   - Deterministic parameterized SQL against `sessions` / `drivers`; `NotFoundError` on miss.
-  - Commit `36b1492` "feat(agent): add resolve_session and resolve_driver read-only tools"
-- L3 — Pit stop detection + artifact metadata.
+  - Commit `36b1492` "feat(agent): add resolve_session and resolve_driver read-only tools"- L3 — Pit stop detection + artifact metadata.
   - Files: `tools.py` (`find_pit_stops`, `get_lap_telemetry_artifacts`), pure `_derive_pit_stops` helper, `apps/backend/tests/test_agent_tools.py`
   - Gather-in-SQL / derive-in-Python separation; DB-free unit tests.
   - Commit `276e5ca` "feat(agent): add pit stop and telemetry artifact tools"
@@ -44,11 +43,18 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - No Clerk auth yet, so runs attach to a seeded `demo-user` row (`INSERT ... ON CONFLICT (clerk_user_id) DO NOTHING`); run + trace inserts share one `engine.begin()` transaction; JSONB written as `json.dumps(...)` strings (matches `race_vector_index.py` convention — psycopg can't adapt a dict param in a raw `text()` statement).
   - Tests: `test_agent_api.py` — happy path persists a `completed` run + 6 tool-call rows; unsupported question persists a `refused` run.
 
-Current test state: 51 passing (backend suite).
+- L9 — OpenRouter adapter.
+  - Files: `apps/backend/src/backend/agent/llm.py` (`_post`, `_chat`, `_estimate_cost`, `route_question`, `compose_answer`), `LLMError` in `types.py`, OpenRouter settings in `config.py`, `apps/backend/tests/test_agent_llm.py`.
+  - All LLM calls live in this one module. stdlib `urllib` (no new dependency); `_post` is the only network-touching function so tests monkeypatch it. Every call logs `agent.llm` with token counts + `cost_estimate_usd` (OpenRouter `usage.cost` when present, else price-table estimate; unknown models = 0.0). `route_question` validates the model output against real `Intent` values; anything else is a typed `LLMError`.
+  - Decided v1 constants: routing model `openai/gpt-4o-mini`, final-answer model `openai/gpt-4o-mini` (both config overridable). OpenRouter key via `OPENROUTER_API_KEY`.
+  - Tests: 10 DB-free unit tests (monkeypatch `_post`), happy paths + unparseable/unknown intent + missing key + cost estimation.
+  - Commit "feat(agent): add OpenRouter adapter"
+
+Current test state: 61 passing (backend suite).
 
 ### Next
 
-- L9 — OpenRouter adapter (`apps/backend/src/backend/agent/llm.py`), per Recommended Next Step item 6. Needs v1 constants #3/#4 (routing + final-answer model names) and an OpenRouter key.
+- L10 — Wire the LLM router into the orchestrator as the planner (replace the hardcoded `_classify` demo flow), then use `compose_answer` for the final answer. Needs an OpenRouter key in `.env` for live runs.
 - Then L10+ per the Implementation Plan section below.
 
 ## How To Use This Document
@@ -1050,8 +1056,8 @@ The read-only tool layer (L1–L4) is done and committed. The five v1 constants 
 
 1. Free daily agent question limit.
 2. Admin Clerk user id or admin email.
-3. Default OpenRouter routing model.
-4. Default OpenRouter final-answer model.
+3. [done] Default OpenRouter routing model = `openai/gpt-4o-mini` (L9).
+4. [done] Default OpenRouter final-answer model = `openai/gpt-4o-mini` (L9).
 5. Default pit-stop comparison window, such as 3 laps before and 3 laps after.
 
 Implement in this order (see Implementation Status for what is done):
@@ -1093,3 +1099,4 @@ Teaching-mode build: the student types every file by hand, then the mentor check
 - Metric: `TELEMETRY_SAMPLE_MEAN` only (`compute_speed_window` refuses others with `DataError: unsupported metric`).
 - Pit stop signal: `pit_in_time_ms IS NOT NULL` = entry lap, first later lap with `pit_out_time_ms IS NOT NULL` = exit lap (fallback: entry + 1).
 - Speed delta positive = faster after the stop.
+- LLM: all calls via `agent/llm.py`; routing + final models both `openai/gpt-4o-mini`; cost logged every call; no OpenRouter calls outside the module.

@@ -48,6 +48,10 @@ class DataError(AgentError):
     """Raised when data exists but is unusable (e.g. missing columns)."""
 
 
+class LLMError(AgentError):
+    """Raised when the OpenRouter/LLM adapter cannot produce output."""
+
+
 # Tool Inputs ---------------------
 @dataclass(frozen=True)
 class ResolveSessionInput:
