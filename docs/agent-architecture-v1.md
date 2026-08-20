@@ -48,7 +48,7 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - All LLM calls live in this one module. stdlib `urllib` (no new dependency); `_post` is the only network-touching function so tests monkeypatch it. Every call logs `agent.llm` with token counts + `cost_estimate_usd` (OpenRouter `usage.cost` when present, else price-table estimate; unknown models = 0.0). `route_question` validates the model output against real `Intent` values; anything else is a typed `LLMError`.
   - Decided v1 constants: routing model `openai/gpt-4o-mini`, final-answer model `openai/gpt-4o-mini` (both config overridable). OpenRouter key via `OPENROUTER_API_KEY`.
   - Tests: 10 DB-free unit tests (monkeypatch `_post`), happy paths + unparseable/unknown intent + missing key + cost estimation.
-  - Commit "feat(agent): add OpenRouter adapter"
+  - Commit `93c462a` "feat(agent): add OpenRouter adapter"
 
 Current test state: 61 passing (backend suite).
 
