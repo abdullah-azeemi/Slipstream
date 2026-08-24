@@ -66,11 +66,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Global bucket until Clerk identities land; refused runs count too (routing alone spends tokens).
   - Tests: limit=0 blocks the very first request without seeding; limit=1 allows one then blocks, proving the counter reads fresh writes.
 
-Current test state: 70 passing (backend suite).
+- L13 — Clerk backend verification (Phase 3).
+  - Files: new `auth.py` (`ClerkAuthError`; `verify_session_token()` via PyJWT `PyJWKClient` — JWKS fetched/cached, RS256 + issuer + expiry enforced, audience check off per Clerk's session-token format), `config.py` (`clerk_issuer`, `clerk_admin_user_ids`), `persistence.py` (`persist_run(answer, started_at, clerk_user_id)` replaces the demo-user constant; `count_runs_today(clerk_user_id)` joins through `users`), `api/v1/agent.py` (blueprint-level `before_request`: bearer header required, verified id stored on `g`, OPTIONS passthrough for CORS preflight, 401 before payload validation or any LLM spend; `_admin_ids()` bypasses the limit), `.env.example`.
+  - Dependency added: `pyjwt[crypto]`.
+  - Tests: 401 on missing/invalid tokens; every endpoint test authenticates via the mocked verifier seam (header-presence logic stays real); per-user bucket proven — same day, alpha blocked at limit while beta still gets 200s.
+
+Current test state: 73 passing (backend suite).
 
 ### Next
 
-- Clerk backend verification (Phase 3): verify session tokens on `/api/v1/agent/*`, replace `DEMO_CLERK_USER_ID` with the real identity, make the daily bucket per-user with admin bypass. Then Clerk frontend components and the Agent chat UI.
+- Phase 2: Clerk frontend auth — Next.js provider, sign-in/sign-up, route protection for `/agent`, sending the session token to Flask. Then the Agent chat UI.
 
 ## How To Use This Document
 

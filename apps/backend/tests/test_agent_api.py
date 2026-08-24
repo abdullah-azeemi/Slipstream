@@ -6,10 +6,14 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from backend import auth as auth_module
 from backend.agent import orchestrator
 from backend.config import settings
 
 SESSION_KEY = 99993
+
+# Any non-empty bearer passes the header check; _fake_auth mocks the verifier.
+AUTH_HEADER = {"Authorization": "Bearer test-token"}
 
 
 def _insert_session_and_driver(db_engine):
@@ -143,7 +147,7 @@ def _cleanup(db_engine):
                 WHERE run_id IN (
                     SELECT id FROM agent_runs
                     WHERE user_id IN (
-                        SELECT id FROM users WHERE clerk_user_id = 'demo-user'
+                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
                     )
                 )
                 """
@@ -154,12 +158,16 @@ def _cleanup(db_engine):
                 """
                 DELETE FROM agent_runs
                 WHERE user_id IN (
-                    SELECT id FROM users WHERE clerk_user_id = 'demo-user'
+                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
                 )
                 """
             )
         )
-        conn.execute(text("DELETE FROM users WHERE clerk_user_id = 'demo-user'"))
+        conn.execute(
+            text(
+                "DELETE FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')"
+            )
+        )
         conn.execute(
             text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"),
             {"sk": SESSION_KEY},
@@ -193,7 +201,22 @@ def _fake_llm(monkeypatch, intent):
     )
 
 
+def _fake_auth(monkeypatch, clerk_user_id="demo-user"):
+    """Replace JWKS verification with a stub identity."""
+    monkeypatch.setattr(
+        auth_module, "verify_session_token", lambda token: clerk_user_id
+    )
+
+
+def _fake_bad_auth(monkeypatch):
+    def boom(token):
+        raise auth_module.ClerkAuthError("signature verification failed")
+
+    monkeypatch.setattr(auth_module, "verify_session_token", boom)
+
+
 def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
+    _fake_auth(monkeypatch)
     _insert_session_and_driver(db_engine)
     _insert_laps(db_engine)
     _insert_artifacts(db_engine, tmp_path)
@@ -203,6 +226,7 @@ def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
     try:
         resp = client.post(
             "/api/v1/agent/query",
+            headers=AUTH_HEADER,
             json={
                 "question": "On which lap did Sainz pit and what was his avg speed before and after?"
             },
@@ -223,15 +247,21 @@ def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
         _cleanup(db_engine)
 
 
-def test_agent_query_missing_question(client):
-    resp = client.post("/api/v1/agent/query", json={})
+def test_agent_query_missing_question(client, monkeypatch):
+    _fake_auth(monkeypatch)
+    resp = client.post("/api/v1/agent/query", headers=AUTH_HEADER, json={})
     assert resp.status_code == 400
     assert "question" in resp.get_json()["error"]
 
 
 def test_agent_query_unsupported(client, monkeypatch):
+    _fake_auth(monkeypatch)
     _fake_llm(monkeypatch, "unsupported")
-    resp = client.post("/api/v1/agent/query", json={"question": "What is the weather?"})
+    resp = client.post(
+        "/api/v1/agent/query",
+        headers=AUTH_HEADER,
+        json={"question": "What is the weather?"},
+    )
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["intent"] == "unsupported"
@@ -241,6 +271,7 @@ def test_agent_query_unsupported(client, monkeypatch):
 def test_agent_query_persists_run_and_tool_calls(
     app, client, db_engine, monkeypatch, tmp_path
 ):
+    _fake_auth(monkeypatch)
     _insert_session_and_driver(db_engine)
     _insert_laps(db_engine)
     _insert_artifacts(db_engine, tmp_path)
@@ -250,6 +281,7 @@ def test_agent_query_persists_run_and_tool_calls(
     try:
         resp = client.post(
             "/api/v1/agent/query",
+            headers=AUTH_HEADER,
             json={
                 "question": "On which lap did Sainz pit and what was his avg speed before and after?"
             },
@@ -296,8 +328,13 @@ def test_agent_query_persists_run_and_tool_calls(
 
 
 def test_agent_query_persists_refused_run(client, db_engine, monkeypatch):
+    _fake_auth(monkeypatch)
     _fake_llm(monkeypatch, "unsupported")
-    resp = client.post("/api/v1/agent/query", json={"question": "What is the weather?"})
+    resp = client.post(
+        "/api/v1/agent/query",
+        headers=AUTH_HEADER,
+        json={"question": "What is the weather?"},
+    )
     assert resp.status_code == 200
 
     with db_engine.connect() as conn:
@@ -310,24 +347,80 @@ def test_agent_query_persists_refused_run(client, db_engine, monkeypatch):
 
     _cleanup(db_engine)
 
+
 def test_agent_query_daily_limit_blocks_immediately(client, monkeypatch):
+    _fake_auth(monkeypatch)
     monkeypatch.setattr(settings, "agent_free_daily_limit", 0)
     _fake_llm(monkeypatch, "pit_stop_speed_delta")
 
-    resp = client.post("/api/v1/agent/query", json={"question": "Who won?"})
+    resp = client.post(
+        "/api/v1/agent/query", headers=AUTH_HEADER, json={"question": "Who won?"}
+    )
     assert resp.status_code == 429
     assert "limit" in resp.get_json()["error"].lower()
 
 
 def test_agent_query_daily_limit_allows_then_blocks(client, db_engine, monkeypatch):
+    _fake_auth(monkeypatch)
     monkeypatch.setattr(settings, "agent_free_daily_limit", 1)
     _fake_llm(monkeypatch, "unsupported")
 
     try:
-        first = client.post("/api/v1/agent/query", json={"question": "First?"})
+        first = client.post(
+            "/api/v1/agent/query", headers=AUTH_HEADER, json={"question": "First?"}
+        )
         assert first.status_code == 200
 
-        second = client.post("/api/v1/agent/query", json={"question": "Second?"})
+        second = client.post(
+            "/api/v1/agent/query", headers=AUTH_HEADER, json={"question": "Second?"}
+        )
         assert second.status_code == 429
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_rejects_missing_token(client):
+    resp = client.post("/api/v1/agent/query", json={"question": "Who won?"})
+    assert resp.status_code == 401
+    assert "bearer" in resp.get_json()["error"].lower()
+
+
+def test_agent_query_rejects_invalid_token(client, monkeypatch):
+    _fake_bad_auth(monkeypatch)
+    resp = client.post(
+        "/api/v1/agent/query",
+        json={"question": "Who won?"},
+        headers={"Authorization": "Bearer not-a-real-jwt"},
+    )
+    assert resp.status_code == 401
+    assert "invalid token" in resp.get_json()["error"].lower()
+
+
+def test_agent_query_limit_is_per_user(client, db_engine, monkeypatch):
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 1)
+
+    try:
+        alpha_headers = {"Authorization": "Bearer alpha"}
+        beta_headers = {"Authorization": "Bearer beta"}
+
+        _fake_auth(monkeypatch, "user_alpha")
+        first = client.post(
+            "/api/v1/agent/query", json={"question": "Q?"}, headers=alpha_headers
+        )
+        assert first.status_code == 200
+
+        blocked = client.post(
+            "/api/v1/agent/query", json={"question": "Q?"}, headers=alpha_headers
+        )
+        assert blocked.status_code == 429
+
+        _fake_auth(monkeypatch, "user_beta")
+        fresh = client.post(
+            "/api/v1/agent/query", json={"question": "Q?"}, headers=beta_headers
+        )
+        assert fresh.status_code == 200
     finally:
         _cleanup(db_engine)

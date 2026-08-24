@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     openrouter_timeout_seconds: int = 30
     agent_free_daily_limit: int = 10
 
+    # Clerk identity (Phase 3). Issuer like https://your-app.clerk.accounts.dev
+    clerk_issuer: str = ""
+    # Comma-separated clerk_user_ids exempt from the daily limit.
+    clerk_admin_user_ids: str = ""
+
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True
     auto_ingest_on_startup: bool = True
