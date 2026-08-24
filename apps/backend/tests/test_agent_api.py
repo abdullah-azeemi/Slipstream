@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from backend.agent import orchestrator
 from backend.config import settings
 
 SESSION_KEY = 99993
@@ -174,11 +175,21 @@ def _cleanup(db_engine):
         )
 
 
+def _fake_llm(monkeypatch, intent):
+    monkeypatch.setattr(orchestrator.llm, "route_question", lambda q: intent)
+    monkeypatch.setattr(
+        orchestrator.llm,
+        "compose_answer",
+        lambda q, e: "Sainz pitted across laps 5 and 6.",
+    )
+
+
 def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
     _insert_session_and_driver(db_engine)
     _insert_laps(db_engine)
     _insert_artifacts(db_engine, tmp_path)
     monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
 
     try:
         resp = client.post(
@@ -209,7 +220,8 @@ def test_agent_query_missing_question(client):
     assert "question" in resp.get_json()["error"]
 
 
-def test_agent_query_unsupported(client):
+def test_agent_query_unsupported(client, monkeypatch):
+    _fake_llm(monkeypatch, "unsupported")
     resp = client.post("/api/v1/agent/query", json={"question": "What is the weather?"})
     assert resp.status_code == 200
     body = resp.get_json()
@@ -224,6 +236,7 @@ def test_agent_query_persists_run_and_tool_calls(
     _insert_laps(db_engine)
     _insert_artifacts(db_engine, tmp_path)
     monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
 
     try:
         resp = client.post(
@@ -273,7 +286,8 @@ def test_agent_query_persists_run_and_tool_calls(
         _cleanup(db_engine)
 
 
-def test_agent_query_persists_refused_run(client, db_engine):
+def test_agent_query_persists_refused_run(client, db_engine, monkeypatch):
+    _fake_llm(monkeypatch, "unsupported")
     resp = client.post("/api/v1/agent/query", json={"question": "What is the weather?"})
     assert resp.status_code == 200
 

@@ -143,11 +143,21 @@ def _cleanup(db_engine):
         )
 
 
+def _fake_route(monkeypatch, intent):
+    monkeypatch.setattr(orchestrator.llm, "route_question", lambda q: intent)
+
+
+def _fake_compose(monkeypatch, text):
+    monkeypatch.setattr(orchestrator.llm, "compose_answer", lambda q, e: text)
+
+
 def test_run_pit_stop_question(app, db_engine, monkeypatch, tmp_path):
     _insert_session_and_driver(db_engine)
     _insert_laps(db_engine)
     _insert_artifacts(db_engine, tmp_path)
     monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_route(monkeypatch, "pit_stop_speed_delta")
+    _fake_compose(monkeypatch, "Sainz pitted across laps 5 and 6.")
 
     try:
         answer = orchestrator.run(
@@ -155,18 +165,13 @@ def test_run_pit_stop_question(app, db_engine, monkeypatch, tmp_path):
         )
         assert answer.intent is types.Intent.PIT_STOP_SPEED_DELTA
         assert answer.refusals == ()
-        assert answer.pit_stop is not None
-        assert answer.pit_stop.pit_in_lap == 5
-        assert answer.pit_stop.pit_out_lap == 6
+        assert answer.answer == "Sainz pitted across laps 5 and 6."
         assert answer.pit_stop.compound_before == "SOFT"
         assert answer.pit_stop.compound_after == "HARD"
         assert answer.speed_window is not None
         assert answer.speed_window.before_avg_speed_kmh == 215.0
         assert answer.speed_window.after_avg_speed_kmh == 255.0
         assert answer.speed_window.delta_kmh == 40.0
-        assert "lap 5" in answer.answer
-        assert "lap 6" in answer.answer
-        assert "SOFT to HARD" in answer.answer
         assert len(answer.trace) == 6
         assert all(r.status == "ok" for r in answer.trace)
         assert [r.tool_name for r in answer.trace] == [
@@ -185,6 +190,7 @@ def test_run_refuses_when_artifacts_missing(app, db_engine, monkeypatch, tmp_pat
     _insert_session_and_driver(db_engine)
     _insert_laps(db_engine)
     monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_route(monkeypatch, "pit_stop_speed_delta")
 
     try:
         answer = orchestrator.run(
@@ -198,8 +204,42 @@ def test_run_refuses_when_artifacts_missing(app, db_engine, monkeypatch, tmp_pat
         _cleanup(db_engine)
 
 
-def test_run_unsupported_question():
+def test_run_unsupported_question(monkeypatch):
+    _fake_route(monkeypatch, "unsupported")
     answer = orchestrator.run("What is the weather?")
     assert answer.intent is types.Intent.UNSUPPORTED
     assert answer.refusals == ("unsupported question",)
+    assert answer.trace == ()
+
+
+def test_run_falls_back_to_template_when_llm_down(
+    app, db_engine, monkeypatch, tmp_path
+):
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    _insert_artifacts(db_engine, tmp_path)
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_route(monkeypatch, "pit_stop_speed_delta")
+    monkeypatch.setattr(settings, "openrouter_api_key", "")
+
+    try:
+        answer = orchestrator.run(
+            "On which lap did Sainz pit and what was his avg speed before and after?"
+        )
+        assert answer.refusals == ()
+        assert "lap 5" in answer.answer
+        assert "SOFT to HARD" in answer.answer
+        assert "215.0" in answer.answer
+
+    finally:
+        _cleanup(db_engine)
+
+
+def test_run_refuses_when_router_fails(monkeypatch):
+    def boom(question):
+        raise types.LLMError("router down")
+
+    monkeypatch.setattr(orchestrator.llm, "route_question", boom)
+    answer = orchestrator.run("Who won the race?")
+    assert answer.refusals == ("llm_router_unavailable",)
     assert answer.trace == ()

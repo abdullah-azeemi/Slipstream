@@ -1,33 +1,29 @@
 """
-Agent orchestrator — chains the read-only tools into a single run().
+Agent orchestrator — routes with the LLM, executes read-only tools, composes.
 
-v1 rule: the flow is hardcoded for the demo pit-stop question. No LLM yet.
-Pipeline: classify -> execute -> verify -> compose.
+Pipeline: route -> plan -> execute -> verify -> compose.
 Every tool call is recorded in the trace for debugging and the future UI.
 """
 
 from __future__ import annotations
 import time
-from backend.agent import tools, types
+from dataclasses import asdict
+
+from backend.agent import llm, tools, types
 
 
-def _classify(question: str) -> types.Plan:
-    """Classify the question into a plan. v1 is the hardcoded version."""
-    q = question.lower()
-    is_pit_question = "pit" in q
-    is_sainz = "sainz" in q
-    if is_sainz and is_pit_question:
-        return types.Plan(
-            intent=types.Intent.PIT_STOP_SPEED_DELTA,
-            question=question,
-            session_selector=types.ResolveSessionInput(
-                year=2026, gp_name="monaco", session_type=types.SessionType.RACE
-            ),
-            driver_selector="Sainz",
-            laps_before=3,
-            laps_after=3,
-        )
-    return types.Plan(intent=types.Intent.UNSUPPORTED, question=question)
+def _build_plan(question: str, intent: types.Intent) -> types.Plan:
+    """Turn a routed intent into a concrete executable plan."""
+    return types.Plan(
+        intent=intent,
+        question=question,
+        session_selector=types.ResolveSessionInput(
+            year=2026, gp_name="Monaco", session_type=types.SessionType.RACE
+        ),
+        driver_selector="Sainz",
+        laps_before=3,
+        laps_after=3,
+    )
 
 
 def _execute(plan: types.Plan) -> tuple[tuple[types.ToolCallRecord, ...], dict]:
@@ -174,7 +170,7 @@ def _compose(
     stop = partial["pit_stop"]
     window = partial["window"]
 
-    lines = [
+    fallback_lines = [
         f"{driver.full_name} made a pit stop across lap {stop.pit_in_lap} "
         f"into lap {stop.pit_out_lap}.",
         "",
@@ -184,14 +180,29 @@ def _compose(
         f"That is a {window.delta_kmh:+.1f} km/h change.",
     ]
     if stop.compound_before and stop.compound_after:
-        lines.append(
+        fallback_lines.append(
             f"He switched from {stop.compound_before} to {stop.compound_after} tyres."
         )
+    fallback_text = "\n".join(fallback_lines)
+
+    evidence_payload = {
+        "session": asdict(session),
+        "driver": asdict(driver),
+        "pit_stop": asdict(stop),
+        "speed_window": asdict(window),
+        "metric_definition": (
+            "average of telemetry speed samples (speed_kmh) over each lap window"
+        ),
+    }
+    try:
+        answer_text = llm.compose_answer(plan.question, evidence_payload)
+    except types.LLMError:
+        answer_text = fallback_text
 
     return types.AgentAnswer(
         question=plan.question,
         intent=plan.intent,
-        answer="\n".join(lines),
+        answer=answer_text,
         session=session,
         driver=driver,
         pit_stop=stop,
@@ -203,13 +214,26 @@ def _compose(
 
 def run(question: str) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out."""
-    plan = _classify(question)
-    if plan.intent is types.Intent.UNSUPPORTED:
+    try:
+        intent = types.Intent(llm.route_question(question))
+    except types.LLMError as exc:
         return types.AgentAnswer(
             question=question,
-            intent=plan.intent,
+            intent=types.Intent.UNSUPPORTED,
+            answer=(
+                "I could not process that question because the question "
+                f"router is unavailable: {exc}"
+            ),
+            refusals=("llm_router_unavailable",),
+        )
+
+    if intent is types.Intent.UNSUPPORTED:
+        return types.AgentAnswer(
+            question=question,
+            intent=intent,
             answer="I cannot answer that yet. v1 only supports the pit-stop speed question.",
             refusals=("unsupported question",),
         )
+    plan = _build_plan(question, intent)
     trace, partial = _execute(plan)
     return _compose(plan, partial, trace)

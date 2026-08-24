@@ -49,13 +49,18 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Decided v1 constants: routing model `openai/gpt-4o-mini`, final-answer model `openai/gpt-4o-mini` (both config overridable). OpenRouter key via `OPENROUTER_API_KEY`.
   - Tests: 10 DB-free unit tests (monkeypatch `_post`), happy paths + unparseable/unknown intent + missing key + cost estimation.
   - Commit `93c462a` "feat(agent): add OpenRouter adapter"
+- L10 — LLM-planned orchestrator.
+  - Files: `apps/backend/src/backend/agent/orchestrator.py` (`_classify` removed; `_build_plan`; composer wiring in `_compose`; routing + typed refusal in `run`), `apps/backend/tests/test_agent_orchestrator.py`, `apps/backend/tests/test_agent_api.py`.
+  - `run()` routes via `llm.route_question`; router outage returns typed refusal `llm_router_unavailable` (no silent keyword fallback). Final answer written by `llm.compose_answer`; on `LLMError` it falls back to the deterministic template so verified numbers survive an LLM outage. LLM calls stay out of the tool trace (logged separately as `agent.llm`).
+  - Known deviation kept: plan selectors remain v1 defaults (2026 Monaco / Sainz / 3+3 laps) until the router extracts entities.
+  - Tests: orchestrator + API tests now mock both LLM seams (`route_question`, `compose_answer`) so the suite stays offline-deterministic; +2 tests (template fallback, router-failure refusal).
+  - Live runs need `OPENROUTER_API_KEY` in `.env`.
 
-Current test state: 61 passing (backend suite).
+Current test state: 63 passing (backend suite).
 
 ### Next
 
-- L10 — Wire the LLM router into the orchestrator as the planner (replace the hardcoded `_classify` demo flow), then use `compose_answer` for the final answer. Needs an OpenRouter key in `.env` for live runs.
-- Then L10+ per the Implementation Plan section below.
+- Router entity extraction (driver / year / GP into the Plan, replacing the Monaco/Sainz defaults), then usage limits + Clerk auth per the Implementation Plan section below.
 
 ## How To Use This Document
 
