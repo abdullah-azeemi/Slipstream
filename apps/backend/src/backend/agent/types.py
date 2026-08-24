@@ -193,6 +193,17 @@ class VerifyEvidenceResult:
     refusal_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class RoutedQuestion:
+    """Entities the LLM router extracted from the raw question."""
+
+    intent: Intent
+    driver_name: str | None = None
+    gp_name: str | None = None
+    year: int | None = None
+    laps_window: int = 3
+
+
 # Orchestrator
 
 

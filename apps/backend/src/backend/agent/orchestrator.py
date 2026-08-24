@@ -12,17 +12,19 @@ from dataclasses import asdict
 from backend.agent import llm, tools, types
 
 
-def _build_plan(question: str, intent: types.Intent) -> types.Plan:
-    """Turn a routed intent into a concrete executable plan."""
+def _build_plan(question: str, routed: types.RoutedQuestion) -> types.Plan:
+    """Turn routed entities into a concrete executable plan."""
     return types.Plan(
-        intent=intent,
+        intent=routed.intent,
         question=question,
         session_selector=types.ResolveSessionInput(
-            year=2026, gp_name="Monaco", session_type=types.SessionType.RACE
+            year=routed.year,
+            gp_name=routed.gp_name,
+            session_type=types.SessionType.RACE,
         ),
-        driver_selector="Sainz",
-        laps_before=3,
-        laps_after=3,
+        driver_selector=routed.driver_name,
+        laps_before=routed.laps_window,
+        laps_after=routed.laps_window,
     )
 
 
@@ -215,7 +217,7 @@ def _compose(
 def run(question: str) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out."""
     try:
-        intent = types.Intent(llm.route_question(question))
+        routed = llm.route_question(question)
     except types.LLMError as exc:
         return types.AgentAnswer(
             question=question,
@@ -227,13 +229,33 @@ def run(question: str) -> types.AgentAnswer:
             refusals=("llm_router_unavailable",),
         )
 
-    if intent is types.Intent.UNSUPPORTED:
+    if routed.intent is types.Intent.UNSUPPORTED:
         return types.AgentAnswer(
             question=question,
-            intent=intent,
+            intent=routed.intent,
             answer="I cannot answer that yet. v1 only supports the pit-stop speed question.",
             refusals=("unsupported question",),
         )
-    plan = _build_plan(question, intent)
+
+    if not routed.driver_name:
+        return types.AgentAnswer(
+            question=question,
+            intent=routed.intent,
+            answer="Which driver should I look at? Name one, e.g. 'Sainz'.",
+            refusals=("missing_driver",),
+        )
+
+    if not routed.gp_name or routed.year is None:
+        return types.AgentAnswer(
+            question=question,
+            intent=routed.intent,
+            answer=(
+                "Which race should I use? Name the year and Grand Prix, "
+                "e.g. '2026 Monaco GP'."
+            ),
+            refusals=("missing_race",),
+        )
+
+    plan = _build_plan(question, routed)
     trace, partial = _execute(plan)
     return _compose(plan, partial, trace)

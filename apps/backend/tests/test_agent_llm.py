@@ -18,28 +18,39 @@ def _set_key(monkeypatch, value="test-key"):
     monkeypatch.setattr(settings, "openrouter_api_key", value)
 
 
-def test_route_question_pit_stop(monkeypatch):
+def test_route_question_extracts_entities(monkeypatch):
     _set_key(monkeypatch)
     monkeypatch.setattr(
         llm,
         "_post",
         lambda messages, model, temperature: _fake_payload(
-            '{"intent": "pit_stop_speed_delta"}'
+            '{"intent": "pit_stop_speed_delta", "driver": "Sainz", '
+            '"year": 2026, "gp_name": "Monaco", "laps_window": 3}'
         ),
     )
-    assert (
-        llm.route_question("On which lap did Verstappen pit?") == "pit_stop_speed_delta"
-    )
+    routed = llm.route_question("On which lap did Sainz pit in Monaco 2026?")
+    assert routed.intent is types.Intent.PIT_STOP_SPEED_DELTA
+    assert routed.driver_name == "Sainz"
+    assert routed.year == 2026
+    assert routed.gp_name == "Monaco"
 
 
-def test_route_question_unsupported(monkeypatch):
+def test_route_question_unsupported_has_null_entities(monkeypatch):
     _set_key(monkeypatch)
     monkeypatch.setattr(
         llm,
         "_post",
-        lambda messages, model, temperature: _fake_payload('{"intent": "unsupported"}'),
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "unsupported", "driver": null, "year": null, '
+            '"gp_name": null, "laps_window": null}'
+        ),
     )
-    assert llm.route_question("What is the weather?") == "unsupported"
+    routed = llm.route_question("What is the weather?")
+    assert routed.intent is types.Intent.UNSUPPORTED
+    assert routed.driver_name is None
+    assert routed.year is None
+    assert routed.gp_name is None
+    assert routed.laps_window == 3
 
 
 def test_route_question_unparseable_raises(monkeypatch):
@@ -109,3 +120,40 @@ def test_compose_answer_uses_final_model(monkeypatch):
     monkeypatch.setattr(llm, "_post", fake_post)
     llm.compose_answer("when?", {})
     assert seen["model"] == settings.openrouter_final_model
+
+
+def test_route_question_coerces_string_year(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "driver": "HAM", "year": "2018"}'
+        ),
+    )
+    assert llm.route_question("q?").year == 2018
+
+
+def test_route_question_bad_year_raises(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "year": "fast"}'
+        ),
+    )
+    with pytest.raises(types.LLMError):
+        llm.route_question("q?")
+
+
+def test_route_question_clamps_window(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "laps_window": 99}'
+        ),
+    )
+    assert llm.route_question("q?").laps_window == 10

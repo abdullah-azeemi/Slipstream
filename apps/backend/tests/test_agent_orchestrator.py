@@ -143,8 +143,14 @@ def _cleanup(db_engine):
         )
 
 
-def _fake_route(monkeypatch, intent):
-    monkeypatch.setattr(orchestrator.llm, "route_question", lambda q: intent)
+def _fake_route(monkeypatch, intent, driver="Sainz", year=2026, gp="Monaco"):
+    monkeypatch.setattr(
+        orchestrator.llm,
+        "route_question",
+        lambda q: types.RoutedQuestion(
+            intent=types.Intent(intent), driver_name=driver, gp_name=gp, year=year
+        ),
+    )
 
 
 def _fake_compose(monkeypatch, text):
@@ -242,4 +248,19 @@ def test_run_refuses_when_router_fails(monkeypatch):
     monkeypatch.setattr(orchestrator.llm, "route_question", boom)
     answer = orchestrator.run("Who won the race?")
     assert answer.refusals == ("llm_router_unavailable",)
+    assert answer.trace == ()
+
+
+def test_run_asks_for_missing_driver(monkeypatch):
+    _fake_route(monkeypatch, "pit_stop_speed_delta", driver=None)
+    answer = orchestrator.run("Where did he pit?")
+    assert answer.refusals == ("missing_driver",)
+    assert answer.answer
+    assert answer.trace == ()
+
+
+def test_run_asks_for_missing_race(monkeypatch):
+    _fake_route(monkeypatch, "pit_stop_speed_delta", gp=None, year=None)
+    answer = orchestrator.run("On which lap did Sainz pit?")
+    assert answer.refusals == ("missing_race",)
     assert answer.trace == ()

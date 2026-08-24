@@ -176,7 +176,16 @@ def _cleanup(db_engine):
 
 
 def _fake_llm(monkeypatch, intent):
-    monkeypatch.setattr(orchestrator.llm, "route_question", lambda q: intent)
+    monkeypatch.setattr(
+        orchestrator.llm,
+        "route_question",
+        lambda q: orchestrator.types.RoutedQuestion(
+            intent=orchestrator.types.Intent(intent),
+            driver_name="Sainz",
+            year=2026,
+            gp_name="Monaco",
+        ),
+    )
     monkeypatch.setattr(
         orchestrator.llm,
         "compose_answer",

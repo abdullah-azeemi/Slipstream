@@ -56,11 +56,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Tests: orchestrator + API tests now mock both LLM seams (`route_question`, `compose_answer`) so the suite stays offline-deterministic; +2 tests (template fallback, router-failure refusal).
   - Live runs need `OPENROUTER_API_KEY` in `.env`.
 
-Current test state: 63 passing (backend suite).
+- L11 — Router entity extraction.
+  - Files: `types.py` (`RoutedQuestion` contract), `llm.py` (router prompt extracts entities; `route_question` returns `RoutedQuestion`; `_clean_str` / `_coerce_year` / `_coerce_window` parse guards), `orchestrator.py` (`_build_plan(routed)` replaces the Monaco/Sainz defaults; Clarifier-lite refusals `missing_driver` / `missing_race` in `run`).
+  - Router never guesses a race. Bad year -> `LLMError`; string years coerced to int; window clamped to 1-10, default 3.
+  - Tests: +3 router edge cases (string year coercion, bad year, window clamp) + null-entity routing assertions + 2 clarifier refusals; all fakes build `RoutedQuestion` with real `Intent` members so mocks match the production contract.
+
+Current test state: 68 passing (backend suite).
 
 ### Next
 
-- Router entity extraction (driver / year / GP into the Plan, replacing the Monaco/Sainz defaults), then usage limits + Clerk auth per the Implementation Plan section below.
+- Usage limits (free tier ~10 questions/day counted off `agent_runs`, admin bypass), then Clerk backend verification (Phase 3) per the Implementation Plan below.
 
 ## How To Use This Document
 
