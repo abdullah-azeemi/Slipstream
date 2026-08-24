@@ -71,11 +71,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Dependency added: `pyjwt[crypto]`.
   - Tests: 401 on missing/invalid tokens; every endpoint test authenticates via the mocked verifier seam (header-presence logic stays real); per-user bucket proven — same day, alpha blocked at limit while beta still gets 200s.
 
-Current test state: 73 passing (backend suite).
+- L14 — Clerk frontend auth (Phase 2).
+  - Files: `apps/frontend/package.json` (`@clerk/nextjs`, installed app-local), root `layout.tsx` wraps `<ClerkProvider>`, new `middleware.ts` (`clerkMiddleware()` supplies auth context only — path rules removed per Clerk's resource-based guidance), `app/agent/layout.tsx` (`auth.protect()` guards server-side before the client page mounts), catch-all `sign-in/[[...sign-in]]` / `sign-up/[[...sign-up]]`, `app/agent/page.tsx` (question box → `useAuth().getToken()` Bearer JWT → Flask), `lib/api.ts` exports `API_URL`.
+  - Env split: publishable/secret keys in frontend `.env.local`; `CLERK_ISSUER` in backend `.env` — both sides must name the same instance domain.
+  - Gotchas hit and fixed: duplicate env var lines (last wins), route slug collision (`[[...rest]]` vs `[[...sign-in]]` under one parent is a boot error), dependency accidentally installed at repo root resolving silently via upward traversal.
+
+Current test state: backend 73 passing; frontend lint + production build clean.
 
 ### Next
 
-- Phase 2: Clerk frontend auth — Next.js provider, sign-in/sign-up, route protection for `/agent`, sending the session token to Flask. Then the Agent chat UI.
+- Agent chat UI polish (conversation view, refusal states, tool-trace display), then usage/admin surfaces per the Implementation Plan below.
 
 ## How To Use This Document
 
