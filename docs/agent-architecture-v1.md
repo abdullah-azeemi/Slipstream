@@ -61,11 +61,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Router never guesses a race. Bad year -> `LLMError`; string years coerced to int; window clamped to 1-10, default 3.
   - Tests: +3 router edge cases (string year coercion, bad year, window clamp) + null-entity routing assertions + 2 clarifier refusals; all fakes build `RoutedQuestion` with real `Intent` members so mocks match the production contract.
 
-Current test state: 68 passing (backend suite).
+- L12 — Free-tier daily usage limit.
+  - Files: `config.py` (`agent_free_daily_limit`, env `AGENT_FREE_DAILY_LIMIT`), `persistence.py` (`count_runs_today()` off `started_at >= date_trunc('day', NOW())`), `api/v1/agent.py` (429 guard fires before `orchestrator.run` — blocked requests cost zero tokens and persist nothing), `.env.example`.
+  - Global bucket until Clerk identities land; refused runs count too (routing alone spends tokens).
+  - Tests: limit=0 blocks the very first request without seeding; limit=1 allows one then blocks, proving the counter reads fresh writes.
+
+Current test state: 70 passing (backend suite).
 
 ### Next
 
-- Usage limits (free tier ~10 questions/day counted off `agent_runs`, admin bypass), then Clerk backend verification (Phase 3) per the Implementation Plan below.
+- Clerk backend verification (Phase 3): verify session tokens on `/api/v1/agent/*`, replace `DEMO_CLERK_USER_ID` with the real identity, make the daily bucket per-user with admin bypass. Then Clerk frontend components and the Agent chat UI.
 
 ## How To Use This Document
 

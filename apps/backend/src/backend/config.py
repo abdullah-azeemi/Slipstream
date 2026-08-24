@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     openrouter_routing_model: str = "openai/gpt-4o-mini"
     openrouter_final_model: str = "openai/gpt-4o-mini"
     openrouter_timeout_seconds: int = 30
+    agent_free_daily_limit: int = 10
 
     # Auto-ingest scheduler for single-service deploys like Railway
     auto_ingest_enabled: bool = True

@@ -309,3 +309,25 @@ def test_agent_query_persists_refused_run(client, db_engine, monkeypatch):
         assert row.error == "unsupported question"
 
     _cleanup(db_engine)
+
+def test_agent_query_daily_limit_blocks_immediately(client, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 0)
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
+
+    resp = client.post("/api/v1/agent/query", json={"question": "Who won?"})
+    assert resp.status_code == 429
+    assert "limit" in resp.get_json()["error"].lower()
+
+
+def test_agent_query_daily_limit_allows_then_blocks(client, db_engine, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 1)
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        first = client.post("/api/v1/agent/query", json={"question": "First?"})
+        assert first.status_code == 200
+
+        second = client.post("/api/v1/agent/query", json={"question": "Second?"})
+        assert second.status_code == 429
+    finally:
+        _cleanup(db_engine)

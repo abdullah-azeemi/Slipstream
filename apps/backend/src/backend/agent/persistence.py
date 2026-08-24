@@ -96,3 +96,15 @@ def persist_run(answer: types.AgentAnswer, started_at: datetime) -> int:
         for call in answer.trace:
             _insert_tool_call(conn, run_id, call)
     return run_id
+
+def count_runs_today() -> int:
+    """Count every agent run recorded since local midnight."""
+    with engine.connect() as conn:
+        return conn.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM agent_runs
+                WHERE started_at >= date_trunc('day', NOW())
+                """
+            )
+        ).scalar_one()

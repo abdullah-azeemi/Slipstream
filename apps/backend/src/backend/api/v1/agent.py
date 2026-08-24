@@ -6,6 +6,7 @@ import structlog
 from flask import Blueprint, jsonify, request
 
 from backend.agent import orchestrator, persistence
+from backend.config import settings
 
 log = structlog.get_logger()
 agent_bp = Blueprint("agent", __name__)
@@ -22,6 +23,12 @@ def agent_query():
         return jsonify(
             {"error": "question is required and must be a non-empty string"}
         ), 400
+
+    if persistence.count_runs_today() >= settings.agent_free_daily_limit:
+        log.info("agent.limit_hit", limit=settings.agent_free_daily_limit)
+        return jsonify(
+            {"error": "Daily question limit reached. Try again tomorrow."}
+        ), 429
 
     started_at = datetime.now().astimezone()
     answer = orchestrator.run(question.strip())
