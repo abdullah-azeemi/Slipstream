@@ -95,7 +95,7 @@ def test_insert_message(db_engine):
         _cleanup(db_engine)
 
 
-def test_list_conversations(db_engine):
+def test_list_conversations(app, db_engine):
     try:
         with db_engine.begin() as conn:
             user_id = _get_user_id(conn)
@@ -124,7 +124,7 @@ def test_list_conversations(db_engine):
         _cleanup(db_engine)
 
 
-def test_get_conversation_messages(db_engine):
+def test_get_conversation_messages(app, db_engine):
     try:
         with db_engine.begin() as conn:
             user_id = _get_user_id(conn)
@@ -148,7 +148,7 @@ def test_get_conversation_messages(db_engine):
         _cleanup(db_engine)
 
 
-def test_get_conversation_messages_wrong_owner(db_engine):
+def test_get_conversation_messages_wrong_owner(app, db_engine):
     try:
         with db_engine.begin() as conn:
             user_id = _get_user_id(conn, "conv-test-user")
@@ -162,11 +162,11 @@ def test_get_conversation_messages_wrong_owner(db_engine):
         _cleanup(db_engine)
 
 
-def test_get_conversation_messages_nonexistent(db_engine):
+def test_get_conversation_messages_nonexistent(app, db_engine):
     result = persistence.get_conversation_messages(999999, "conv-test-user")
     assert result is None
 
 
-def test_list_conversations_empty(db_engine):
+def test_list_conversations_empty(app, db_engine):
     conversations = persistence.list_conversations("nonexistent-user")
     assert conversations == []

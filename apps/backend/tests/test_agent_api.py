@@ -84,7 +84,7 @@ def _write_gz_artifact(tmp_path, lap_number, speeds):
     storage_key = f"telemetry/session_{SESSION_KEY}/driver_55/lap_{lap_number}.json.gz"
     path = Path(tmp_path) / storage_key
     path.parent.mkdir(parents=True, exist_ok=True)
-    samples = [{"speed_kmh": s} for s in speeds]
+    samples = [{"speed_kmh": s, "distance_m": 1.0} for s in speeds]
     with gzip.open(path, "wb") as f:
         f.write(
             json.dumps(
@@ -147,7 +147,7 @@ def _cleanup(db_engine):
                 WHERE run_id IN (
                     SELECT id FROM agent_runs
                     WHERE user_id IN (
-                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta', 'admin-user')
                     )
                 )
                 """
@@ -160,7 +160,7 @@ def _cleanup(db_engine):
                 WHERE conversation_id IN (
                     SELECT id FROM agent_conversations
                     WHERE user_id IN (
-                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta', 'admin-user')
                     )
                 )
                 """
@@ -171,7 +171,7 @@ def _cleanup(db_engine):
                 """
                 DELETE FROM agent_runs
                 WHERE user_id IN (
-                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta', 'admin-user')
                 )
                 """
             )
@@ -181,14 +181,14 @@ def _cleanup(db_engine):
                 """
                 DELETE FROM agent_conversations
                 WHERE user_id IN (
-                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta', 'admin-user')
                 )
                 """
             )
         )
         conn.execute(
             text(
-                "DELETE FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')"
+                "DELETE FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta', 'admin-user')"
             )
         )
         conn.execute(
@@ -210,17 +210,20 @@ def _fake_llm(monkeypatch, intent):
     monkeypatch.setattr(
         orchestrator.llm,
         "route_question",
-        lambda q: orchestrator.types.RoutedQuestion(
-            intent=orchestrator.types.Intent(intent),
-            driver_name="Sainz",
-            year=2026,
-            gp_name="Monaco",
+        lambda q: (
+            orchestrator.types.RoutedQuestion(
+                intent=orchestrator.types.Intent(intent),
+                driver_name="Sainz",
+                year=2026,
+                gp_name="Monaco",
+            ),
+            0.0,
         ),
     )
     monkeypatch.setattr(
         orchestrator.llm,
         "compose_answer",
-        lambda q, e: "Sainz pitted across laps 5 and 6.",
+        lambda q, e: ("Sainz pitted across laps 5 and 6.", 0.0),
     )
 
 
@@ -266,6 +269,64 @@ def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
         assert len(body["trace"]) == 6
         assert body["trace"][0]["tool_name"] == "resolve_session"
         assert body["trace"][0]["status"] == "ok"
+        assert body["trace_visibility"] == "evidence"
+        assert body["trace"][0]["input_summary"] == ""
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_admin_receives_full_trace(
+    app, client, db_engine, monkeypatch, tmp_path
+):
+    _fake_auth(monkeypatch, "admin-user")
+    monkeypatch.setattr(settings, "clerk_admin_user_ids", "admin-user")
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    _insert_artifacts(db_engine, tmp_path)
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
+
+    try:
+        resp = client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={
+                "question": "On which lap did Sainz pit and what was his avg speed before and after?"
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["trace_visibility"] == "full"
+        assert body["trace"][0]["input_summary"]
+        assert body["trace"][0]["output_summary"]
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_stream_emits_progress_and_final(
+    app, client, db_engine, monkeypatch, tmp_path
+):
+    _fake_auth(monkeypatch)
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    _insert_artifacts(db_engine, tmp_path)
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    _fake_llm(monkeypatch, "pit_stop_speed_delta")
+
+    try:
+        resp = client.post(
+            "/api/v1/agent/query/stream",
+            headers=AUTH_HEADER,
+            json={
+                "question": "On which lap did Sainz pit and what was his avg speed before and after?"
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "event: progress" in body
+        assert "event: final" in body
+        assert "resolve_session" in body
+        assert '"trace_visibility": "evidence"' in body
     finally:
         _cleanup(db_engine)
 
@@ -559,6 +620,7 @@ def test_agent_query_rejects_wrong_conversation_owner(
         conv_id = resp1.get_json()["conversation_id"]
 
         # Try to post to that conversation as beta — should 404.
+        _fake_auth(monkeypatch, "user_beta")
         resp2 = client.post(
             "/api/v1/agent/query",
             headers={"Authorization": "Bearer beta"},

@@ -11,7 +11,7 @@ import json
 from sqlalchemy import text
 
 from backend.agent import types
-from backend.extensions import engine
+from backend import extensions
 from backend.config import settings
 
 
@@ -72,7 +72,7 @@ def persist_run(
 
     Returns the new run id. Links to conversation_id when provided.
     """
-    with engine.begin() as conn:
+    with extensions.engine.begin() as conn:
         user_id = ensure_user(conn, clerk_user_id)
         row = conn.execute(
             text(
@@ -105,7 +105,7 @@ def persist_run(
 
 def count_runs_today(clerk_user_id: str) -> int:
     """Count this user's agent runs recorded since local midnight."""
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         return conn.execute(
             text(
                 """
@@ -128,7 +128,7 @@ def get_usage_summary(clerk_user_id: str) -> dict:
 
 def get_admin_stats() -> dict:
     """Aggregate admin-facing stats: total runs, cost, breakdown by status."""
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         row = conn.execute(
             text(
                 """
@@ -148,6 +148,7 @@ def get_admin_stats() -> dict:
             "completed": row.completed,
             "refused": row.refused,
         }
+
 
 # ── Conversation persistence (L16) ─────────────────────────────────────────
 
@@ -180,9 +181,7 @@ def insert_message(conn, conversation_id: int, role: str, content: str) -> None:
     )
     # Touch updated_at on the parent conversation so it sorts first in lists.
     conn.execute(
-        text(
-            "UPDATE agent_conversations SET updated_at = NOW() WHERE id = :cid"
-        ),
+        text("UPDATE agent_conversations SET updated_at = NOW() WHERE id = :cid"),
         {"cid": conversation_id},
     )
 
@@ -193,7 +192,7 @@ def list_conversations(clerk_user_id: str) -> list[dict]:
     Each row includes: id, title, message_count, last_message_preview,
     created_at, updated_at.
     """
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         rows = conn.execute(
             text(
                 """
@@ -213,7 +212,7 @@ def list_conversations(clerk_user_id: str) -> list[dict]:
                 LEFT JOIN agent_messages m ON m.conversation_id = c.id
                 WHERE u.clerk_user_id = :clerk_user_id
                 GROUP BY c.id
-                ORDER BY c.updated_at DESC
+                ORDER BY c.updated_at DESC, c.id DESC
                 """
             ),
             {"clerk_user_id": clerk_user_id},
@@ -231,14 +230,12 @@ def list_conversations(clerk_user_id: str) -> list[dict]:
         ]
 
 
-def get_conversation_messages(
-    conversation_id: int, clerk_user_id: str
-) -> dict | None:
+def get_conversation_messages(conversation_id: int, clerk_user_id: str) -> dict | None:
     """Return a conversation with all its messages, or None if not found / not owned.
 
     Output: { id, title, created_at, messages: [{ role, content, created_at }] }
     """
-    with engine.connect() as conn:
+    with extensions.engine.connect() as conn:
         # Verify ownership first.
         owner = conn.execute(
             text(

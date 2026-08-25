@@ -28,11 +28,12 @@ def test_route_question_extracts_entities(monkeypatch):
             '"year": 2026, "gp_name": "Monaco", "laps_window": 3}'
         ),
     )
-    routed = llm.route_question("On which lap did Sainz pit in Monaco 2026?")
+    routed, cost = llm.route_question("On which lap did Sainz pit in Monaco 2026?")
     assert routed.intent is types.Intent.PIT_STOP_SPEED_DELTA
     assert routed.driver_name == "Sainz"
     assert routed.year == 2026
     assert routed.gp_name == "Monaco"
+    assert isinstance(cost, float)
 
 
 def test_route_question_unsupported_has_null_entities(monkeypatch):
@@ -45,7 +46,7 @@ def test_route_question_unsupported_has_null_entities(monkeypatch):
             '"gp_name": null, "laps_window": null}'
         ),
     )
-    routed = llm.route_question("What is the weather?")
+    routed, cost = llm.route_question("What is the weather?")
     assert routed.intent is types.Intent.UNSUPPORTED
     assert routed.driver_name is None
     assert routed.year is None
@@ -105,8 +106,9 @@ def test_compose_answer(monkeypatch):
             "Verstappen pitted on lap 22."
         ),
     )
-    out = llm.compose_answer("when did he pit?", {"pit_lap": 22})
+    out, cost = llm.compose_answer("when did he pit?", {"pit_lap": 22})
     assert out == "Verstappen pitted on lap 22."
+    assert isinstance(cost, float)
 
 
 def test_compose_answer_uses_final_model(monkeypatch):
@@ -131,7 +133,8 @@ def test_route_question_coerces_string_year(monkeypatch):
             '{"intent": "pit_stop_speed_delta", "driver": "HAM", "year": "2018"}'
         ),
     )
-    assert llm.route_question("q?").year == 2018
+    routed, _ = llm.route_question("q?")
+    assert routed.year == 2018
 
 
 def test_route_question_bad_year_raises(monkeypatch):
@@ -156,4 +159,5 @@ def test_route_question_clamps_window(monkeypatch):
             '{"intent": "pit_stop_speed_delta", "laps_window": 99}'
         ),
     )
-    assert llm.route_question("q?").laps_window == 10
+    routed, _ = llm.route_question("q?")
+    assert routed.laps_window == 10

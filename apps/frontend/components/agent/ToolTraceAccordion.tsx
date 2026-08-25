@@ -4,14 +4,16 @@ import { ToolCallRecord } from '@/types/agent'
 
 interface Props {
   trace: ToolCallRecord[]
+  visibility?: string
 }
 
-export default function ToolTraceAccordion({ trace }: Props) {
+export default function ToolTraceAccordion({ trace, visibility = 'full' }: Props) {
   const [isOpen, setIsOpen] = useState(false)
 
   if (!trace || trace.length === 0) return null
 
   const totalDuration = trace.reduce((acc, item) => acc + (item.duration_ms ?? 0), 0)
+  const isFullTrace = visibility === 'full'
 
   return (
     <div className="mt-4 overflow-hidden border border-slate-200 bg-white shadow-sm">
@@ -23,7 +25,7 @@ export default function ToolTraceAccordion({ trace }: Props) {
         <div className="flex min-w-0 items-center gap-2">
           <Terminal className="h-3.5 w-3.5 shrink-0 text-rose-500" />
           <span className="truncate text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600">
-            Tool execution trace
+            {isFullTrace ? 'Tool execution trace' : 'Evidence trail'}
           </span>
           <span className="border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.06em] text-slate-400">
             {trace.length} calls
@@ -60,7 +62,7 @@ export default function ToolTraceAccordion({ trace }: Props) {
                   <span className="font-semibold uppercase tracking-[0.06em] text-slate-400">[{item.status}]</span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-slate-500">
-                  {item.output_summary ?? item.input_summary ?? item.error}
+                  {item.output_summary || item.input_summary || item.error}
                 </p>
               </div>
 

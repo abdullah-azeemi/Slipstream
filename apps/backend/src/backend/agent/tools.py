@@ -12,6 +12,7 @@ import gzip
 import io
 import json
 from pathlib import Path
+import re
 
 from sqlalchemy import text
 
@@ -22,6 +23,11 @@ from backend.agent import types
 
 def resolve_session(inp: types.ResolveSessionInput) -> types.ResolvedSession:
     """Find the most recent session matching the given year, GP name, and session type."""
+    cleaned_gp = re.sub(
+        r"\b(grand prix|gp)\b", "", inp.gp_name, flags=re.IGNORECASE
+    ).strip()
+    search_term = cleaned_gp if cleaned_gp else inp.gp_name.strip()
+
     with extensions.engine.connect() as conn:
         row = (
             conn.execute(
@@ -29,14 +35,16 @@ def resolve_session(inp: types.ResolveSessionInput) -> types.ResolvedSession:
                     """
                     SELECT session_key, year, gp_name, session_type, session_name 
                     FROM sessions
-                    WHERE year = :year AND gp_name ILIKE :gp_pattern AND session_type = :stype
+                    WHERE year = :year 
+                      AND (gp_name ILIKE :gp_pattern OR country ILIKE :gp_pattern)
+                      AND session_type = :stype
                     ORDER BY date_start DESC NULLS LAST
                     LIMIT 1
                     """
                 ),
                 {
                     "year": inp.year,
-                    "gp_pattern": f"%{inp.gp_name}%",
+                    "gp_pattern": f"%{search_term}%",
                     "stype": inp.session_type.value,
                 },
             )

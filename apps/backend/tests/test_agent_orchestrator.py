@@ -72,7 +72,7 @@ def _write_gz_artifact(tmp_path, lap_number, speeds):
     storage_key = f"telemetry/session_{SESSION_KEY}/driver_55/lap_{lap_number}.json.gz"
     path = Path(tmp_path) / storage_key
     path.parent.mkdir(parents=True, exist_ok=True)
-    samples = [{"speed_kmh": s} for s in speeds]
+    samples = [{"speed_kmh": s, "distance_m": 100.0} for s in speeds]
     with gzip.open(path, "wb") as f:
         f.write(
             json.dumps(
@@ -147,14 +147,17 @@ def _fake_route(monkeypatch, intent, driver="Sainz", year=2026, gp="Monaco"):
     monkeypatch.setattr(
         orchestrator.llm,
         "route_question",
-        lambda q: types.RoutedQuestion(
-            intent=types.Intent(intent), driver_name=driver, gp_name=gp, year=year
+        lambda q: (
+            types.RoutedQuestion(
+                intent=types.Intent(intent), driver_name=driver, gp_name=gp, year=year
+            ),
+            0.0,
         ),
     )
 
 
 def _fake_compose(monkeypatch, text):
-    monkeypatch.setattr(orchestrator.llm, "compose_answer", lambda q, e: text)
+    monkeypatch.setattr(orchestrator.llm, "compose_answer", lambda q, e: (text, 0.0))
 
 
 def test_run_pit_stop_question(app, db_engine, monkeypatch, tmp_path):
@@ -264,3 +267,21 @@ def test_run_asks_for_missing_race(monkeypatch):
     answer = orchestrator.run("On which lap did Sainz pit?")
     assert answer.refusals == ("missing_race",)
     assert answer.trace == ()
+
+
+def test_run_pit_stop_resolves_gp_with_suffix(app, db_engine, monkeypatch, tmp_path):
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    _insert_artifacts(db_engine, tmp_path)
+    monkeypatch.setattr(settings, "telemetry_artifact_dir", str(tmp_path))
+    # Pass 'Monaco GP' which should resolve to 'Monaco Grand Prix'
+    _fake_route(monkeypatch, "pit_stop_speed_delta", gp="Monaco GP")
+    _fake_compose(monkeypatch, "Sainz pitted across laps 5 and 6.")
+
+    try:
+        answer = orchestrator.run("What was Sainz pit stop speed in Monaco GP 2026?")
+        assert answer.refusals == ()
+        assert answer.session is not None
+        assert answer.session.gp_name == "Monaco Grand Prix"
+    finally:
+        _cleanup(db_engine)

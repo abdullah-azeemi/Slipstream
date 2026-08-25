@@ -27,7 +27,9 @@ def _segment_quali_laps(laps):
 
     all_laps = all_laps.sort_values("LapStartTime")
     all_laps["gap"] = all_laps["LapStartTime"].diff()
-    boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]["LapStartTime"].tolist()
+    boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)][
+        "LapStartTime"
+    ].tolist()
 
     def assign_segment(t):
         if len(boundaries) == 0:
@@ -111,7 +113,11 @@ def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict
 
 def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     laps = session.laps
-    lap_segment_map = _segment_quali_laps(laps) if session.name in ("Qualifying", "Sprint Qualifying") else {}
+    lap_segment_map = (
+        _segment_quali_laps(laps)
+        if session.name in ("Qualifying", "Sprint Qualifying")
+        else {}
+    )
     results = []
     for _, row in laps.iterrows():
         try:
@@ -120,7 +126,11 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
             continue
         lap_number = row.get("LapNumber")
         try:
-            quali_segment = lap_segment_map.get((str(driver_num), int(lap_number))) if lap_number is not None else None
+            quali_segment = (
+                lap_segment_map.get((str(driver_num), int(lap_number)))
+                if lap_number is not None
+                else None
+            )
         except (TypeError, ValueError):
             quali_segment = None
         results.append(
@@ -159,22 +169,26 @@ def extract_telemetry(
     session: fastf1.core.Session,
     session_key: int,
     all_drivers: bool = False,
+    all_laps: bool = False,
 ) -> list[dict]:
     """
-    Extract telemetry for the best qualifying lap in each segment.
+    Extract telemetry samples for a session.
 
     Captures: speed, rpm, gear, throttle, brake, drs, distance.
     Distance is key — it's metres around the lap, so two drivers
     can be compared at the exact same track position regardless of
     how many samples they have.
 
-    To keep storage lean while still supporting the Q1/Q2/Q3 switcher,
-    we only store up to one telemetry lap per driver per segment:
+    Qualifying stores up to one telemetry lap per driver per segment:
     best Q1, best Q2, best Q3.
+
+    Race ingestion can pass all_laps=True so the agent can compute windows
+    around any pit stop without guessing from partial traces.
     """
     results = []
     drivers = session.drivers if all_drivers else session.drivers[:10]
-    lap_segment_map = _segment_quali_laps(session.laps)
+    is_qualifying = session.name in ("Qualifying", "Sprint Qualifying")
+    lap_segment_map = _segment_quali_laps(session.laps) if is_qualifying else {}
 
     for drv in drivers:
         try:
@@ -193,23 +207,34 @@ def extract_telemetry(
                 log.debug("telemetry.no_valid_laps", driver=drv)
                 continue
 
-            best_laps_by_segment = {}
-            for _, lap in valid_laps.iterrows():
-                lap_number = int(lap["LapNumber"])
-                segment = lap_segment_map.get((str(drv), lap_number), 1)
-                current_best = best_laps_by_segment.get(segment)
-                if current_best is None or lap["LapTime"] < current_best["LapTime"]:
-                    best_laps_by_segment[segment] = lap
+            if all_laps:
+                laps_to_store = list(valid_laps.sort_values("LapNumber").iterrows())
+            else:
+                best_laps_by_segment = {}
+                for _, lap in valid_laps.iterrows():
+                    lap_number = int(lap["LapNumber"])
+                    segment = lap_segment_map.get((str(drv), lap_number), 1)
+                    current_best = best_laps_by_segment.get(segment)
+                    if current_best is None or lap["LapTime"] < current_best["LapTime"]:
+                        best_laps_by_segment[segment] = lap
+                laps_to_store = [
+                    (None, best_laps_by_segment[segment])
+                    for segment in sorted(best_laps_by_segment)
+                ]
 
             driver_sample_count = 0
             stored_lap_count = 0
 
-            for segment in sorted(best_laps_by_segment):
-                lap = best_laps_by_segment[segment]
+            for _, lap in laps_to_store:
                 try:
                     tel = lap.get_telemetry()
                 except Exception as e:
-                    log.debug("telemetry.lap_failed", driver=drv, lap_number=lap.get("LapNumber"), error=str(e))
+                    log.debug(
+                        "telemetry.lap_failed",
+                        driver=drv,
+                        lap_number=lap.get("LapNumber"),
+                        error=str(e),
+                    )
                     continue
 
                 if tel is None or tel.empty:
@@ -237,7 +262,12 @@ def extract_telemetry(
                     )
                 driver_sample_count += len(tel)
 
-            log.info("telemetry.driver_done", driver=drv, laps=stored_lap_count, samples=driver_sample_count)
+            log.info(
+                "telemetry.driver_done",
+                driver=drv,
+                laps=stored_lap_count,
+                samples=driver_sample_count,
+            )
 
         except Exception as e:
             log.warning("telemetry.skip", driver=drv, error=str(e))

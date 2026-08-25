@@ -24,10 +24,18 @@ import type { LucideIcon } from 'lucide-react'
 import type React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import EvidenceCards from '@/components/agent/EvidenceCards'
+import AgentProgressRail from '@/components/agent/AgentProgressRail'
+import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
 import { agentApi, API_URL } from '@/lib/api'
-import { AgentAnswer, AdminStats, ConversationSummary, UsageInfo } from '@/types/agent'
+import {
+  AgentAnswer,
+  AgentProgressEvent,
+  AdminStats,
+  ConversationSummary,
+  UsageInfo,
+} from '@/types/agent'
 
 const SUGGESTED_QUESTIONS = [
   'Where did Sainz pit in Monaco 2026?',
@@ -40,6 +48,7 @@ type ChatTurn = {
   question: string
   reply: AgentAnswer | null
   error: string | null
+  progress: AgentProgressEvent[]
 }
 
 const SYSTEM_MODULES: Array<[string, LucideIcon, boolean]> = [
@@ -118,6 +127,9 @@ export default function AgentPage() {
   const traceCount = latestReply?.trace.length ?? 0
   const totalTraceMs =
     latestReply?.trace.reduce((sum, call) => sum + (call.duration_ms ?? 0), 0) ?? 0
+  const activeTurnHasProgress = turns.some(
+    (turn) => turn.question === loadingQuestion && !turn.reply && turn.progress.length > 0
+  )
 
   // Load conversation list on mount.
   useEffect(() => {
@@ -150,6 +162,7 @@ export default function AgentPage() {
               ? { answer: assistantMsg.content, intent: '', refusals: [], trace: [], question: userMsg.content }
               : null,
             error: null,
+            progress: [],
           })
         }
       }
@@ -176,15 +189,16 @@ export default function AgentPage() {
     const id = Date.now()
     setLoadingQuestion(trimmed)
     setQuestion('')
-    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null }])
+    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [] }])
 
     try {
       const token = await getToken()
 
-      const resp = await fetch(`${API_URL}/api/v1/agent/query`, {
+      const resp = await fetch(`${API_URL}/api/v1/agent/query/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
@@ -198,17 +212,73 @@ export default function AgentPage() {
         throw new Error(body?.error ?? `Request failed (${resp.status})`)
       }
 
-      const reply = (await resp.json()) as AgentAnswer
+      if (!resp.body) {
+        throw new Error('Streaming response was empty')
+      }
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      const streamResult: { reply: AgentAnswer | null } = { reply: null }
+
+      function handleFrame(frame: string) {
+        const lines = frame.split('\n')
+        const event = lines
+          .find((line) => line.startsWith('event:'))
+          ?.replace('event:', '')
+          .trim()
+        const dataLine = lines
+          .find((line) => line.startsWith('data:'))
+          ?.replace('data:', '')
+          .trim()
+        if (!event || !dataLine) return
+
+        const payload = JSON.parse(dataLine)
+        if (event === 'progress') {
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === id
+                ? { ...turn, progress: [...turn.progress, payload as AgentProgressEvent] }
+                : turn
+            )
+          )
+        }
+        if (event === 'final') {
+          streamResult.reply = payload as AgentAnswer
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === id ? { ...turn, reply: streamResult.reply, error: null } : turn
+            )
+          )
+        }
+        if (event === 'error') {
+          throw new Error(payload?.error ?? 'Agent stream failed')
+        }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const frames = buffer.split('\n\n')
+        buffer = frames.pop() ?? ''
+        for (const frame of frames) {
+          if (frame.trim()) handleFrame(frame)
+        }
+        if (done) break
+      }
+      if (buffer.trim()) handleFrame(buffer)
+
+      const reply = streamResult.reply
+      if (!reply) {
+        throw new Error('Agent stream ended without a final answer')
+      }
+
       if (reply.conversation_id) {
         setConversationId(reply.conversation_id)
         agentApi.listConversations(getToken).then(setConversations).catch(() => {})
       }
       agentApi.getUsage(getToken).then(setUsage).catch(() => {})
       agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
-
-      setTurns((current) =>
-        current.map((turn) => (turn.id === id ? { ...turn, reply, error: null } : turn))
-      )
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong'
       setTurns((current) =>
@@ -422,7 +492,21 @@ export default function AgentPage() {
                         pitStop={turn.reply.pit_stop}
                         speedWindow={turn.reply.speed_window}
                       />
-                      <ToolTraceAccordion trace={turn.reply.trace} />
+                      <AgentSpeedChart speedWindow={turn.reply.speed_window} />
+                      <ToolTraceAccordion
+                        trace={turn.reply.trace}
+                        visibility={turn.reply.trace_visibility}
+                      />
+                    </div>
+                  )}
+
+                  {!turn.reply && !turn.error && turn.progress.length > 0 && (
+                    <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
+                      <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                        Running agent pipeline
+                      </div>
+                      <AgentProgressRail events={turn.progress} />
                     </div>
                   )}
 
@@ -434,7 +518,7 @@ export default function AgentPage() {
                 </div>
               ))}
 
-              {loadingQuestion && (
+              {loadingQuestion && !activeTurnHasProgress && (
                 <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
                   <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
                     <Loader2 className="h-4 w-4 animate-spin text-rose-500" />

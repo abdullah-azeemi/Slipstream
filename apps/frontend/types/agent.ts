@@ -67,6 +67,17 @@ export interface AgentAnswer {
   evidence?: VerifyEvidenceResult | null
   trace: ToolCallRecord[]
   conversation_id?: number | null
+  trace_visibility?: 'full' | 'evidence' | string
+  cost_usd?: number
+}
+
+export interface AgentProgressEvent {
+  type: 'stage' | 'tool' | string
+  stage?: string
+  tool_name?: string
+  status: 'running' | 'ok' | 'error' | string
+  label: string
+  duration_ms?: number | null
 }
 
 // ── Conversation persistence types (L16) ──────────────────

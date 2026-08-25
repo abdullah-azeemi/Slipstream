@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-25
+Last updated: 2026-08-25 (L20)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -90,11 +90,41 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Tables `agent_conversations` and `agent_messages` (migration 0019) are now fully wired: every query creates a conversation, stores both messages, and links the run. Ownership enforced on all reads.
   - Verified: `uv run ruff check`, `uv run ruff format`, frontend `npm run lint`, `npx tsc --noEmit`, `npm run build`. Integration tests require `make up` (Postgres).
 
-Current test state: backend 73 passing from L14 (conversation tests need Postgres); frontend lint + typecheck + production build clean after L16.
+- L17 — Usage remaining API + frontend wiring.
+  - Files: `persistence.py` (`get_usage_summary`), `api/v1/agent.py` (`GET /agent/usage`), `types/agent.ts` (`UsageInfo`), `lib/api.ts` (`agentApi.getUsage`), `app/agent/page.tsx` (usage state, fetch on mount + after query, live `remaining / limit` in right panel replacing hardcoded cap).
+  - Reuses `count_runs_today` + `settings.agent_free_daily_limit`; no new SQL.
+  - Verified: backend lint, frontend typecheck clean.
+
+- L18 — LLM cost tracking + admin stats surface.
+  - Files: `types.py` (`AgentAnswer.cost_usd: float = 0.0`), `llm.py` (`route_question` returns `(RoutedQuestion, float)`, `compose_answer` returns `(str, float)` — both now return cost alongside result), `orchestrator.py` (captures `routing_cost` + `compose_cost`, accumulates via `dataclasses.replace`), `persistence.py` (`persist_run` writes `cost_estimate_usd` to DB; new `get_admin_stats()` aggregates runs/cost/status), `api/v1/agent.py` (`GET /agent/admin/stats` with 403 admin guard), `types/agent.ts` (`AdminStats`), `lib/api.ts` (`agentApi.getAdminStats`), `app/agent/page.tsx` (`adminStats` state, admin panel with runs/cost/completed/refused metrics).
+  - Cost pipeline complete: LLM module computes per-call cost → orchestrator sums routing + composition → persistence writes to `agent_runs.cost_estimate_usd` → admin endpoint reads it.
+  - Verified: backend lint + import check, frontend typecheck clean.
+
+- L19 — Distance-weighted speed metric.
+  - Files: `tools.py` (+`_weighted_mean`, +`_read_artifact_speed_and_distance` reading `distance_m` alongside `speed_kmh`; `compute_speed_window` accepts `DISTANCE_WEIGHTED_TELEMETRY`), `orchestrator.py` (default metric changed to `DISTANCE_WEIGHTED_TELEMETRY`), `EvidenceCards.tsx` (metric name shown in speed delta card), `test_agent_tools.py` (+3 `_weighted_mean` unit tests).
+  - Distance-weighted mean weights each telemetry sample by the distance it covers, giving the true average speed over distance traveled. Falls back gracefully when `distance_m` is absent (total weight = 0 → `DataError`).
+  - Verified: `uv run ruff check`, `uv run ruff format`, frontend `npx tsc --noEmit`.
+
+- L20 — Streaming progress, agent telemetry chart, and trace visibility policy.
+  - Backend: `POST /api/v1/agent/query/stream` streams Server-Sent Events (`progress`, `final`, `error`, `done`) while preserving the existing `POST /agent/query` JSON endpoint.
+  - Orchestrator: `run(question, progress=...)` emits route, plan, tool, and compose progress without changing deterministic tool outputs.
+  - Frontend: agent UI prefers the streaming endpoint, renders a live progress rail during runs, and shows a compact before/after speed comparison graph from the verified `speed_window` payload.
+  - Design decision: non-admin users see a simplified evidence trail; admins see full tool input/output summaries. Raw telemetry blobs remain out of the API response for everyone.
+  - Tests: API coverage for normal-user trace redaction, admin full trace visibility, and SSE progress/final delivery.
+
+- L21 — Race telemetry ingestion for agent evidence.
+  - `make seed` now ingests 2024 British GP Race telemetry as local file artifacts instead of skipping it.
+  - Race sessions are allowed through telemetry extraction; qualifying still stores selected segment-best laps by default.
+  - `load_laps()` now persists `pit_in_time_ms`, `pit_out_time_ms`, `stint`, `fresh_tyre`, `deleted_reason`, and `is_accurate`, so real ingested race data can drive pit-stop detection.
+  - Design reason: the agent’s v1 pit-stop speed question needs Race (`R`) lap markers plus telemetry artifacts for the before/after lap windows.
+
+Current test state: backend 73 passing from L14 (conversation tests need Postgres); frontend lint + typecheck + production build clean after L21.
 
 ### Next
 
-- Add usage remaining API and wire it into the agent page, then admin/cost/trace surfaces per the Implementation Plan below.
+- Persist structured chart artifacts for richer graphs beyond before/after averages.
+- Add conversation history replay for evidence cards/charts, not just assistant text.
+- Add admin-only run detail pages for historical trace inspection.
 
 ## How To Use This Document
 
@@ -986,13 +1016,13 @@ Minimum UI:
 - [done] tool trace accordion
 - [done] local in-page conversation turns
 - [done] persisted conversation history
-- usage remaining from a real backend endpoint
+- [done] usage remaining from a real backend endpoint
+- [done] admin/cost stats panel
 
 Later UI:
 
 - streaming progress
-- charts
-- usage/admin/cost surfaces
+- telemetry charts
 
 ## Testing Plan
 
@@ -1118,8 +1148,10 @@ Implement in this order next (see Implementation Status for what is already done
 8. [done] Flask Clerk JWT verification.
 9. [done] Evidence cards and trace UI.
 10. [done] Persist conversation/message rows and add conversation list/detail APIs.
-11. Add usage remaining API and wire it into the agent page.
-12. Add admin/cost/trace surfaces.
+11. [done] Add usage remaining API and wire it into the agent page.
+12. [done] Add admin/cost/trace surfaces.
+13. [done] Add streaming progress (SSE).
+14. [done] Add telemetry charts in agent UI.
 
 ## Session Handoff (compact log)
 
@@ -1145,7 +1177,7 @@ Teaching-mode build: the student types every file by hand, then the mentor check
 
 ### Decided v1 values used so far
 
-- Metric: `TELEMETRY_SAMPLE_MEAN` only (`compute_speed_window` refuses others with `DataError: unsupported metric`).
+- Metric: `DISTANCE_WEIGHTED_TELEMETRY` is the new default (`compute_speed_window` weights each sample by `distance_m`). `TELEMETRY_SAMPLE_MEAN` still works when requested explicitly.
 - Pit stop signal: `pit_in_time_ms IS NOT NULL` = entry lap, first later lap with `pit_out_time_ms IS NOT NULL` = exit lap (fallback: entry + 1).
 - Speed delta positive = faster after the stop.
 - LLM: all calls via `agent/llm.py`; routing + final models both `openai/gpt-4o-mini`; cost logged every call; no OpenRouter calls outside the module.

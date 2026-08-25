@@ -8,8 +8,21 @@ Every tool call is recorded in the trace for debugging and the future UI.
 from __future__ import annotations
 import time
 from dataclasses import asdict, replace
+from typing import Callable
 
 from backend.agent import llm, tools, types
+
+ProgressCallback = Callable[[dict], None]
+
+
+def _emit(progress: ProgressCallback | None, **payload) -> None:
+    """Best-effort progress events for streaming clients."""
+    if progress is None:
+        return
+    try:
+        progress(payload)
+    except Exception:
+        return
 
 
 def _build_plan(question: str, routed: types.RoutedQuestion) -> types.Plan:
@@ -28,36 +41,59 @@ def _build_plan(question: str, routed: types.RoutedQuestion) -> types.Plan:
     )
 
 
-def _execute(plan: types.Plan) -> tuple[tuple[types.ToolCallRecord, ...], dict]:
+def _execute(
+    plan: types.Plan, progress: ProgressCallback | None = None
+) -> tuple[tuple[types.ToolCallRecord, ...], dict]:
     """Run the tools for a plan. Returns (trace, partial results)."""
     trace: list[types.ToolCallRecord] = []
     partial: dict = {}
 
     def record(tool_name, fn, **kwargs):
+        _emit(
+            progress,
+            type="tool",
+            tool_name=tool_name.value,
+            status="running",
+            label=f"Running {tool_name.value.replace('_', ' ')}",
+        )
         start = time.perf_counter()
         try:
             result = fn(**kwargs)
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
-            trace.append(
-                types.ToolCallRecord(
-                    tool_name=tool_name,
-                    status="ok",
-                    input_summary=str(kwargs),
-                    output_summary=str(result),
-                    duration_ms=duration_ms,
-                )
+            call = types.ToolCallRecord(
+                tool_name=tool_name,
+                status="ok",
+                input_summary=str(kwargs),
+                output_summary=str(result),
+                duration_ms=duration_ms,
+            )
+            trace.append(call)
+            _emit(
+                progress,
+                type="tool",
+                tool_name=tool_name.value,
+                status="ok",
+                duration_ms=duration_ms,
+                label=f"Finished {tool_name.value.replace('_', ' ')}",
             )
             return result
         except (types.NotFoundError, types.DataError) as exc:
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
-            trace.append(
-                types.ToolCallRecord(
-                    tool_name=tool_name,
-                    status="error",
-                    input_summary=str(kwargs),
-                    error=str(exc),
-                    duration_ms=duration_ms,
-                )
+            call = types.ToolCallRecord(
+                tool_name=tool_name,
+                status="error",
+                input_summary=str(kwargs),
+                error=str(exc),
+                duration_ms=duration_ms,
+            )
+            trace.append(call)
+            _emit(
+                progress,
+                type="tool",
+                tool_name=tool_name.value,
+                status="error",
+                duration_ms=duration_ms,
+                label=f"{tool_name.value.replace('_', ' ')} failed",
             )
             raise
 
@@ -141,8 +177,16 @@ def _compose(
     plan: types.Plan,
     partial: dict,
     trace: tuple[types.ToolCallRecord, ...],
+    progress: ProgressCallback | None = None,
 ) -> types.AgentAnswer:
     """Build the final structured answer from tool results."""
+    _emit(
+        progress,
+        type="stage",
+        stage="compose",
+        status="running",
+        label="Composing evidence-backed answer",
+    )
     refusals: list[str] = []
     if partial.get("error"):
         refusals.append(str(partial["error"]))
@@ -151,7 +195,7 @@ def _compose(
         refusals.append(evidence.refusal_reason)
 
     if refusals:
-        return types.AgentAnswer(
+        answer = types.AgentAnswer(
             question=plan.question,
             intent=plan.intent,
             answer=(
@@ -167,6 +211,14 @@ def _compose(
             evidence=evidence,
             trace=trace,
         )
+        _emit(
+            progress,
+            type="stage",
+            stage="compose",
+            status="ok",
+            label="Prepared refusal with available evidence",
+        )
+        return answer
 
     session = partial["session"]
     driver = partial["driver"]
@@ -203,7 +255,7 @@ def _compose(
     except types.LLMError:
         answer_text = fallback_text
 
-    return types.AgentAnswer(
+    answer = types.AgentAnswer(
         question=plan.question,
         intent=plan.intent,
         answer=answer_text,
@@ -215,13 +267,35 @@ def _compose(
         trace=trace,
         cost_usd=compose_cost,
     )
+    _emit(
+        progress,
+        type="stage",
+        stage="compose",
+        status="ok",
+        label="Answer composed",
+    )
+    return answer
 
 
-def run(question: str) -> types.AgentAnswer:
+def run(question: str, progress: ProgressCallback | None = None) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out."""
+    _emit(
+        progress,
+        type="stage",
+        stage="route",
+        status="running",
+        label="Routing question and extracting race entities",
+    )
     try:
         routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:
+        _emit(
+            progress,
+            type="stage",
+            stage="route",
+            status="error",
+            label="Question router unavailable",
+        )
         return types.AgentAnswer(
             question=question,
             intent=types.Intent.UNSUPPORTED,
@@ -229,8 +303,15 @@ def run(question: str) -> types.AgentAnswer:
                 "I could not process that question because the question "
                 f"router is unavailable {exc}"
             ),
-            refusals=("llm router unavailable",),
+            refusals=("llm_router_unavailable",),
         )
+    _emit(
+        progress,
+        type="stage",
+        stage="route",
+        status="ok",
+        label="Question routed",
+    )
 
     if routed.intent is types.Intent.UNSUPPORTED:
         return types.AgentAnswer(
@@ -260,6 +341,13 @@ def run(question: str) -> types.AgentAnswer:
         )
 
     plan = _build_plan(question, routed)
-    trace, partial = _execute(plan)
-    answer = _compose(plan, partial, trace)
+    _emit(
+        progress,
+        type="stage",
+        stage="plan",
+        status="ok",
+        label="Execution plan prepared",
+    )
+    trace, partial = _execute(plan, progress)
+    answer = _compose(plan, partial, trace, progress)
     return replace(answer, cost_usd=round(routing_cost + answer.cost_usd, 6))

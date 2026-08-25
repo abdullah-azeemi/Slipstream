@@ -117,11 +117,15 @@ Why:
 Slipstream stores:
 
 - lap times
+- pit-in and pit-out markers
 - positions
 - stint and strategy-relevant fields
 - race results derived from lap progression
+- full per-driver, per-lap telemetry artifacts when telemetry is enabled
 
-Telemetry is not the main focus for race ingestion in the current product flow.
+Race telemetry artifacts are required by the Pitwall agent for pit-stop speed
+window questions. For local seed data, `make seed` stores race telemetry as
+compressed local files and writes only artifact metadata to Postgres.
 
 ### Practice (`FP2` and others)
 
