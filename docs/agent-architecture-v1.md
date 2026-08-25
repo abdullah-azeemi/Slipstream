@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-17
+Last updated: 2026-08-25
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -17,7 +17,9 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
 - L2 — First read-only tools.
   - Files: `apps/backend/src/backend/agent/tools.py` (`resolve_session`, `resolve_driver`)
   - Deterministic parameterized SQL against `sessions` / `drivers`; `NotFoundError` on miss.
-  - Commit `36b1492` "feat(agent): add resolve_session and resolve_driver read-only tools"- L3 — Pit stop detection + artifact metadata.
+  - Commit `36b1492` "feat(agent): add resolve_session and resolve_driver read-only tools"
+
+- L3 — Pit stop detection + artifact metadata.
   - Files: `tools.py` (`find_pit_stops`, `get_lap_telemetry_artifacts`), pure `_derive_pit_stops` helper, `apps/backend/tests/test_agent_tools.py`
   - Gather-in-SQL / derive-in-Python separation; DB-free unit tests.
   - Commit `276e5ca` "feat(agent): add pit stop and telemetry artifact tools"
@@ -76,11 +78,18 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Env split: publishable/secret keys in frontend `.env.local`; `CLERK_ISSUER` in backend `.env` — both sides must name the same instance domain.
   - Gotchas hit and fixed: duplicate env var lines (last wins), route slug collision (`[[...rest]]` vs `[[...sign-in]]` under one parent is a boot error), dependency accidentally installed at repo root resolving silently via upward traversal.
 
-Current test state: backend 73 passing; frontend lint + production build clean.
+- L15 — Polished agent console UI (Phase 8 first pass).
+  - Files: `apps/frontend/app/agent/page.tsx`, `apps/frontend/components/agent/EvidenceCards.tsx`, `apps/frontend/components/agent/RefusalBanner.tsx`, `apps/frontend/components/agent/ToolTraceAccordion.tsx`, `apps/frontend/types/agent.ts`.
+  - Replaced the simple one-shot question form with a responsive race-ops workspace inspired by the attached orchestration-console reference: grid-paper background, left agent/system status panel, central conversation/pipeline lane, right runtime log/context panel, suggested queries, loading pipeline cards, local in-page turn history, evidence cards, refusal banner, and expandable tool trace.
+  - Typography adjusted back toward the project default (`Inter` / normal product UI) with monospace reserved for tool IDs, durations, and numeric telemetry values.
+  - Still client-local only: conversation turns are not persisted to `agent_conversations` / `agent_messages`; daily usage remaining is represented as static UI copy until a usage endpoint exists.
+  - Verified: `npm run lint`, `npm run build`. Build completes, with existing `ECONNREFUSED` fetch noise from other prerendered data-backed pages when the backend is not running.
+
+Current test state: backend 73 passing from L14; frontend lint + production build clean after L15.
 
 ### Next
 
-- Agent chat UI polish (conversation view, refusal states, tool-trace display), then usage/admin surfaces per the Implementation Plan below.
+- Persist conversations/messages for the polished chat UI, then add real usage remaining and admin/cost/trace surfaces per the Implementation Plan below.
 
 ## How To Use This Document
 
@@ -965,17 +974,20 @@ Expected files:
 
 Minimum UI:
 
-- text input
-- answer panel
-- evidence cards
-- usage remaining
+- [done] text input
+- [done] answer panel
+- [done] evidence cards
+- [done] refusal state
+- [done] tool trace accordion
+- [done] local in-page conversation turns
+- usage remaining from a real backend endpoint
 
 Later UI:
 
 - streaming progress
-- tool trace
 - charts
-- conversation history
+- persisted conversation history
+- usage/admin/cost surfaces
 
 ## Testing Plan
 
@@ -1067,35 +1079,42 @@ This is how the future world-model path begins without pretending the first chat
 
 ## Open Questions
 
-- Exact Clerk package versions and env variable names.
-- Exact OpenRouter model choices.
 - Whether v1 should stream progress or return a single response.
-- Whether usage limits are daily, monthly, or both.
 - Whether normal users can see full tool traces or only simplified evidence.
-- How many telemetry laps around a pit stop should be loaded by default.
 - Whether speed should be sample mean or distance-weighted mean.
+
+Resolved since the first planning draft:
+
+- Clerk package/env shape is implemented in L13/L14.
+- OpenRouter defaults are `openai/gpt-4o-mini` for routing and final-answer composition.
+- The first usage limit is daily (`AGENT_FREE_DAILY_LIMIT`), with admin bypass.
+- The default pit-stop comparison window is 3 laps before / 3 laps after unless the router extracts another window.
 
 ## Recommended Next Step
 
-The read-only tool layer (L1–L4) is done and committed. The five v1 constants below are still open but not blocking the orchestrator (the demo flow can use local defaults until decide later):
+The first usable authenticated agent path is in place: read-only tools, orchestrator, OpenRouter routing/composition, Clerk auth, daily-limit enforcement, persisted runs/tool calls, and a polished client-side console UI.
 
-1. Free daily agent question limit.
-2. Admin Clerk user id or admin email.
-3. [done] Default OpenRouter routing model = `openai/gpt-4o-mini` (L9).
-4. [done] Default OpenRouter final-answer model = `openai/gpt-4o-mini` (L9).
-5. Default pit-stop comparison window, such as 3 laps before and 3 laps after.
+Remaining v1 decisions:
 
-Implement in this order (see Implementation Status for what is done):
+1. Admin Clerk user id or admin email for production.
+2. Whether the default pit-stop comparison window should stay 3 laps before / 3 laps after.
+3. Whether normal users can see full tool traces or only simplified evidence.
+4. Whether speed should stay telemetry-sample mean or become distance-weighted mean.
+
+Implement in this order next (see Implementation Status for what is already done):
 
 1. [done] Typed tool contracts.
 2. [done] Read-only tools without LLM (`resolve_session`, `resolve_driver`, `find_pit_stops`, `get_lap_telemetry_artifacts`, `compute_speed_window`, `verify_evidence`).
 3. [done] Orchestrator: one hardcoded demo query flow (no LLM).
 4. [done] Flask agent endpoint `POST /api/v1/agent/query` + tool trace logging.
 5. [done] Minimal user/agent tables (users, conversations, messages, runs, tool_calls).
-6. OpenRouter adapter, then planner/composer.
-7. Clerk route protection for `/agent`.
-8. Flask Clerk JWT verification.
-9. Evidence cards and trace UI.
+6. [done] OpenRouter adapter, then planner/composer.
+7. [done] Clerk route protection for `/agent`.
+8. [done] Flask Clerk JWT verification.
+9. [done] Evidence cards and trace UI.
+10. Persist conversation/message rows and add conversation list/detail APIs.
+11. Add usage remaining API and wire it into the agent page.
+12. Add admin/cost/trace surfaces.
 
 ## Session Handoff (compact log)
 

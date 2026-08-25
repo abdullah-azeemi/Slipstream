@@ -1,0 +1,69 @@
+export interface ResolvedSession {
+    session_key: number, 
+    year: number, 
+    gp_name: string, 
+    session_type: string,
+    session_name?: string | null
+}
+
+export interface ResolvedDriver{
+    driver_number: number,
+    abbreviation: string,
+    full_name: string,
+    team_name?: string | null
+}
+
+export interface PitStop{
+    stop_index: number,
+    pit_in_lap: number,
+    pit_out_lap: number,
+    compound_before?: string | null,
+    compound_after?: string | null
+}
+
+export interface SpeedWindowResult{
+    session_key: number,
+    driver_number: number,
+    metric: string,
+    before_laps: number[],
+    after_laps: number[],
+    before_avg_speed_kmh: number | null,
+    after_avg_speed_kmh: number | null,
+    delta_kmh: number | null,
+    sample_count_before: number,
+    sample_count_after: number
+}
+
+export interface EvidenceCheck{
+    name: string,
+    passed: boolean,
+    detail?: string | null
+}
+
+export interface VerifyEvidenceResult {
+  passed: boolean
+  checks: EvidenceCheck[]
+  refusal_reason?: string | null
+}
+
+export interface ToolCallRecord {
+  tool_name: string
+  status: 'ok' | 'error' | string
+  input_summary: string
+  output_summary?: string | null
+  error?: string | null
+  duration_ms?: number | null
+}
+
+export interface AgentAnswer {
+  question: string
+  intent: string
+  answer: string
+  refusals: string[]
+  session?: ResolvedSession | null
+  driver?: ResolvedDriver | null
+  pit_stop?: PitStop | null
+  speed_window?: SpeedWindowResult | null
+  evidence?: VerifyEvidenceResult | null
+  trace: ToolCallRecord[]
+}
