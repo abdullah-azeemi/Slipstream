@@ -62,11 +62,14 @@ def _insert_tool_call(conn, run_id: int, record: types.ToolCallRecord) -> None:
 
 
 def persist_run(
-    answer: types.AgentAnswer, started_at: datetime, clerk_user_id: str
+    answer: types.AgentAnswer,
+    started_at: datetime,
+    clerk_user_id: str,
+    conversation_id: int | None = None,
 ) -> int:
     """Insert one agent_runs row plus every tool call in the trace.
 
-    Returns the new run id. conversation_id stays NULL (no chat UI yet).
+    Returns the new run id. Links to conversation_id when provided.
     """
     with engine.begin() as conn:
         user_id = ensure_user(conn, clerk_user_id)
@@ -77,13 +80,14 @@ def persist_run(
                     conversation_id, user_id, status, model,
                     started_at, completed_at, cost_estimate_usd, error
                 ) VALUES (
-                    NULL, :user_id, :status, NULL, :started_at, :completed_at,
-                    NULL, :error
+                    :conversation_id, :user_id, :status, NULL, :started_at,
+                    :completed_at, NULL, :error
                 )
                 RETURNING id
                 """
             ),
             {
+                "conversation_id": conversation_id,
                 "user_id": user_id,
                 "status": "refused" if answer.refusals else "completed",
                 "started_at": started_at,
@@ -111,3 +115,135 @@ def count_runs_today(clerk_user_id: str) -> int:
             ),
             {"clerk_user_id": clerk_user_id},
         ).scalar_one()
+
+
+# ── Conversation persistence (L16) ─────────────────────────────────────────
+
+
+def create_conversation(conn, user_id: int, title: str) -> int:
+    """Create a new conversation thread and return its id."""
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO agent_conversations (user_id, title)
+            VALUES (:user_id, :title)
+            RETURNING id
+            """
+        ),
+        {"user_id": user_id, "title": title},
+    ).first()
+    return row.id
+
+
+def insert_message(conn, conversation_id: int, role: str, content: str) -> None:
+    """Insert one message (user or assistant) into a conversation."""
+    conn.execute(
+        text(
+            """
+            INSERT INTO agent_messages (conversation_id, role, content)
+            VALUES (:conversation_id, :role, :content)
+            """
+        ),
+        {"conversation_id": conversation_id, "role": role, "content": content},
+    )
+    # Touch updated_at on the parent conversation so it sorts first in lists.
+    conn.execute(
+        text(
+            "UPDATE agent_conversations SET updated_at = NOW() WHERE id = :cid"
+        ),
+        {"cid": conversation_id},
+    )
+
+
+def list_conversations(clerk_user_id: str) -> list[dict]:
+    """Return conversations for this user, newest first.
+
+    Each row includes: id, title, message_count, last_message_preview,
+    created_at, updated_at.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT
+                    c.id,
+                    c.title,
+                    COUNT(m.id) AS message_count,
+                    (
+                        SELECT content FROM agent_messages
+                        WHERE conversation_id = c.id
+                        ORDER BY id DESC LIMIT 1
+                    ) AS last_message_preview,
+                    c.created_at,
+                    c.updated_at
+                FROM agent_conversations c
+                JOIN users u ON u.id = c.user_id
+                LEFT JOIN agent_messages m ON m.conversation_id = c.id
+                WHERE u.clerk_user_id = :clerk_user_id
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC
+                """
+            ),
+            {"clerk_user_id": clerk_user_id},
+        ).fetchall()
+        return [
+            {
+                "id": r.id,
+                "title": r.title,
+                "message_count": r.message_count,
+                "last_message_preview": r.last_message_preview,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
+
+
+def get_conversation_messages(
+    conversation_id: int, clerk_user_id: str
+) -> dict | None:
+    """Return a conversation with all its messages, or None if not found / not owned.
+
+    Output: { id, title, created_at, messages: [{ role, content, created_at }] }
+    """
+    with engine.connect() as conn:
+        # Verify ownership first.
+        owner = conn.execute(
+            text(
+                """
+                SELECT c.id, c.title, c.created_at
+                FROM agent_conversations c
+                JOIN users u ON u.id = c.user_id
+                WHERE c.id = :cid AND u.clerk_user_id = :clerk_user_id
+                """
+            ),
+            {"cid": conversation_id, "clerk_user_id": clerk_user_id},
+        ).first()
+        if owner is None:
+            return None
+
+        messages = conn.execute(
+            text(
+                """
+                SELECT role, content, created_at
+                FROM agent_messages
+                WHERE conversation_id = :cid
+                ORDER BY id ASC
+                """
+            ),
+            {"cid": conversation_id},
+        ).fetchall()
+
+        return {
+            "id": owner.id,
+            "title": owner.title,
+            "created_at": owner.created_at.isoformat() if owner.created_at else None,
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ],
+        }

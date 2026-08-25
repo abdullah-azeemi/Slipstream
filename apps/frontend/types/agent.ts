@@ -66,4 +66,29 @@ export interface AgentAnswer {
   speed_window?: SpeedWindowResult | null
   evidence?: VerifyEvidenceResult | null
   trace: ToolCallRecord[]
+  conversation_id?: number | null
+}
+
+// ── Conversation persistence types (L16) ──────────────────
+
+export interface ConversationSummary {
+  id: number
+  title: string | null
+  message_count: number
+  last_message_preview: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string | null
+}
+
+export interface ConversationDetail {
+  id: number
+  title: string | null
+  created_at: string | null
+  messages: ConversationMessage[]
 }

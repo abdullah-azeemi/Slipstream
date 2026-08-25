@@ -8,6 +8,9 @@ from flask import Blueprint, g, jsonify, request
 from backend import auth
 from backend.agent import orchestrator, persistence
 from backend.config import settings
+from sqlalchemy import text as sql_text
+
+from backend.extensions import engine
 
 log = structlog.get_logger()
 agent_bp = Blueprint("agent", __name__)
@@ -60,9 +63,48 @@ def agent_query():
             {"error": "Daily question limit reached. Try again tomorrow."}
         ), 429
 
+    # ── Conversation handling ───────────────────────────────────────────
+    # If the client sends a conversation_id, reuse that thread.
+    # Otherwise create a new conversation (title = first 80 chars of question).
+    incoming_conv_id = payload.get("conversation_id")
+    conv_id: int | None = None
+
+    with engine.begin() as conn:
+        user_id = persistence.ensure_user(conn, g.clerk_user_id)
+
+        if incoming_conv_id is not None:
+            # Validate that this conversation belongs to this user.
+            owner = conn.execute(
+                sql_text(
+                    """
+                    SELECT c.id FROM agent_conversations c
+                    WHERE c.id = :cid AND c.user_id = :uid
+                    """
+                ),
+                {"cid": incoming_conv_id, "uid": user_id},
+            ).first()
+            if owner is None:
+                return jsonify({"error": "Conversation not found"}), 404
+            conv_id = incoming_conv_id
+        else:
+            title = question.strip()[:80]
+            conv_id = persistence.create_conversation(conn, user_id, title)
+
+        # Store the user message.
+        persistence.insert_message(conn, conv_id, "user", question.strip())
+
+    # ── Run the orchestrator ────────────────────────────────────────────
     started_at = datetime.now().astimezone()
     answer = orchestrator.run(question.strip())
-    run_id = persistence.persist_run(answer, started_at, g.clerk_user_id)
+
+    # ── Store the assistant message + persist run ───────────────────────
+    with engine.begin() as conn:
+        persistence.insert_message(conn, conv_id, "assistant", answer.answer)
+
+    run_id = persistence.persist_run(
+        answer, started_at, g.clerk_user_id, conversation_id=conv_id
+    )
+
     for call in answer.trace:
         log.info(
             "agent.tool_call",
@@ -75,8 +117,31 @@ def agent_query():
     log.info(
         "agent.run",
         run_id=run_id,
+        conversation_id=conv_id,
         intent=answer.intent.value,
         refused=bool(answer.refusals),
         refusals=list(answer.refusals),
     )
-    return jsonify(asdict(answer))
+
+    # ── Response ────────────────────────────────────────────────────────
+    # Return the AgentAnswer dict plus the conversation_id so the client
+    # can continue the thread on the next question.
+    response = asdict(answer)
+    response["conversation_id"] = conv_id
+    return jsonify(response)
+
+
+@agent_bp.get("/agent/conversations")
+def list_conversations():
+    """Return all conversations for the authenticated user, newest first."""
+    conversations = persistence.list_conversations(g.clerk_user_id)
+    return jsonify(conversations)
+
+
+@agent_bp.get("/agent/conversations/<int:conv_id>")
+def get_conversation(conv_id: int):
+    """Return a single conversation with all its messages."""
+    result = persistence.get_conversation_messages(conv_id, g.clerk_user_id)
+    if result is None:
+        return jsonify({"error": "Conversation not found"}), 404
+    return jsonify(result)

@@ -156,7 +156,30 @@ def _cleanup(db_engine):
         conn.execute(
             text(
                 """
+                DELETE FROM agent_messages
+                WHERE conversation_id IN (
+                    SELECT id FROM agent_conversations
+                    WHERE user_id IN (
+                        SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                    )
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 DELETE FROM agent_runs
+                WHERE user_id IN (
+                    SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                DELETE FROM agent_conversations
                 WHERE user_id IN (
                     SELECT id FROM users WHERE clerk_user_id IN ('demo-user', 'user_alpha', 'user_beta')
                 )
@@ -424,3 +447,184 @@ def test_agent_query_limit_is_per_user(client, db_engine, monkeypatch):
         assert fresh.status_code == 200
     finally:
         _cleanup(db_engine)
+
+
+# ── Conversation persistence tests (L16) ────────────────────────────────────
+
+
+def test_agent_query_creates_conversation_and_messages(
+    app, client, db_engine, monkeypatch
+):
+    _fake_auth(monkeypatch)
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        resp = client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "What is the weather?"},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        conv_id = body.get("conversation_id")
+        assert conv_id is not None
+        assert isinstance(conv_id, int)
+
+        # Verify conversation exists in DB.
+        with db_engine.connect() as conn:
+            conv = conn.execute(
+                text("SELECT title FROM agent_conversations WHERE id = :id"),
+                {"id": conv_id},
+            ).first()
+            assert conv is not None
+            assert "weather" in conv.title.lower()
+
+            # Verify two messages were stored.
+            messages = conn.execute(
+                text(
+                    "SELECT role, content FROM agent_messages "
+                    "WHERE conversation_id = :cid ORDER BY id ASC"
+                ),
+                {"cid": conv_id},
+            ).fetchall()
+            assert len(messages) == 2
+            assert messages[0].role == "user"
+            assert messages[0].content == "What is the weather?"
+            assert messages[1].role == "assistant"
+            assert len(messages[1].content) > 0
+
+            # Verify run is linked to the conversation.
+            run = conn.execute(
+                text(
+                    "SELECT conversation_id FROM agent_runs "
+                    "WHERE conversation_id = :cid LIMIT 1"
+                ),
+                {"cid": conv_id},
+            ).first()
+            assert run is not None
+            assert run.conversation_id == conv_id
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_reuses_conversation(app, client, db_engine, monkeypatch):
+    _fake_auth(monkeypatch)
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        # First question — creates a new conversation.
+        resp1 = client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "First question"},
+        )
+        assert resp1.status_code == 200
+        conv_id = resp1.get_json()["conversation_id"]
+
+        # Second question — reuses the same conversation.
+        resp2 = client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "Second question", "conversation_id": conv_id},
+        )
+        assert resp2.status_code == 200
+        assert resp2.get_json()["conversation_id"] == conv_id
+
+        # Verify four messages in the conversation (2 user + 2 assistant).
+        with db_engine.connect() as conn:
+            count = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM agent_messages WHERE conversation_id = :cid"
+                ),
+                {"cid": conv_id},
+            ).scalar_one()
+            assert count == 4
+    finally:
+        _cleanup(db_engine)
+
+
+def test_agent_query_rejects_wrong_conversation_owner(
+    app, client, db_engine, monkeypatch
+):
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        # Create a conversation as alpha.
+        _fake_auth(monkeypatch, "user_alpha")
+        resp1 = client.post(
+            "/api/v1/agent/query",
+            headers={"Authorization": "Bearer alpha"},
+            json={"question": "Alpha's question"},
+        )
+        conv_id = resp1.get_json()["conversation_id"]
+
+        # Try to post to that conversation as beta — should 404.
+        resp2 = client.post(
+            "/api/v1/agent/query",
+            headers={"Authorization": "Bearer beta"},
+            json={"question": "Beta hijack", "conversation_id": conv_id},
+        )
+        assert resp2.status_code == 404
+    finally:
+        _cleanup(db_engine)
+
+
+def test_list_conversations(app, client, db_engine, monkeypatch):
+    _fake_auth(monkeypatch)
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        # Create two conversations.
+        client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "First topic"},
+        )
+        client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "Second topic"},
+        )
+
+        resp = client.get("/api/v1/agent/conversations", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        convs = resp.get_json()
+        assert len(convs) >= 2
+        assert convs[0]["title"] == "Second topic"
+        assert convs[1]["title"] == "First topic"
+        for c in convs:
+            assert "id" in c
+            assert "message_count" in c
+    finally:
+        _cleanup(db_engine)
+
+
+def test_get_conversation_messages(app, client, db_engine, monkeypatch):
+    _fake_auth(monkeypatch)
+    _fake_llm(monkeypatch, "unsupported")
+
+    try:
+        # Create a conversation.
+        resp = client.post(
+            "/api/v1/agent/query",
+            headers=AUTH_HEADER,
+            json={"question": "Tell me about pit stops"},
+        )
+        conv_id = resp.get_json()["conversation_id"]
+
+        # Fetch the conversation messages.
+        resp = client.get(f"/api/v1/agent/conversations/{conv_id}", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] == conv_id
+        assert len(data["messages"]) == 2
+        assert data["messages"][0]["role"] == "user"
+        assert data["messages"][1]["role"] == "assistant"
+    finally:
+        _cleanup(db_engine)
+
+
+def test_get_conversation_messages_not_found(app, client, monkeypatch):
+    _fake_auth(monkeypatch)
+    resp = client.get("/api/v1/agent/conversations/999999", headers=AUTH_HEADER)
+    assert resp.status_code == 404

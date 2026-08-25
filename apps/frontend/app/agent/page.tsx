@@ -10,7 +10,9 @@ import {
   Database,
   Flag,
   Gauge,
+  History,
   Loader2,
+  Plus,
   Radio,
   Send,
   ShieldCheck,
@@ -20,12 +22,12 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type React from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import EvidenceCards from '@/components/agent/EvidenceCards'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
-import { API_URL } from '@/lib/api'
-import { AgentAnswer } from '@/types/agent'
+import { agentApi, API_URL } from '@/lib/api'
+import { AgentAnswer, ConversationSummary } from '@/types/agent'
 
 const SUGGESTED_QUESTIONS = [
   'Where did Sainz pit in Monaco 2026?',
@@ -97,6 +99,9 @@ export default function AgentPage() {
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [loadingQuestion, setLoadingQuestion] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<number | null>(null)
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
@@ -111,6 +116,47 @@ export default function AgentPage() {
   const traceCount = latestReply?.trace.length ?? 0
   const totalTraceMs =
     latestReply?.trace.reduce((sum, call) => sum + (call.duration_ms ?? 0), 0) ?? 0
+
+  // Load conversation list on mount.
+  useEffect(() => {
+    agentApi.listConversations(getToken).then(setConversations).catch(() => {})
+  }, [getToken])
+
+  // Load a past conversation's messages into the turn view.
+  async function loadConversation(convId: number) {
+    setLoadingHistory(true)
+    try {
+      const detail = await agentApi.getConversation(convId, getToken)
+      // Convert messages into ChatTurn objects.
+      const loaded: ChatTurn[] = []
+      for (let i = 0; i < detail.messages.length; i += 2) {
+        const userMsg = detail.messages[i]
+        const assistantMsg = detail.messages[i + 1]
+        if (userMsg?.role === 'user') {
+          loaded.push({
+            id: Date.now() + i,
+            question: userMsg.content,
+            reply: assistantMsg
+              ? { answer: assistantMsg.content, intent: '', refusals: [], trace: [], question: userMsg.content }
+              : null,
+            error: null,
+          })
+        }
+      }
+      setTurns(loaded)
+      setConversationId(convId)
+    } catch {
+      // Silently fail — conversation list stays visible.
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  // Start a new conversation (clear turns and conversationId).
+  function newConversation() {
+    setTurns([])
+    setConversationId(null)
+  }
 
   async function ask(e: React.FormEvent) {
     e.preventDefault()
@@ -131,7 +177,10 @@ export default function AgentPage() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          ...(conversationId ? { conversation_id: conversationId } : {}),
+        }),
       })
 
       if (!resp.ok) {
@@ -140,6 +189,13 @@ export default function AgentPage() {
       }
 
       const reply = (await resp.json()) as AgentAnswer
+      // Store the conversation_id from the response so the next question
+      // in this thread is sent to the same conversation.
+      if (reply.conversation_id) {
+        setConversationId(reply.conversation_id)
+        // Refresh the conversation list so the new conversation appears.
+        agentApi.listConversations(getToken).then(setConversations).catch(() => {})
+      }
       setTurns((current) =>
         current.map((turn) => (turn.id === id ? { ...turn, reply, error: null } : turn))
       )
@@ -217,6 +273,58 @@ export default function AgentPage() {
                   />
                 </div>
               ))}
+            </div>
+
+            {/* ── Conversation History ──────────────────── */}
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-slate-500">
+                  <History className="h-3 w-3 text-rose-500" />
+                  History
+                </div>
+                <button
+                  onClick={newConversation}
+                  className="flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-500 hover:border-rose-300 hover:text-rose-600 transition-colors"
+                  title="New conversation"
+                >
+                  <Plus className="h-3 w-3" />
+                  New
+                </button>
+              </div>
+
+              {loadingHistory && (
+                <div className="flex items-center gap-2 p-2 text-[10px] text-slate-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Loading...
+                </div>
+              )}
+
+              {!loadingHistory && conversations.length === 0 && (
+                <div className="p-2 text-[10px] text-slate-400">
+                  No conversations yet
+                </div>
+              )}
+
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {conversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => loadConversation(conv.id)}
+                    className={`w-full text-left border px-2.5 py-2 transition-colors ${
+                      conversationId === conv.id
+                        ? 'border-rose-300 bg-rose-50 text-rose-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-[11px] font-semibold truncate">
+                      {conv.title || 'Untitled'}
+                    </div>
+                    <div className="mt-0.5 text-[9px] text-slate-400">
+                      {conv.message_count} messages
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </section>

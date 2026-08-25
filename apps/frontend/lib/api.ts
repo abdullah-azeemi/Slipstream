@@ -107,3 +107,36 @@ export const raceIntelligenceApi = {
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+// ── Agent conversation API (L16) ──────────────────────────
+// These require a Clerk Bearer token, so they use the raw fetch pattern
+// instead of the server-safe `get()` helper above.
+
+export const agentApi = {
+  listConversations: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/conversations`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to list conversations (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').ConversationSummary[]>
+  },
+
+  getConversation: async (
+    convId: number,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/conversations/${convId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to load conversation (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').ConversationDetail>
+  },
+}
