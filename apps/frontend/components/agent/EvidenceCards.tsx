@@ -76,6 +76,13 @@ export default function EvidenceCards({ session, driver, pitStop, speedWindow }:
             <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-400">
               <Gauge className="h-3 w-3 text-emerald-500" />
               Speed delta
+              {
+                speedWindow.metric && (
+                  <span className="ml-2 font-mono text-[9px] normal-case tracking-normal text-slate-400">
+                    ({speedWindow.metric.replace(/_/g, ' ')})
+                  </span>
+                )
+              }
             </div>
             {deltaFormatted && (
               <span

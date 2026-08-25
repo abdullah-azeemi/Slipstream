@@ -212,6 +212,19 @@ def test_compute_speed_window_rejects_unsupported_metric():
         raise AssertionError("expected DataError for unsupported metric")
 
 
+def test_weighted_mean_basic():
+    assert tools._weighted_mean([200.0, 200.0, 200.0], [100.0, 100.0, 100.0]) == 200.0
+
+
+def test_weighted_mean_skews_toward_heavier():
+    result = tools._weighted_mean([100.0, 200.0], [900.0, 100.0])
+    assert round(result, 2) == 110.0
+
+
+def test_weighted_mean_zero_weights_returns_zero():
+    assert tools._weighted_mean([100.0, 200.0], [0.0, 0.0]) == 0.0
+
+
 def test_compute_speed_window_rejects_empty_windows():
     inp = types.ComputeSpeedWindowInput(session_key=1, driver_number=1)
     try:

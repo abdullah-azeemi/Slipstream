@@ -115,6 +115,7 @@ def _execute(plan: types.Plan) -> tuple[tuple[types.ToolCallRecord, ...], dict]:
                 driver_number=driver.driver_number,
                 before_laps=before_laps,
                 after_laps=after_laps,
+                metric=types.SpeedMetric.DISTANCE_WEIGHTED_TELEMETRY,
             ),
         )
         partial["window"] = window
@@ -212,7 +213,7 @@ def _compose(
         speed_window=window,
         evidence=evidence,
         trace=trace,
-        cost_usd=compose_cost
+        cost_usd=compose_cost,
     )
 
 
@@ -223,12 +224,12 @@ def run(question: str) -> types.AgentAnswer:
     except types.LLMError as exc:
         return types.AgentAnswer(
             question=question,
-            intent=types.Intent.UNSUPPORTED, 
+            intent=types.Intent.UNSUPPORTED,
             answer=(
                 "I could not process that question because the question "
                 f"router is unavailable {exc}"
             ),
-            refusals=("llm router unavailable", ),
+            refusals=("llm router unavailable",),
         )
 
     if routed.intent is types.Intent.UNSUPPORTED:

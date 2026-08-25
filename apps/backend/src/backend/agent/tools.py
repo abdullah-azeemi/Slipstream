@@ -219,6 +219,14 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _weighted_mean(values: list[float], weights: list[float]) -> float:
+    """Weighted average: sum(v*w) / sum(w). Returns 0.0 if weights sum to zero."""
+    total_weight = sum(weights)
+    if total_weight == 0:
+        return 0.0
+    return sum(v * w for v, w in zip(values, weights)) / total_weight
+
+
 def _read_artifact_speed_samples(artifact: types.TelemetryArtifact) -> list[float]:
     """Read speed kmph values from a telemtry artifact (local file or S3) and return them as a list of floats."""
 
@@ -273,11 +281,100 @@ def _read_artifact_speed_samples(artifact: types.TelemetryArtifact) -> list[floa
     return speeds
 
 
+def _read_artifact_speed_and_distance(
+    artifact: types.TelemetryArtifact,
+) -> tuple[list[float], list[float]]:
+    """Read speed and distance samples from a telemetry artifact.
+
+    Returns (speeds, distances) where distances[i] is the distance in meters
+    covered between speed sample i and the next sample. The last sample's
+    distance defaults to 0.0 (no next sample to compute interval distance).
+    """
+    if artifact.storage_backend == "local" and artifact.format == "json.gz":
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        with gzip.open(path, "rb") as f:
+            payload = json.loads(f.read().decode("utf-8"))
+        raw = payload.get("samples", [])
+        speeds = [float(s["speed_kmh"]) for s in raw if s.get("speed_kmh") is not None]
+        distances = [
+            float(s.get("distance_m", 0.0))
+            for s in raw
+            if s.get("speed_kmh") is not None
+        ]
+
+    elif artifact.storage_backend == "local" and artifact.format == "parquet":
+        import pyarrow.parquet as pq
+
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        table = pq.read_parquet(path)
+        speed_col = table.column("speed_kmh").to_pylist()
+        dist_col = (
+            table.column("distance_m").to_pylist()
+            if "distance_m" in table.column_names
+            else [0.0] * len(speed_col)
+        )
+        speeds = [float(v) for v in speed_col if v is not None]
+        distances = [
+            float(d) if d is not None else 0.0
+            for v, d in zip(speed_col, dist_col)
+            if v is not None
+        ]
+
+    elif artifact.storage_backend == "r2" and artifact.format == "parquet":
+        import boto3
+        import pyarrow.parquet as pq
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=settings.r2_endpoint_url,
+            aws_access_key_id=settings.r2_access_key_id,
+            aws_secret_access_key=settings.r2_secret_access_key,
+            region_name="auto",
+        )
+        obj = client.get_object(
+            Bucket=settings.telemetry_artifact_bucket,
+            Key=artifact.storage_key,
+        )
+        table = pq.read_table(io.BytesIO(obj["Body"].read()))
+        speed_col = table.column("speed_kmh").to_pylist()
+        dist_col = (
+            table.column("distance_m").to_pylist()
+            if "distance_m" in table.column_names
+            else [0.0] * len(speed_col)
+        )
+        speeds = [float(v) for v in speed_col if v is not None]
+        distances = [
+            float(d) if d is not None else 0.0
+            for v, d in zip(speed_col, dist_col)
+            if v is not None
+        ]
+
+    else:
+        raise types.DataError(
+            f"unsupported artifact: {artifact.storage_backend}/{artifact.format}"
+        )
+
+    return speeds, distances
+
+
 def compute_speed_window(inp: types.ComputeSpeedWindowInput) -> types.SpeedWindowResult:
     """
     Average telemetry speed before and after a given lap window for a driver in a session.
+
+    Supports two metrics:
+    - TELEMETRY_SAMPLE_MEAN: plain average of all speed samples (simple but slightly biased
+      by sampling rate — fast laps get more samples).
+    - DISTANCE_WEIGHTED_TELEMETRY: each sample weighted by the distance it covers,
+      giving the true average speed over distance traveled (more accurate).
     """
-    if inp.metric is not types.SpeedMetric.TELEMETRY_SAMPLE_MEAN:
+    if inp.metric not in (
+        types.SpeedMetric.TELEMETRY_SAMPLE_MEAN,
+        types.SpeedMetric.DISTANCE_WEIGHTED_TELEMETRY,
+    ):
         raise types.DataError(f"unsupported metric: {inp.metric}")
     if not inp.before_laps and not inp.after_laps:
         raise types.DataError("before_laps and after_laps cannot both be empty")
@@ -296,12 +393,27 @@ def compute_speed_window(inp: types.ComputeSpeedWindowInput) -> types.SpeedWindo
         missing = [ln for ln in lap_window if ln not in by_lap]
         if missing:
             raise types.DataError(f"no telemetry artifact for laps {missing}")
-        flat = [
-            v for lap in lap_window for v in _read_artifact_speed_samples(by_lap[lap])
-        ]
-        if not flat:
-            raise types.DataError("telemetry artifacts contain zero speed samples")
-        return _mean(flat), len(flat)
+
+        if inp.metric is types.SpeedMetric.DISTANCE_WEIGHTED_TELEMETRY:
+            all_speeds: list[float] = []
+            all_distances: list[float] = []
+            for lap in lap_window:
+                speeds, distances = _read_artifact_speed_and_distance(by_lap[lap])
+                all_speeds.extend(speeds)
+                all_distances.extend(distances)
+            if not all_speeds:
+                raise types.DataError("telemetry artifacts contain zero speed samples")
+            avg = _weighted_mean(all_speeds, all_distances)
+            return avg, len(all_speeds)
+        else:
+            flat = [
+                v
+                for lap in lap_window
+                for v in _read_artifact_speed_samples(by_lap[lap])
+            ]
+            if not flat:
+                raise types.DataError("telemetry artifacts contain zero speed samples")
+            return _mean(flat), len(flat)
 
     before_avg, before_count = (
         _window_mean(tuple(inp.before_laps)) if inp.before_laps else (None, 0)
