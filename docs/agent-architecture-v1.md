@@ -85,11 +85,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Still client-local only: conversation turns are not persisted to `agent_conversations` / `agent_messages`; daily usage remaining is represented as static UI copy until a usage endpoint exists.
   - Verified: `npm run lint`, `npm run build`. Build completes, with existing `ECONNREFUSED` fetch noise from other prerendered data-backed pages when the backend is not running.
 
-Current test state: backend 73 passing from L14; frontend lint + production build clean after L15.
+- L16 — Conversation persistence.
+  - Files: `apps/backend/src/backend/agent/persistence.py` (`create_conversation`, `insert_message`, `list_conversations`, `get_conversation_messages`; `persist_run` gains `conversation_id` param), `apps/backend/src/backend/api/v1/agent.py` (`POST /agent/query` auto-creates conversations + stores both messages + links runs; `GET /agent/conversations` lists user threads; `GET /agent/conversations/:id` returns full message history with ownership check), `apps/backend/tests/test_agent_persistence.py` (7 unit tests), `apps/backend/tests/test_agent_api.py` (+6 integration tests), `apps/frontend/types/agent.ts` (`ConversationSummary`, `ConversationDetail`, `conversation_id` on `AgentAnswer`), `apps/frontend/lib/api.ts` (`agentApi.listConversations`, `agentApi.getConversation`), `apps/frontend/app/agent/page.tsx` (conversation history panel in left sidebar, "New" button, click-to-load past conversations, follow-up questions continue the same thread via `conversation_id`).
+  - Tables `agent_conversations` and `agent_messages` (migration 0019) are now fully wired: every query creates a conversation, stores both messages, and links the run. Ownership enforced on all reads.
+  - Verified: `uv run ruff check`, `uv run ruff format`, frontend `npm run lint`, `npx tsc --noEmit`, `npm run build`. Integration tests require `make up` (Postgres).
+
+Current test state: backend 73 passing from L14 (conversation tests need Postgres); frontend lint + typecheck + production build clean after L16.
 
 ### Next
 
-- Persist conversations/messages for the polished chat UI, then add real usage remaining and admin/cost/trace surfaces per the Implementation Plan below.
+- Add usage remaining API and wire it into the agent page, then admin/cost/trace surfaces per the Implementation Plan below.
 
 ## How To Use This Document
 
@@ -980,13 +985,13 @@ Minimum UI:
 - [done] refusal state
 - [done] tool trace accordion
 - [done] local in-page conversation turns
+- [done] persisted conversation history
 - usage remaining from a real backend endpoint
 
 Later UI:
 
 - streaming progress
 - charts
-- persisted conversation history
 - usage/admin/cost surfaces
 
 ## Testing Plan
@@ -1112,7 +1117,7 @@ Implement in this order next (see Implementation Status for what is already done
 7. [done] Clerk route protection for `/agent`.
 8. [done] Flask Clerk JWT verification.
 9. [done] Evidence cards and trace UI.
-10. Persist conversation/message rows and add conversation list/detail APIs.
+10. [done] Persist conversation/message rows and add conversation list/detail APIs.
 11. Add usage remaining API and wire it into the agent page.
 12. Add admin/cost/trace surfaces.
 
