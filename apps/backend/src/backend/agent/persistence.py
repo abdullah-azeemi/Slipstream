@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from backend.agent import types
 from backend.extensions import engine
+from backend.config import settings
 
 
 def ensure_user(conn, clerk_user_id: str) -> int:
@@ -81,7 +82,7 @@ def persist_run(
                     started_at, completed_at, cost_estimate_usd, error
                 ) VALUES (
                     :conversation_id, :user_id, :status, NULL, :started_at,
-                    :completed_at, NULL, :error
+                    :completed_at, :cost_estimate_usd, :error
                 )
                 RETURNING id
                 """
@@ -92,6 +93,7 @@ def persist_run(
                 "status": "refused" if answer.refusals else "completed",
                 "started_at": started_at,
                 "completed_at": datetime.now(started_at.tzinfo),
+                "cost_estimate_usd": answer.cost_usd,
                 "error": answer.refusals[0] if answer.refusals else None,
             },
         ).first()
@@ -116,6 +118,36 @@ def count_runs_today(clerk_user_id: str) -> int:
             {"clerk_user_id": clerk_user_id},
         ).scalar_one()
 
+
+def get_usage_summary(clerk_user_id: str) -> dict:
+    """Return { used, limit, remaining } for the current day."""
+    used = count_runs_today(clerk_user_id)
+    limit = settings.agent_free_daily_limit
+    return {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+
+
+def get_admin_stats() -> dict:
+    """Aggregate admin-facing stats: total runs, cost, breakdown by status."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*)                            AS total_runs,
+                    COALESCE(SUM(cost_estimate_usd), 0) AS total_cost_usd,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'refused')   AS refused
+                FROM agent_runs
+                WHERE started_at >= date_trunc('day', NOW())
+                """
+            )
+        ).first()
+        return {
+            "total_runs": row.total_runs,
+            "total_cost_usd": round(float(row.total_cost_usd), 4),
+            "completed": row.completed,
+            "refused": row.refused,
+        }
 
 # ── Conversation persistence (L16) ─────────────────────────────────────────
 

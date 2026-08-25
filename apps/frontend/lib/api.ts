@@ -139,4 +139,28 @@ export const agentApi = {
     if (!res.ok) throw new Error(`Failed to load conversation (${res.status})`)
     return res.json() as Promise<import('@/types/agent').ConversationDetail>
   },
+
+  getUsage: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/api/v1/agent/usage`, {
+      headers: {
+        'Content-Type' : 'application/json', 
+         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch usage (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').UsageInfo>
+  },
+
+  getAdminStats: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/stats`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch admin stats (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').AdminStats>
+  },
 }

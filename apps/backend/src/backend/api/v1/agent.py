@@ -145,3 +145,17 @@ def get_conversation(conv_id: int):
     if result is None:
         return jsonify({"error": "Conversation not found"}), 404
     return jsonify(result)
+
+@agent_bp.get("/agent/usage")
+def get_usage():
+    """ Returns the authenticated users daily usage summary """
+    summary = persistence.get_usage_summary(g.clerk_user_id)
+    return jsonify(summary)
+
+@agent_bp.get("/agent/admin/stats")
+def admin_stats():
+    """ Return aggregated stats. Only accessible to admin users """
+    if g.clerk_user_id not in _admin_ids():
+        return jsonify({"error": "Admin access required"}), 403
+    stats = persistence.get_admin_stats()
+    return jsonify(stats)

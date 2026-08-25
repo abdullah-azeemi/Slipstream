@@ -245,3 +245,4 @@ class AgentAnswer:
     speed_window: SpeedWindowResult | None = None
     evidence: VerifyEvidenceResult | None = None
     trace: tuple[ToolCallRecord, ...] = ()
+    cost_usd: float = 0.0

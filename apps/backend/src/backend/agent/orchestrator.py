@@ -7,7 +7,7 @@ Every tool call is recorded in the trace for debugging and the future UI.
 
 from __future__ import annotations
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from backend.agent import llm, tools, types
 
@@ -196,8 +196,9 @@ def _compose(
             "average of telemetry speed samples (speed_kmh) over each lap window"
         ),
     }
+    compose_cost = 0.0
     try:
-        answer_text = llm.compose_answer(plan.question, evidence_payload)
+        answer_text, compose_cost = llm.compose_answer(plan.question, evidence_payload)
     except types.LLMError:
         answer_text = fallback_text
 
@@ -211,22 +212,23 @@ def _compose(
         speed_window=window,
         evidence=evidence,
         trace=trace,
+        cost_usd=compose_cost
     )
 
 
 def run(question: str) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out."""
     try:
-        routed = llm.route_question(question)
+        routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:
         return types.AgentAnswer(
             question=question,
-            intent=types.Intent.UNSUPPORTED,
+            intent=types.Intent.UNSUPPORTED, 
             answer=(
                 "I could not process that question because the question "
-                f"router is unavailable: {exc}"
+                f"router is unavailable {exc}"
             ),
-            refusals=("llm_router_unavailable",),
+            refusals=("llm router unavailable", ),
         )
 
     if routed.intent is types.Intent.UNSUPPORTED:
@@ -258,4 +260,5 @@ def run(question: str) -> types.AgentAnswer:
 
     plan = _build_plan(question, routed)
     trace, partial = _execute(plan)
-    return _compose(plan, partial, trace)
+    answer = _compose(plan, partial, trace)
+    return replace(answer, cost_usd=round(routing_cost + answer.cost_usd, 6))

@@ -27,7 +27,7 @@ import EvidenceCards from '@/components/agent/EvidenceCards'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
 import { agentApi, API_URL } from '@/lib/api'
-import { AgentAnswer, ConversationSummary } from '@/types/agent'
+import { AgentAnswer, AdminStats, ConversationSummary, UsageInfo } from '@/types/agent'
 
 const SUGGESTED_QUESTIONS = [
   'Where did Sainz pit in Monaco 2026?',
@@ -102,6 +102,8 @@ export default function AgentPage() {
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [usage, setUsage] = useState<UsageInfo| null>(null)
+  const [adminStats, setAdminStats] = useState<AdminStats| null>(null)
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
@@ -120,6 +122,14 @@ export default function AgentPage() {
   // Load conversation list on mount.
   useEffect(() => {
     agentApi.listConversations(getToken).then(setConversations).catch(() => {})
+  }, [getToken])
+
+  useEffect(() => {
+    agentApi.getUsage(getToken).then(setUsage).catch(() => {})
+  }, [getToken])
+
+  useEffect(() => {
+    agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
   }, [getToken])
 
   // Load a past conversation's messages into the turn view.
@@ -189,13 +199,13 @@ export default function AgentPage() {
       }
 
       const reply = (await resp.json()) as AgentAnswer
-      // Store the conversation_id from the response so the next question
-      // in this thread is sent to the same conversation.
       if (reply.conversation_id) {
         setConversationId(reply.conversation_id)
-        // Refresh the conversation list so the new conversation appears.
         agentApi.listConversations(getToken).then(setConversations).catch(() => {})
       }
+      agentApi.getUsage(getToken).then(setUsage).catch(() => {})
+      agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
+
       setTurns((current) =>
         current.map((turn) => (turn.id === id ? { ...turn, reply, error: null } : turn))
       )
@@ -481,7 +491,10 @@ export default function AgentPage() {
                   value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
                   tone={totalTraceMs ? 'green' : 'slate'}
                 />
-                <MiniMetric label="daily cap" value="10 q" tone="red" />
+                <MiniMetric 
+                  label="remaining"
+                  value={usage ? `${usage.remaining} / ${usage.limit}`: '...'}
+                  tone={usage && usage.remaining <= 2? 'red' : 'green'}/>
               </div>
               <div className="border border-slate-200 bg-slate-50 p-3">
                 <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
@@ -546,13 +559,31 @@ export default function AgentPage() {
             </div>
           </section>
 
+         {adminStats && (
+            <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+              <PanelHeader eyebrow="Admin" title="Daily stats" />
+              <div className="space-y-3 p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <MiniMetric label="runs today" value={String(adminStats.total_runs)} />
+                  <MiniMetric
+                    label="cost today"
+                    value={`$${adminStats.total_cost_usd.toFixed(4)}`}
+                    tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'}
+                  />
+                  <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
+                  <MiniMetric label="refused" value={String(adminStats.refused)} tone="amber" />
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="border border-slate-200 bg-white/86 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
             <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
               <Clock3 className="h-3.5 w-3.5 text-rose-500" />
               Next build targets
             </div>
             <div className="mt-3 space-y-2">
-              {['Conversation persistence', 'Usage remaining API', 'Admin trace surface'].map((item) => (
+               {['Streaming progress', 'Telemetry charts'].map((item) => (
                 <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                   <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                   {item}

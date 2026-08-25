@@ -145,13 +145,13 @@ def _coerce_window(value) -> int:
     return max(1, min(window, 10))
 
 
-def route_question(question: str) -> types.RoutedQuestion:
+def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     """Classify a question and extract its entities with the cheap routing model"""
     messages = [
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
         {"role": "user", "content": question},
     ]
-    text, _ = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
+    text, usage = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
     try:
         payload = json.loads(text)
         intent_value = payload["intent"]
@@ -163,16 +163,17 @@ def route_question(question: str) -> types.RoutedQuestion:
     if intent_value not in {member.value for member in types.Intent}:
         raise types.LLMError(f"router returned unknown intent: {intent_value}")
 
+    cost = usage.get("cost_estimate_usd", 0.0)
     return types.RoutedQuestion(
         intent=types.Intent(intent_value),
         driver_name=_clean_str(payload.get("driver")),
         gp_name=_clean_str(payload.get("gp_name")),
         year=_coerce_year(payload.get("year")),
         laps_window=_coerce_window(payload.get("laps_window")),
-    )
+    ), cost
 
 
-def compose_answer(question: str, evidence: dict) -> str:
+def compose_answer(question: str, evidence: dict) -> tuple[str, float]:
     """Write the final human-readable answer from structured evidence."""
     messages = [
         {"role": "system", "content": _COMPOSER_SYSTEM_PROMPT},
@@ -184,5 +185,6 @@ def compose_answer(question: str, evidence: dict) -> str:
             ),
         },
     ]
-    text, _ = _chat(messages, model=settings.openrouter_final_model, temperature=0.2)
-    return text.strip()
+    text, usage = _chat(messages, model=settings.openrouter_final_model, temperature=0.2)
+    cost = usage.get("cost_estimate_usd", 0.0)
+    return text.strip(), cost

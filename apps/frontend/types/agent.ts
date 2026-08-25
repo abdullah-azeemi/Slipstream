@@ -92,3 +92,15 @@ export interface ConversationDetail {
   created_at: string | null
   messages: ConversationMessage[]
 }
+
+export interface UsageInfo {
+  used: number,
+  limit: number,
+  remaining: number
+}
+export interface AdminStats {
+  total_runs: number
+  total_cost_usd: number
+  completed: number
+  refused: number
+}
