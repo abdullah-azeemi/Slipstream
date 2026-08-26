@@ -14,6 +14,9 @@ class Intent(str, Enum):
     """The categories of the question, v1 agent knows how to answer that."""
 
     PIT_STOP_SPEED_DELTA = "pit_stop_speed_delta"
+    LAP_EVENT_INVESTIGATION = "lap_event_investigation"
+    TYRE_DEGRADATION_ANALYSIS = "tyre_degradation_analysis"
+    TELEMETRY_COMPARISON = "telemetry_comparison"
     UNSUPPORTED = "unsupported"
 
 
@@ -33,6 +36,9 @@ class ToolName(str, Enum):
     FIND_PIT_STOPS = "find_pit_stops"
     GET_LAP_TELEMETRY_ARTIFACTS = "get_lap_telemetry_artifacts"
     COMPUTE_SPEED_WINDOW = "compute_speed_window"
+    INSPECT_LAP_EVENTS = "inspect_lap_events"
+    STINT_DEGRADATION_SCANNER = "stint_degradation_scanner"
+    TELEMETRY_INSPECTOR = "telemetry_inspector"
     VERIFY_EVIDENCE = "verify_evidence"
 
 
@@ -217,6 +223,115 @@ class Plan:
     driver_selector: str | None = None
     laps_before: int = 3
     laps_after: int = 3
+
+
+@dataclass(frozen=True)
+class InspectLabEventsInput:
+    session_key: int
+    driver_number: int
+    target_lap: int | None = None
+    window_laps: int = 5
+
+
+@dataclass(frozen=True)
+class LapEvent:
+    "One lap summary, sector time, compound, degredation, anamolies"
+    lap_number: int
+    lap_time_ms: int | None
+    delta_to_median_ms: int | None
+    sector1_ms: int | None
+    sector2_ms: int | None
+    sector3_ms: int | None
+    compound: str | None
+    stint: int | None
+    is_pit_in: bool
+    is_pit_out: bool
+    is_anamoly: bool
+    rainfall: bool
+    track_status: str | None
+
+@dataclass(frozen=True)
+class InspectLapEventsResult:
+    """Output of the insepect lab events, all the laps with anamoly flags"""
+    session_key: int
+    driver_number: int
+    target_lap: int | None
+    median_pace_ms: int
+    events: tuple[LapEvent, ...]
+    anamoly_count: int
+
+
+# -- Stint degredation
+
+@dataclass(frozen=True)
+class StintDegredationInput:
+    """The parameters for the stint_degredation_scanner tool """
+    session_key: int
+    driver_number: int
+    stint_index: int | None = None
+
+@dataclass(frozen=True)
+class StintSummary:
+    """Degredation metrics for one tyre stint"""
+    stint_index: int
+    compound: str
+    start_lap: int
+    end_lap: int
+    total_laps: int
+    final_pace_ms: int
+    degredation_slope_ms_per_lap: float
+    cliff_detected: bool
+    cliff_lab: int | None
+
+@dataclass(frozen=True)
+class StintDegredationResult:
+    """Output of the stint_degredation_scanner tool"""
+    session_key: int
+    driver_number: int
+    stints: [StintSummary, ...]
+    worst_degredation_stint: int | None
+
+# Telemetry Inspector
+
+@dataclass(frozen=True)
+class TelemetryInspectorInput:
+    """Parameters for the telemetry inspector tool"""
+    session_key: int
+    driver_number: int
+    laps_number: tuple[int, ...]
+    compare_driver_number: int | None = None
+    compare_lap_numbers: tuple[int, ...] = ()
+    max_samples_per_lap: int = 600
+
+@dataclass(frozen=True)
+class TelemetrySamplePoint:
+    """ One resampled telmetry sample """
+    distance_m: float
+    speed_kmh: float
+    throttle_pct: float
+    brake: bool
+    gear: int
+    drs: int
+    x_pos: float | None
+    y_pos: float | None
+
+@dataclass(frozen=True)
+class TelemetryLapTrace:
+    """One lap's full telemetry trace, resampled to max_samples_per_lap points."""
+    driver_number: int
+    driver_abbreviation: int
+    lap_number: int
+    samples: tuple[TelemetrySamplePoint, ...]
+
+@dataclass(frozen=True)
+class TelemetryInspectorResult:
+    """The output of the telemetry inspector """
+    session_key: int
+    traces: tuple[TelemetryLapTrace, ...]
+    speed_delta_apex_kmh: float | None
+    full_throttle_pct: float
+    heavy_braking_zones_count: int
+
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-25 (L20)
+Last updated: 2026-08-26 (L22)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -118,13 +118,408 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - `load_laps()` now persists `pit_in_time_ms`, `pit_out_time_ms`, `stint`, `fresh_tyre`, `deleted_reason`, and `is_accurate`, so real ingested race data can drive pit-stop detection.
   - Design reason: the agent’s v1 pit-stop speed question needs Race (`R`) lap markers plus telemetry artifacts for the before/after lap windows.
 
-Current test state: backend 73 passing from L14 (conversation tests need Postgres); frontend lint + typecheck + production build clean after L21.
+- L22 — GP name entity normalization, pit intent routing fix, and parallelized telemetry ingestion.
+  - Files: `apps/backend/src/backend/agent/tools.py` (`resolve_session` strips "GP" and "Grand Prix" suffixes and searches both `gp_name` and `country`), `apps/backend/src/backend/agent/llm.py` (`_ROUTER_SYSTEM_PROMPT` clarified so all pit queries route to `pit_stop_speed_delta` and entity extraction returns clean Grand Prix names), `packages/ingestion/src/ingestion/loader.py` (`_load_telemetry_files` uploads artifacts concurrently via `ThreadPoolExecutor` for fast session seeding), `apps/backend/src/backend/agent/persistence.py` & `apps/backend/src/backend/api/v1/agent.py` (dynamic `extensions.engine` access to avoid uninitialized references).
+  - Tests: `apps/backend/tests/test_agent_orchestrator.py` (+GP suffix resolution test, cost tuple signatures), `apps/backend/tests/test_agent_llm.py`, `apps/backend/tests/test_agent_persistence.py`.
+  - Current test state: 92/92 backend tests passing, frontend typecheck and build clean.
 
 ### Next
 
-- Persist structured chart artifacts for richer graphs beyond before/after averages.
-- Add conversation history replay for evidence cards/charts, not just assistant text.
-- Add admin-only run detail pages for historical trace inspection.
+- **L23 — Expanded Tool Registry**: Add `inspect_lap_events`, `stint_degradation_scanner`, and `telemetry_inspector` tools for rich race incident, degradation, and telemetry queries.
+- **L24 — Dynamic DAG Planner**: Upgrade orchestrator from fixed pipelines to dynamically generated execution DAGs supporting diverse queries.
+- **L25 — Visual Thinking Graph UI**: Build n8n/React Flow interactive reasoning graph canvas with live SSE execution pulses.
+- **L26 — Node Inspector Drawer**: Add click-to-inspect on graph nodes to view executed SQL queries, durations, and structured evidence.
+- **L27 — Rich Multi-Channel Telemetry Visualizations**: Interactive speed/throttle/brake traces, 2D GPS track map heatmaps, and tyre degradation curves.
+
+---
+
+## Agentic System Evolution: Dynamic Multi-Tool DAG & Visual Thinking Graph
+
+### 1. Architectural Overview & Vision
+
+The v1 agent established strict foundational invariants:
+1. **Typed Tool Contracts**: Every tool consumes a frozen dataclass and returns a frozen dataclass.
+2. **Parameterized Read-Only SQL**: Safe, deterministic execution without raw LLM-generated SQL risks.
+3. **Evidence Gate & Zero Hallucinations**: Verifiers validate fact availability before answer composition.
+4. **Cloudflare R2 Telemetry Artifacts**: High-frequency telemetry stored as compressed Parquet files with metadata in PostgreSQL.
+5. **SSE Progress Streaming & Cost Tracking**: Token accounting and streaming state delivery.
+
+The next evolution transforms the linear pipeline into a **full dynamic multi-tool agentic system with a visual reasoning DAG canvas (n8n / React Flow style)** capable of answering complex, multi-faceted race engineering questions (e.g. lap incidents, tyre degradation cliffs, telemetry overlays, and undercut strategy deltas).
+
+```
+                       ┌──────────────────────────────────────────────┐
+                       │             MASTER ORCHESTRATOR              │
+                       │           (LLM Dynamic DAG Planner)          │
+                       └──────────────────────┬───────────────────────┘
+                                              │
+         ┌────────────────────────────────────┼────────────────────────────────────┐
+         │ (Branch 1)                         │ (Branch 2)                         │ (Branch 3)
+         ▼                                    ▼                                    ▼
+┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐
+│       RESOLVE SESSION       │  │       RESOLVE DRIVER        │  │      INSPECT LAP EVENTS     │
+│   "British Grand Prix 2024" │  │     "Carlos Sainz (#55)"    │  │    "Lap 34 Anomaly Scan"    │
+│   SQL: sessions table       │  │     SQL: drivers table      │  │    SQL: lap_times & weather │
+│   ✅ 12ms                   │  │     ✅ 8ms                  │  │    ✅ 24ms                  │
+└──────────────┬──────────────┘  └──────────────┬──────────────┘  └──────────────┬──────────────┘
+               │                                │                                │
+               └────────────────────────────────┼────────────────────────────────┘
+                                                │
+                                                ▼
+                                 ┌─────────────────────────────┐
+                                 │     TELEMETRY INSPECTOR     │
+                                 │   (Speed/Throttle/Brake)    │
+                                 │   Parquet: R2 Artifact Scan │
+                                 │   ✅ 45ms                   │
+                                 └──────────────┬──────────────┘
+                                                │
+                                                ▼
+                                 ┌─────────────────────────────┐
+                                 │   EVIDENCE GATE VERIFIER    │
+                                 │  (Zero-Hallucination Gate)  │
+                                 │   ✅ 2ms                    │
+                                 └──────────────┬──────────────┘
+                                                │
+                                                ▼
+                                 ┌─────────────────────────────┐
+                                 │    SYNTHESIZER & DEBRIEF    │
+                                 │  Final Text + Telemetry Plot│
+                                 └─────────────────────────────┘
+```
+
+---
+
+### 2. Typed Data Contracts (`apps/backend/src/backend/agent/types.py`)
+
+Every tool, event, and DAG structure is defined with immutable dataclasses and enums.
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+class Intent(str, Enum):
+    PIT_STOP_SPEED_DELTA = "pit_stop_speed_delta"
+    LAP_EVENT_INVESTIGATION = "lap_event_investigation"
+    TYRE_DEGRADATION_ANALYSIS = "tyre_degradation_analysis"
+    TELEMETRY_COMPARISON = "telemetry_comparison"
+    STRATEGY_UNDERCUT_ANALYSIS = "strategy_undercut_analysis"
+    UNSUPPORTED = "unsupported"
+
+class ToolName(str, Enum):
+    RESOLVE_SESSION = "resolve_session"
+    RESOLVE_DRIVER = "resolve_driver"
+    FIND_PIT_STOPS = "find_pit_stops"
+    GET_LAP_TELEMETRY_ARTIFACTS = "get_lap_telemetry_artifacts"
+    COMPUTE_SPEED_WINDOW = "compute_speed_window"
+    INSPECT_LAP_EVENTS = "inspect_lap_events"
+    STINT_DEGRADATION_SCANNER = "stint_degradation_scanner"
+    TELEMETRY_INSPECTOR = "telemetry_inspector"
+    GAP_AND_STRATEGY_ANALYZER = "gap_and_strategy_analyzer"
+    VERIFY_EVIDENCE = "verify_evidence"
+    SYNTHESIZER = "synthesizer"
+
+# ── DAG Node & Edge Contracts ──────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class DAGNode:
+    id: str
+    tool_name: ToolName
+    label: str
+    description: str
+    depends_on: tuple[str, ...] = ()
+    input_params: dict[str, Any] = field(default_factory=dict)
+
+@dataclass(frozen=True)
+class DAGEdge:
+    source: str
+    target: str
+    label: str = ""
+
+@dataclass(frozen=True)
+class ExecutionDAG:
+    nodes: tuple[DAGNode, ...]
+    edges: tuple[DAGEdge, ...]
+
+# ── Lap Event Investigation Contracts ──────────────────────────────────────
+
+@dataclass(frozen=True)
+class InspectLapEventsInput:
+    session_key: int
+    driver_number: int
+    target_lap: int | None = None
+    window_laps: int = 5
+
+@dataclass(frozen=True)
+class LapEvent:
+    lap_number: int
+    lap_time_ms: int | None
+    delta_to_median_ms: int | None
+    sector_1_ms: int | None
+    sector_2_ms: int | None
+    sector_3_ms: int | None
+    compound: str | None
+    stint: int | None
+    is_pit_in: bool
+    is_pit_out: bool
+    is_anomaly: bool
+    anomaly_reason: str | None
+    rainfall: bool
+    track_status: str | None
+
+@dataclass(frozen=True)
+class InspectLapEventsResult:
+    session_key: int
+    driver_number: int
+    target_lap: int | None
+    median_pace_ms: int
+    events: tuple[LapEvent, ...]
+    anomaly_count: int
+
+# ── Stint Degradation Contracts ─────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class StintDegradationInput:
+    session_key: int
+    driver_number: int
+    stint_index: int | None = None
+
+@dataclass(frozen=True)
+class StintSummary:
+    stint_index: int
+    compound: str
+    start_lap: int
+    end_lap: int
+    total_laps: int
+    initial_pace_ms: int
+    final_pace_ms: int
+    degradation_slope_ms_per_lap: float
+    cliff_detected: bool
+    cliff_lap: int | None
+
+@dataclass(frozen=True)
+class StintDegradationResult:
+    session_key: int
+    driver_number: int
+    stints: tuple[StintSummary, ...]
+    worst_degradation_stint: int | None
+
+# ── Telemetry Inspector Contracts ──────────────────────────────────────────
+
+@dataclass(frozen=True)
+class TelemetryInspectorInput:
+    session_key: int
+    driver_number: int
+    lap_numbers: tuple[int, ...]
+    compare_driver_number: int | None = None
+    compare_lap_numbers: tuple[int, ...] = ()
+    max_samples_per_lap: int = 600
+
+@dataclass(frozen=True)
+class TelemetrySamplePoint:
+    distance_m: float
+    speed_kmh: float
+    throttle_pct: float
+    brake: bool
+    gear: int
+    drs: int
+    x_pos: float | None
+    y_pos: float | None
+
+@dataclass(frozen=True)
+class TelemetryLapTrace:
+    driver_number: int
+    driver_abbreviation: str
+    lap_number: int
+    samples: tuple[TelemetrySamplePoint, ...]
+
+@dataclass(frozen=True)
+class TelemetryInspectorResult:
+    session_key: int
+    traces: tuple[TelemetryLapTrace, ...]
+    speed_delta_apex_kmh: float | None
+    full_throttle_pct: float
+    heavy_braking_zones_count: int
+```
+
+---
+
+### 3. Tool Implementation Specifications (`apps/backend/src/backend/agent/tools.py`)
+
+Each tool executes deterministic SQL or reads compressed Parquet telemetry artifacts, then performs pure calculation in Python:
+
+#### 3.1 `inspect_lap_events`
+- **SQL Gather**:
+  ```sql
+  SELECT
+      l.lap_number, l.lap_time_ms, l.sector_1_ms, l.sector_2_ms, l.sector_3_ms,
+      l.compound, l.stint, l.pit_in_time_ms, l.pit_out_time_ms,
+      s.rainfall, s.track_status
+  FROM lap_times l
+  JOIN sessions s ON s.session_key = l.session_key
+  WHERE l.session_key = :session_key AND l.driver_number = :driver_number
+  ORDER BY l.lap_number ASC;
+  ```
+- **Pure Python Logic**:
+  1. Computes the rolling median lap time across the driver's stints (excluding pit entry/exit laps).
+  2. Flags any lap where `lap_time_ms - median_pace_ms > 3000ms` (+3 seconds).
+  3. Classifies anomaly reasons: `pit_stop`, `rain_onset`, `yellow_flag_vsc`, `tyre_puncture_spin`.
+  4. Returns `InspectLapEventsResult`.
+
+#### 3.2 `stint_degradation_scanner`
+- **SQL Gather**: Pulls all valid flying laps grouped by `stint` for the target driver.
+- **Pure Python Logic**:
+  1. Excludes lap 1 (race start) and pit in/out laps.
+  2. Fits a linear regression line: $\text{LapTime}(n) = \alpha + \beta \cdot n$, where $\beta$ is degradation in $\text{ms/lap}$.
+  3. Detects "cliff lap" where consecutive lap times deviate $> 2.5\times$ standard deviation above the regression line.
+  4. Returns `StintDegradationResult`.
+
+#### 3.3 `telemetry_inspector`
+- **Artifact Fetch**:
+  1. Reads Parquet files from Cloudflare R2 / local artifact cache for requested `(session_key, driver_number, lap_number)` keys.
+  2. Extracts channels: `distance_m`, `speed_kmh`, `throttle_pct`, `brake`, `gear`, `drs`, `x_pos`, `y_pos`.
+- **Pure Python Resampling**:
+  1. Interpolates samples uniformly over `distance_m` down to $N \le 600$ points to ensure low JSON wire size and rapid UI rendering.
+  2. Identifies minimum corner apex speeds and throttle application delay.
+  3. Returns `TelemetryInspectorResult`.
+
+---
+
+### 4. Dynamic DAG Planner & Orchestrator (`apps/backend/src/backend/agent/orchestrator.py`)
+
+#### 4.1 Upgraded LLM Router
+The router prompt takes the raw user query and outputs a structured execution graph:
+
+```json
+{
+  "intent": "lap_event_investigation",
+  "year": 2024,
+  "gp_name": "British",
+  "driver_name": "Carlos Sainz",
+  "target_lap": 34,
+  "nodes": [
+    { "id": "session", "tool_name": "resolve_session", "label": "Resolve British GP 2024", "depends_on": [] },
+    { "id": "driver", "tool_name": "resolve_driver", "label": "Resolve Carlos Sainz", "depends_on": [] },
+    { "id": "laps", "tool_name": "inspect_lap_events", "label": "Inspect Lap 34 Event", "depends_on": ["session", "driver"] },
+    { "id": "telemetry", "tool_name": "telemetry_inspector", "label": "Extract Lap 34 Telemetry", "depends_on": ["laps"] },
+    { "id": "verifier", "tool_name": "verify_evidence", "label": "Verify Race Facts", "depends_on": ["telemetry"] },
+    { "id": "synth", "tool_name": "synthesizer", "label": "Compose Debrief", "depends_on": ["verifier"] }
+  ],
+  "edges": [
+    { "source": "session", "target": "laps" },
+    { "source": "driver", "target": "laps" },
+    { "source": "laps", "target": "telemetry" },
+    { "source": "telemetry", "target": "verifier" },
+    { "source": "verifier", "target": "synth" }
+  ]
+}
+```
+
+#### 4.2 Multi-Branch Concurrent Execution
+Independent nodes (e.g. `resolve_session` and `resolve_driver`) run concurrently via Python's `concurrent.futures.ThreadPoolExecutor(max_workers=4)`. As each node starts and completes, the orchestrator emits real-time Server-Sent Events (SSE).
+
+---
+
+### 5. Real-Time SSE Streaming Protocol (`POST /api/v1/agent/query/stream`)
+
+The streaming endpoint emits discrete SSE events:
+
+| Event Name | JSON Payload | Description |
+| :--- | :--- | :--- |
+| `event: dag_init` | `{ "nodes": [...], "edges": [...] }` | Initial graph structure sent immediately upon routing. |
+| `event: node_start` | `{ "node_id": "session", "label": "Resolving British GP 2024", "query_preview": "SELECT session_key FROM sessions WHERE year = 2024..." }` | Emitted when a tool begins execution. |
+| `event: node_complete`| `{ "node_id": "session", "duration_ms": 12, "summary": "Session 9558 (British Grand Prix Race)", "status": "ok" }` | Emitted when a tool finishes successfully. |
+| `event: node_error` | `{ "node_id": "telemetry", "error": "Artifact missing for lap 34", "duration_ms": 4 }` | Emitted if a tool raises an error. |
+| `event: final` | `{ "answer": "...", "trace": [...], "chart_data": {...} }` | Full final response payload. |
+| `event: done` | `{}` | Closes SSE connection. |
+
+---
+
+### 6. Visual Thinking Graph UI (`apps/frontend/`)
+
+Built using **React Flow (`@xyflow/react`)** with Pitwall's dark racing palette:
+
+#### 6.1 Custom Nodes (`components/agent/nodes/AgentDAGNode.tsx`)
+- **Visual Styles**:
+  - Dark panel background (`#111111`) with rounded borders (`6px`).
+  - Top header: Node icon + Tool name in `Rajdhani` uppercase font.
+  - Subtitle: Query preview or live status text in `JetBrains Mono`.
+  - State indicator badge:
+    - **Idle**: Muted border (`#2A2A2A`).
+    - **Running**: Pulsing Gold border (`#FFD700`) with spinning radar indicator.
+    - **Done**: Emerald border (`#2CF4C5`) with execution time (e.g. `12ms`).
+    - **Error**: Alert Red border (`#E8002D`).
+
+#### 6.2 Animated Edge Streams (`components/agent/edges/AnimatedLaserEdge.tsx`)
+Custom SVG Bézier curves with dynamic CSS keyframe stroke offsets:
+- **Running Edge**: Amber glowing dashed line with moving particles flowing from parent to child.
+- **Done Edge**: Crisp emerald neon line with smooth pulse.
+- **Error Edge**: Red warning line.
+
+```css
+@keyframes edgeFlow {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.edge-running path {
+  stroke: #FFD700;
+  stroke-dasharray: 6 6;
+  animation: edgeFlow 0.6s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.6));
+}
+
+.edge-done path {
+  stroke: #2CF4C5;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 4px rgba(44, 244, 197, 0.4));
+}
+```
+
+#### 6.3 Slide-Over Node Inspector Drawer (`components/agent/NodeInspectorDrawer.tsx`)
+Clicking any node in the canvas opens a side drawer displaying:
+1. **Tool Identity**: Name, execution status, and exact duration in milliseconds.
+2. **SQL Query / Storage Key**: Formatted syntax-highlighted SQL or Cloudflare R2 Parquet key.
+3. **Structured Input / Output**: Expandable JSON tree view of raw parameters and evidence.
+
+---
+
+### 7. Rich Telemetry & Circuit Visualizations
+
+The agent response panel renders interactive visualizations alongside text debriefs:
+
+1. **Synchronized Telemetry Trace Chart (`components/agent/TelemetryOverlayChart.tsx`)**:
+   - Multi-channel synchronized X-axis over lap distance (`distance_m` from 0 to 5891m at Silverstone).
+   - Channels: Speed (km/h), Throttle (0–100%), Brake (on/off), Gear (1–8), DRS status.
+   - Dual-lap overlay comparing anomalous lap vs. personal best lap.
+2. **2D Circuit Map Anomaly Heatmap (`components/agent/CircuitHeatmap.tsx`)**:
+   - SVG circuit map rendered from `x_pos` and `y_pos`.
+   - Speed/delta color gradient along the track line highlighting corner exit grip loss or braking points.
+3. **Tyre Degradation Slope Graph (`components/agent/TyreDegradationChart.tsx`)**:
+   - Scatter plot of lap times vs. tyre age with fitted regression lines for each tyre stint.
+
+---
+
+### 8. Phased Implementation Plan (L23 – L27)
+
+- **L23 — Expanded Tool Registry**:
+  - Implement `inspect_lap_events`, `stint_degradation_scanner`, `telemetry_inspector` in `apps/backend/src/backend/agent/tools.py`.
+  - Add pure calculation helpers (`_detect_lap_anomalies`, `_compute_stint_degradation`, `_resample_telemetry`) and unit tests in `test_agent_tools.py`.
+- **L24 — Dynamic DAG Planner & Router**:
+  - Upgrade `_ROUTER_SYSTEM_PROMPT` in `llm.py` to output dynamic `ExecutionDAG`.
+  - Implement `ExecutionDAG` runner in `orchestrator.py` with multi-threaded branch execution and DAG SSE streaming.
+- **L25 — Visual Thinking Graph UI Canvas**:
+  - Install `@xyflow/react` in `apps/frontend`.
+  - Build `ReasoningGraphCanvas`, `AgentDAGNode`, and `AnimatedLaserEdge`.
+  - Wire SSE events to live node states and animated edge streams in `app/agent/page.tsx`.
+- **L26 — Node Inspector Drawer & Query Traces**:
+  - Build `NodeInspectorDrawer` component in frontend.
+  - Connect node selection to SQL query and raw evidence preview.
+- **L27 — Rich Telemetry & Circuit Visualizations**:
+  - Implement `TelemetryOverlayChart`, `CircuitHeatmap`, and `TyreDegradationChart` components.
+  - Wire synthesizer evidence payloads to embed charts directly into the debrief stream.
+
+---
 
 ## How To Use This Document
 

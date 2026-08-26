@@ -447,6 +447,161 @@ def compute_speed_window(inp: types.ComputeSpeedWindowInput) -> types.SpeedWindo
         sample_count_after=after_count,
     )
 
+def _detect_lap_anamolies(events: list[types.LapEvent], median_ms: int) -> list[types.LapEvent]:
+    """ Flag laps where the lap time exceeds median by >3 seconds. 
+    
+        Subsquently anything >3 seconds can be possible (pitstop, rain, VSC, puncture or compound change)
+    """
+    THRESHOLD_MS = 3000 # 3 seconds
+    results = []
+    for ev in events:
+        if ev.lap_time_ms is None or ev.delta_to_median_ms is None:
+            results.append(ev)
+            continue
+
+        isAnamoly = False
+        reason = None
+
+        if ev.delta_to_median_ms > THRESHOLD_MS:
+            isAnamoly = True
+            if ev.is_pit_in or ev.is_pit_out:
+                reason="pit_stop"
+            elif ev.rainfall and not any (e.rainfall for e in events[:events.index(ev)]):
+                reason="rain"
+            elif ev.track_status in ("4", "5", "6", "7"): # 4 = VSC, 5 = SC, 6 = Red, 7 = Virtual flag red/yellow
+                reason="yellow_flag_vsc"
+            else:
+                reason="unknown_slowlap"
+
+        results.append(types.LapEvent(
+            lap_number=ev.lap_number,
+            lap_time_ms=ev.lap_time_ms,
+            delta_to_median_ms=ev.delta_to_median_ms,
+            sector1_ms=ev.sector1_ms,
+            sector2_ms=ev.sector2_ms,
+            sector3_ms=ev.sector3_ms,
+            compound=ev.compound,
+            stint=ev.stint,
+            is_pit_in=ev.is_pit_in,
+            is_pit_out=ev.is_pit_out,
+            rainfall=ev.rainfall,
+            track_status=ev.track_status,
+            is_anamoly=isAnamoly,
+        ))
+
+    return results
+
+def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
+    """ Compute the degredation slop per stint using linear regression. """
+    if not laps:
+        return []
+
+    by_stint: dict[int, list[dict]] = {}
+    for lap in laps:
+        stint = lap["stint"]
+        if stint is None:
+            continue
+        by_stint.setdefault(stint, []).append(lap)
+
+    summaries = []
+    for stint_idx in sorted(by_stint.keys()):
+        stint_laps = sorted(by_stint[stint_idx], key=lambda l:l["lap_number"])
+
+        clean = [
+            l 
+            for l in stint_laps:
+            if l["lap_number"] != 1
+            and l["pit_in_time_ms"] is not None
+            and l["pit_out_time_ms"] is not None
+            and l["lap_time_ms"] is not None
+        ]
+        if len(clean) < 2:
+            continue
+
+        xs = [float(l["lap_number"]) for l in clean]
+        ys = [float(l["lap_time_ms"]) for l in clean]
+
+        x_mean = sum(xs) / len(xs)
+        y_mean = sum(ys) / len(ys)
+        ss_xy = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
+        ss_xx = sum((x - x_mean) ** 2 for x in xs)
+        beta = ss_xy / ss_xx if ss_xx != 0 else 0.0
+        alpha = y_mean - beta * x_mean
+
+        fitted = [alpha + beta * x for x in xs]
+        residuals = [y - f for y, f in zip(ys, fitted)]
+        std_residual = (
+            (sum(r**2 for r in residuals) / len(residuals)) ** 0.5
+        )  
+        CLIFF_SIGMA = 2.5
+        cliff_lap = None
+        for i, (res, l) in enumerate(zip(residuals, clean)):
+            if std_residual > 0 and res > CLIFF_SIGMA * std_residual:
+                cliff_lap = l["lap_number"]
+                break
+
+        compound = clean[0]["compound"] or "UNKNOWN"
+        summaries.append(
+            types.StintSummary(
+                stint_index=stint_idx,
+                compound=compound,
+                start_lap=clean[0]["lap_number"],
+                end_lap=clean[-1]["lap_number"],
+                total_laps=len(clean),
+                initial_pace_ms=round(alpha),  
+                final_pace_ms=round(alpha + beta * clean[-1]["lap_number"]),
+                degradation_slope_ms_per_lap=round(beta, 2),
+                cliff_detected=cliff_lap is not None,
+                cliff_lap=cliff_lap,
+            )
+        )
+    return summaries
+
+
+def stint_degradation_scanner(inp: types.StintDegredationInput) -> types.StintDegredationResult:
+    """ Scan all the stint for the driver and calculate the degredation slope"""
+
+    with extensions.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text(
+                    """
+                    SELECT lap_number, lap_time_ms, compound, stint, pit_in_time_ms, pit_out_time_ms
+                    FROM lap_times
+                    WHERE session_key = :sk
+                    AND driver_number = :dn
+                    AND deleted = FALSE
+                    ORDER BY lap_number ASC """
+                ),
+                {"sk": inp.session_key, "dn": inp.driver_number},
+            )
+            .mappings()
+            .all()
+        )
+
+    if not rows:
+        raise types.NotFoundError(f"No laps found for the driver {inp.driver_number} in the session : {inp.session_key}")
+
+    all_stints = _compute_stint_degradation([dict(r) for r in rows])
+    if inp.stint_index is not None:
+        all_stints = [s for s in all_stints if s.stint_index == inp.stint_index]
+
+    worst = None
+    worst_slope = -float("inf")
+    for s in all_stints:
+        if s.degredation_slope_ms_per_lap > worst_slope:
+            worst_slope = s.degredation_slope_ms_per_lap
+            worst = s.stint_index
+
+    return types.StintDegredationResult(
+        session_key=inp.session_key,
+        driver_number=inp.driver_number,
+        stints=tuple(all_stints),
+        worst_degredation_stint=worst
+    )
+
+        
+
 
 def _assess(checks: list[types.EvidenceCheck]) -> types.VerifyEvidenceResult:
     """Pure verdict: any failed check becomes a refusal with a readable reason."""
