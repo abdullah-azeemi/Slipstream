@@ -22,12 +22,17 @@ _ROUTER_SYSTEM_PROMPT = """ You will classify an F1 question and extract its ent
 
 Allowed Intents:
     - "pit_stop_speed_delta" : the question asks about a pitstop before/after it.
+    - "lap_event_investigation" : the question asks why a specific lap/anomaly happened for a driver.
+    - "tyre_degradation_analysis" : the question asks about tyre wear / stint degradation.
+    - "telemetry_comparison" : the question asks to compare two laps or two drivers' telemetry.
     - "unsupported" : everything else (weather, other sports, live timing etc)
 
 Field Rules:
-    - "driver" : the surname, full name, number or the abbreviation the user asks about; null if none
+    - "driver" : the surname, full name, number or abbreviation the user asks about; null if none
+    - "compare_driver" : the second driver for a telemetry comparison; null otherwise
     - "year" and "gp_name" : only when the user names the race; null otherwise. Never guess a race
-    - "laps_window" : how many laps before and after the stop to compare; 3 unless the user say otherwise.
+    - "laps_window" : how many laps before and after the stop to compare; 3 unless the user says otherwise
+    - "target_lap" : the specific lap number the user asks about; null if none is specified
     - For "unsupported" questions every other field must be null.
 """
 
@@ -145,6 +150,22 @@ def _coerce_window(value) -> int:
     return max(1, min(window, 10))
 
 
+def _coerce_target_lap(value) -> int | None:
+    """Accept a single lap number; None or zero becomes None"""
+    if value is None:
+        return None
+    try:
+        lap = int(value)
+    except (TypeError, ValueError):
+        raise types.LLMError(f"router returned bad target lap : {value!r}") from None
+    return lap if lap > 0 else None
+
+
+def _coerce_compare_driver(value) -> str | None:
+    """The second driver is just a name like the primary one"""
+    return _clean_str(value)
+
+
 def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     """Classify a question and extract its entities with the cheap routing model"""
     messages = [
@@ -166,12 +187,17 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         raise types.LLMError(f"router returned unknown intent: {intent_value}")
 
     cost = usage.get("cost_estimate_usd", 0.0)
+    intent = types.Intent(intent_value)
     return types.RoutedQuestion(
-        intent=types.Intent(intent_value),
+        intent=intent,
         driver_name=_clean_str(payload.get("driver")),
+        compare_driver_name=_coerce_compare_driver(
+            payload.get("compare_driver") or payload.get("compare_driver_name")
+        ),
         gp_name=_clean_str(payload.get("gp_name")),
         year=_coerce_year(payload.get("year")),
         laps_window=_coerce_window(payload.get("laps_window")),
+        target_lap=_coerce_target_lap(payload.get("target_lap")),
     ), cost
 
 

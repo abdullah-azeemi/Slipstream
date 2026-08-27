@@ -6,8 +6,9 @@ between the planner (LLM or rule-based) and the executor (deterministic Python).
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class Intent(str, Enum):
@@ -40,6 +41,36 @@ class ToolName(str, Enum):
     STINT_DEGRADATION_SCANNER = "stint_degradation_scanner"
     TELEMETRY_INSPECTOR = "telemetry_inspector"
     VERIFY_EVIDENCE = "verify_evidence"
+
+
+@dataclass(frozen=True)
+class DAGNode:
+    """One node in the execuation graph = one tool call"""
+
+    id: str
+    tool_name: ToolName
+    label: str
+    description: str = ""
+    depends_on: tuple[str, ...] = ()
+    input_params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DAGEdge:
+    """A directed dependency: source must finish before the target starts"""
+
+    source: str
+    target: str
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class ExecutionDAG:
+    """The whole graph. Edges are usually derived from each node's depends_on,
+    but storing them explicitly lets the UI render the graph without re-deriving"""
+
+    nodes: tuple[DAGNode, ...]
+    edges: tuple[DAGEdge, ...] = ()
 
 
 class AgentError(Exception):
@@ -186,6 +217,19 @@ class SpeedWindowResult:
 
 
 @dataclass(frozen=True)
+class RoutedQuestion:
+    """Entities the LLM Router extracted form the raw question"""
+
+    intent: Intent
+    driver_name: str | None = None
+    compare_driver_name: str | None = None
+    gp_name: str | None = None
+    year: int | None = None
+    laps_window: int = 3
+    target_lap: int | None = None
+
+
+@dataclass(frozen=True)
 class EvidenceCheck:
     name: str
     passed: bool
@@ -197,17 +241,6 @@ class VerifyEvidenceResult:
     passed: bool
     checks: tuple[EvidenceCheck, ...] = ()
     refusal_reason: str | None = None
-
-
-@dataclass(frozen=True)
-class RoutedQuestion:
-    """Entities the LLM router extracted from the raw question."""
-
-    intent: Intent
-    driver_name: str | None = None
-    gp_name: str | None = None
-    year: int | None = None
-    laps_window: int = 3
 
 
 # Orchestrator
@@ -363,6 +396,7 @@ class ToolCallRecord:
     output_summary: str | None = None
     error: str | None = None
     duration_ms: int | None = None
+    node_id: str | None = None
 
 
 @dataclass(frozen=True)
