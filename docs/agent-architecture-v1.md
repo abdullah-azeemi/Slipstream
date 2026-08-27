@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-26 (L22)
+Last updated: 2026-08-27 (L24)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -123,10 +123,18 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Tests: `apps/backend/tests/test_agent_orchestrator.py` (+GP suffix resolution test, cost tuple signatures), `apps/backend/tests/test_agent_llm.py`, `apps/backend/tests/test_agent_persistence.py`.
   - Current test state: 92/92 backend tests passing, frontend typecheck and build clean.
 
+- L23 — Expanded Tool Registry.
+  - Files: `apps/backend/src/backend/agent/tools.py` (`inspect_lap_events`, `stint_degradation_scanner`, `telemetry_inspector`), pure helpers (`_detect_lap_anomalies`, `_find_cliff_lap`, `_compute_stint_degradation`, `_read_artifact_full_channels`, `_resample_telemetry`, `_compute_trace_stats`); contracts in `types.py`; tests in `apps/backend/tests/test_agent_tools.py`.
+  - Lap anomaly reason vocabulary: `pit_stop`, `rain_onset`, `yellow_flag_vsc`, `unknown_slowlap`; stint degradation uses OLS slope + cliff detection (>2.5σ, ≥3 clean laps); telemetry inspector resamples full channels to ≤`max_samples_per_lap` and reads Parquet/JSON from local or R2.
+  - Commit `af493e9` "feat(agent): finish inspect_lap_events, stint_degradation_scanner, telemetry_inspector". Delivery record: `docs/L23-continuation.md`.
+
+- L24 — Dynamic DAG Planner & concurrent runner.
+  - Files: `apps/backend/src/backend/agent/orchestrator.py` (`build_dag`, `topo_sort`, `_execute_dag` with `ThreadPoolExecutor(max_workers=4)`, `_TOOLS`/`_BINDERS` registries via `@_register`, rewritten `_compose`/`run`), `types.py` (`DAGNode`/`DAGEdge`/`ExecutionDAG`, `RoutedQuestion.compare_driver_name` + `target_lap`, `ToolCallRecord.node_id`), `llm.py` (router covers all four intents, `_coerce_target_lap`/`_coerce_compare_driver`), tests in `apps/backend/tests/test_agent_dag.py`.
+  - Unknown intents and queries missing driver/race/lap/compare-driver produce typed early refusals; any node failure fails closed (dependents get `dependency failed` records, `verify` never runs, answer refused); trace re-sorted to graph order for deterministic output.
+  - Commit `2a09e78` "feat(agent): replace fixed pipeline with dynamic ExecutionDAG planner and concurrent runner". Delivery record: `docs/L24-continuation.md`.
+
 ### Next
 
-- **L23 — Expanded Tool Registry**: Add `inspect_lap_events`, `stint_degradation_scanner`, and `telemetry_inspector` tools for rich race incident, degradation, and telemetry queries.
-- **L24 — Dynamic DAG Planner**: Upgrade orchestrator from fixed pipelines to dynamically generated execution DAGs supporting diverse queries.
 - **L25 — Visual Thinking Graph UI**: Build n8n/React Flow interactive reasoning graph canvas with live SSE execution pulses.
 - **L26 — Node Inspector Drawer**: Add click-to-inspect on graph nodes to view executed SQL queries, durations, and structured evidence.
 - **L27 — Rich Multi-Channel Telemetry Visualizations**: Interactive speed/throttle/brake traces, 2D GPS track map heatmaps, and tyre degradation curves.
