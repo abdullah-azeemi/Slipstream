@@ -17,20 +17,17 @@ _PRICES_PER_1M = {
     "openai/gpt-4o-mini": (0.15, 0.60),
 }
 
-_ROUTER_SYSTEM_PROMPT = """You will classify an F1 question and extract its entities.
+_ROUTER_SYSTEM_PROMPT = """ You will classify an F1 question and extract its entities.
     Reply ONLY with a JSON Object and nothing else.
 
 Allowed Intents:
-    - "pit_stop_speed_delta" : ANY question concerning pit stops, pit timing, pit laps, tyre changes, stints, or speed/pace around a pit stop.
-      Examples: "When did X pit?", "Which lap did X stop on?", "What was X's speed before/after the pit?", "What tyres did X use in the pit stop?", "Did X make a pit stop in Y?".
-      If the question mentions pit stops, pitting, tyre change, or stint strategy, you MUST use "pit_stop_speed_delta".
-    - "unsupported" : everything else (general weather, standings, unrelated trivia, other sports, etc.)
+    - "pit_stop_speed_delta" : the question asks about a pitstop before/after it.
+    - "unsupported" : everything else (weather, other sports, live timing etc)
 
 Field Rules:
-    - "driver" : the surname, full name, number, or abbreviation (e.g. "Sainz", "VER", "55"); null if none
-    - "gp_name" : the Grand Prix name or location without "GP" or "Grand Prix" suffix (e.g. "British", "Monaco", "Silverstone", "Italian"); null if none. Never guess a race.
-    - "year" : the 4-digit race year as an integer; null if not specified.
-    - "laps_window" : how many laps before and after the stop to compare; 3 unless the user says otherwise.
+    - "driver" : the surname, full name, number or the abbreviation the user asks about; null if none
+    - "year" and "gp_name" : only when the user names the race; null otherwise. Never guess a race
+    - "laps_window" : how many laps before and after the stop to compare; 3 unless the user say otherwise.
     - For "unsupported" questions every other field must be null.
 """
 

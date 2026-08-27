@@ -19,6 +19,7 @@ from sqlalchemy import text
 from backend import extensions
 from backend.config import settings
 from backend.agent import types
+import statistics
 
 
 def resolve_session(inp: types.ResolveSessionInput) -> types.ResolvedSession:
@@ -447,55 +448,178 @@ def compute_speed_window(inp: types.ComputeSpeedWindowInput) -> types.SpeedWindo
         sample_count_after=after_count,
     )
 
-def _detect_lap_anamolies(events: list[types.LapEvent], median_ms: int) -> list[types.LapEvent]:
-    """ Flag laps where the lap time exceeds median by >3 seconds. 
-    
-        Subsquently anything >3 seconds can be possible (pitstop, rain, VSC, puncture or compound change)
+
+def _detect_lap_anomalies(
+    events: list[types.LapEvent], median_ms: int
+) -> list[types.LapEvent]:
+    """Flag laps more than 3s off the median pace and explain WHY.
+
+    Returns NEW LapEvent objects: the input is never mutated, so this stays
+    a pure, unit-testable function.
     """
-    THRESHOLD_MS = 3000 # 3 seconds
-    results = []
-    for ev in events:
-        if ev.lap_time_ms is None or ev.delta_to_median_ms is None:
-            results.append(ev)
-            continue
+    if median_ms <= 0:
+        return list(events)
 
-        isAnamoly = False
+    THRESHOLD_MS = 3000
+
+    flagged: list[types.LapEvent] = []
+    for idx, ev in enumerate(events):
+        delta = int(ev.lap_time_ms - median_ms) if ev.lap_time_ms is not None else None
+
+        is_anomaly = delta is not None and delta > THRESHOLD_MS
         reason = None
-
-        if ev.delta_to_median_ms > THRESHOLD_MS:
-            isAnamoly = True
+        if is_anomaly:
             if ev.is_pit_in or ev.is_pit_out:
-                reason="pit_stop"
-            elif ev.rainfall and not any (e.rainfall for e in events[:events.index(ev)]):
-                reason="rain"
-            elif ev.track_status in ("4", "5", "6", "7"): # 4 = VSC, 5 = SC, 6 = Red, 7 = Virtual flag red/yellow
-                reason="yellow_flag_vsc"
+                reason = "pit_stop"
+            elif ev.rainfall and not any(e.rainfall for e in events[:idx]):
+                reason = "rain_onset"
+            elif ev.track_status in (
+                "4",
+                "5",
+                "6",
+                "7",
+            ):  # 4=VSC, 5=SC, 6=RED flag, 7=Yellow flag
+                reason = "yellow_flag_vsc"
             else:
-                reason="unknown_slowlap"
+                reason = "unknown_slowlap"
 
-        results.append(types.LapEvent(
-            lap_number=ev.lap_number,
-            lap_time_ms=ev.lap_time_ms,
-            delta_to_median_ms=ev.delta_to_median_ms,
-            sector1_ms=ev.sector1_ms,
-            sector2_ms=ev.sector2_ms,
-            sector3_ms=ev.sector3_ms,
-            compound=ev.compound,
-            stint=ev.stint,
-            is_pit_in=ev.is_pit_in,
-            is_pit_out=ev.is_pit_out,
-            rainfall=ev.rainfall,
-            track_status=ev.track_status,
-            is_anamoly=isAnamoly,
-        ))
+        flagged.append(
+            types.LapEvent(
+                lap_number=ev.lap_number,
+                lap_time_ms=ev.lap_time_ms,
+                delta_to_median_ms=delta,
+                sector1_ms=ev.sector1_ms,
+                sector2_ms=ev.sector2_ms,
+                sector3_ms=ev.sector3_ms,
+                compound=ev.compound,
+                stint=ev.stint,
+                is_pit_in=ev.is_pit_in,
+                is_pit_out=ev.is_pit_out,
+                rainfall=ev.rainfall,
+                track_status=ev.track_status,
+                is_anomaly=is_anomaly,
+                anomaly_reason=reason,
+            )
+        )
+    return flagged
 
-    return results
+
+def inspect_lap_events(
+    inp: types.InspectLapEventsInput,
+) -> types.InspectLapEventsResult:
+    """Flag every off-pace lap for the driver, with a compact reason."""
+
+    with extensions.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text(
+                    """ 
+                        SELECT l.lap_number, l.lap_time_ms, l.s1_ms AS sector1_ms, l.s2_ms AS sector2_ms, l.s3_ms AS sector3_ms,
+                                l.compound, l.stint, l.pit_in_time_ms, l.pit_out_time_ms, l.track_status, s.rainfall
+                        FROM lap_times l
+                        JOIN sessions s ON s.session_key = l.session_key
+                        WHERE l.session_key = :sk
+                        AND l.driver_number = :dn
+                        AND l.deleted = FALSE
+                        ORDER BY l.lap_number ASC """
+                ),
+                {"sk": inp.session_key, "dn": inp.driver_number},
+            )
+            .mappings()
+            .all()
+        )
+
+    if not rows:
+        raise types.NotFoundError(
+            f"No laps found for driver : {inp.driver_number} in session : {inp.session_key}"
+        )
+
+    events = [
+        types.LapEvent(
+            lap_number=r["lap_number"],
+            lap_time_ms=r["lap_time_ms"],
+            delta_to_median_ms=None,
+            sector1_ms=r["sector1_ms"],
+            sector2_ms=r["sector2_ms"],
+            sector3_ms=r["sector3_ms"],
+            compound=r["compound"],
+            stint=r["stint"],
+            is_pit_in=r["pit_in_time_ms"] is not None,
+            is_pit_out=r["pit_out_time_ms"] is not None,
+            is_anomaly=False,
+            rainfall=bool(r["rainfall"]),
+            track_status=r["track_status"],
+        )
+        for r in rows
+    ]
+
+    clean_times = [
+        e.lap_time_ms
+        for e in events
+        if not e.is_pit_in and not e.is_pit_out and e.lap_time_ms is not None
+    ]
+    median_ms = int(statistics.median(clean_times)) if clean_times else 0
+
+    flagged = tuple(_detect_lap_anomalies(events, median_ms))
+
+    if inp.target_lap is not None:
+        lo = inp.target_lap - inp.window_laps
+        hi = inp.target_lap + inp.window_laps
+        flagged = tuple(e for e in flagged if lo <= e.lap_number <= hi)
+
+    return types.InspectLapEventsResult(
+        session_key=inp.session_key,
+        driver_number=inp.driver_number,
+        target_lap=inp.target_lap,
+        median_pace_ms=median_ms,
+        events=flagged,
+        anomaly_count=sum(1 for e in flagged if e.is_anomaly),
+    )
+
+
+def _find_cliff_lap(clean: list[dict], residuals_by_lap: dict) -> int | None:
+
+    if len(clean) < 3:
+        return None
+
+    worst_lap_no = max(residuals_by_lap, key=residuals_by_lap.get)
+    remainder = [lap for lap in clean if lap["lap_number"] != worst_lap_no]
+    rx = [float(lap["lap_number"]) for lap in remainder]
+    ry = [float(lap["lap_time_ms"]) for lap in remainder]
+    rxm, rym = sum(rx) / len(rx), sum(ry) / len(ry)
+    ss_xy = sum((x - rxm) * (y - rym) for x, y in zip(rx, ry))
+    ss_xx = sum((x - rxm) ** 2 for x in rx)
+    rbeta = ss_xy / ss_xx if ss_xx else 0.0
+    ralpha = rym - rbeta * rxm
+
+    candidate = next(lap for lap in clean if lap["lap_number"] == worst_lap_no)
+    resid_candidate = float(candidate["lap_time_ms"]) - (ralpha + rbeta * worst_lap_no)
+
+    other_resids = [
+        float(lap["lap_time_ms"]) - (ralpha + rbeta * float(lap["lap_number"]))
+        for lap in remainder
+    ]
+    sigma = (
+        (sum(r * r for r in other_resids) / len(other_resids)) ** 0.5
+        if other_resids
+        else 0.0
+    )
+    CLIFF_MIN_MS = 1200.0
+    if (sigma == 0.0 and resid_candidate > CLIFF_MIN_MS) or (
+        sigma > 0.0 and resid_candidate > max(CLIFF_MIN_MS, 2.5 * sigma)
+    ):
+        return int(worst_lap_no)
+    return None
+
 
 def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
-    """ Compute the degredation slop per stint using linear regression. """
+    """Fit LapTime(n) = alpha + beta * n per stint (ordinary least squares).
+
+    alpha = pace at the start of the stint (ms)
+    beta  = degradation slope (ms, positive = getting slower)"""
+
     if not laps:
         return []
-
     by_stint: dict[int, list[dict]] = {}
     for lap in laps:
         stint = lap["stint"]
@@ -504,41 +628,30 @@ def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
         by_stint.setdefault(stint, []).append(lap)
 
     summaries = []
-    for stint_idx in sorted(by_stint.keys()):
-        stint_laps = sorted(by_stint[stint_idx], key=lambda l:l["lap_number"])
+    for stint_idx in sorted(by_stint):
+        stint_laps = sorted(by_stint[stint_idx], key=lambda lap: lap["lap_number"])
 
         clean = [
-            l 
-            for l in stint_laps:
-            if l["lap_number"] != 1
-            and l["pit_in_time_ms"] is not None
-            and l["pit_out_time_ms"] is not None
-            and l["lap_time_ms"] is not None
+            lap
+            for lap in stint_laps
+            if lap["pit_in_time_ms"] is None
+            and lap["pit_out_time_ms"] is None
+            and lap["lap_time_ms"] is not None
         ]
+
         if len(clean) < 2:
             continue
 
-        xs = [float(l["lap_number"]) for l in clean]
-        ys = [float(l["lap_time_ms"]) for l in clean]
-
-        x_mean = sum(xs) / len(xs)
-        y_mean = sum(ys) / len(ys)
+        xs = [float(lap["lap_number"]) for lap in clean]
+        ys = [float(lap["lap_time_ms"]) for lap in clean]
+        x_mean, y_mean = sum(xs) / len(xs), sum(ys) / len(ys)
         ss_xy = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
         ss_xx = sum((x - x_mean) ** 2 for x in xs)
-        beta = ss_xy / ss_xx if ss_xx != 0 else 0.0
+        beta = ss_xy / ss_xx if ss_xx else 0.0
         alpha = y_mean - beta * x_mean
 
-        fitted = [alpha + beta * x for x in xs]
-        residuals = [y - f for y, f in zip(ys, fitted)]
-        std_residual = (
-            (sum(r**2 for r in residuals) / len(residuals)) ** 0.5
-        )  
-        CLIFF_SIGMA = 2.5
-        cliff_lap = None
-        for i, (res, l) in enumerate(zip(residuals, clean)):
-            if std_residual > 0 and res > CLIFF_SIGMA * std_residual:
-                cliff_lap = l["lap_number"]
-                break
+        residuals = {x: y - (alpha + beta * x) for x, y in zip(xs, ys)}
+        cliff_lap = _find_cliff_lap(clean, residuals)
 
         compound = clean[0]["compound"] or "UNKNOWN"
         summaries.append(
@@ -548,7 +661,7 @@ def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
                 start_lap=clean[0]["lap_number"],
                 end_lap=clean[-1]["lap_number"],
                 total_laps=len(clean),
-                initial_pace_ms=round(alpha),  
+                initial_pace_ms=round(alpha),
                 final_pace_ms=round(alpha + beta * clean[-1]["lap_number"]),
                 degradation_slope_ms_per_lap=round(beta, 2),
                 cliff_detected=cliff_lap is not None,
@@ -558,20 +671,23 @@ def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
     return summaries
 
 
-def stint_degradation_scanner(inp: types.StintDegredationInput) -> types.StintDegredationResult:
-    """ Scan all the stint for the driver and calculate the degredation slope"""
+def stint_degradation_scanner(
+    inp: types.StintDegradationInput,
+) -> types.StintDegradationResult:
+    """Scan all the driver's stints and compute the degradation slopes."""
 
     with extensions.engine.connect() as conn:
         rows = (
             conn.execute(
                 text(
+                    """ 
+                        SELECT lap_number, lap_time_ms, compound, stint, pit_in_time_ms, pit_out_time_ms
+                        FROM lap_times
+                        WHERE session_key = :sk
+                        AND driver_number = :dn
+                        AND deleted = FALSE
+                        ORDER BY lap_number ASC
                     """
-                    SELECT lap_number, lap_time_ms, compound, stint, pit_in_time_ms, pit_out_time_ms
-                    FROM lap_times
-                    WHERE session_key = :sk
-                    AND driver_number = :dn
-                    AND deleted = FALSE
-                    ORDER BY lap_number ASC """
                 ),
                 {"sk": inp.session_key, "dn": inp.driver_number},
             )
@@ -580,7 +696,9 @@ def stint_degradation_scanner(inp: types.StintDegredationInput) -> types.StintDe
         )
 
     if not rows:
-        raise types.NotFoundError(f"No laps found for the driver {inp.driver_number} in the session : {inp.session_key}")
+        raise types.NotFoundError(
+            f" No laps found for the driver : {inp.driver_number} for session : {inp.session_key}"
+        )
 
     all_stints = _compute_stint_degradation([dict(r) for r in rows])
     if inp.stint_index is not None:
@@ -589,18 +707,248 @@ def stint_degradation_scanner(inp: types.StintDegredationInput) -> types.StintDe
     worst = None
     worst_slope = -float("inf")
     for s in all_stints:
-        if s.degredation_slope_ms_per_lap > worst_slope:
-            worst_slope = s.degredation_slope_ms_per_lap
+        if s.degradation_slope_ms_per_lap > worst_slope:
+            worst_slope = s.degradation_slope_ms_per_lap
             worst = s.stint_index
 
-    return types.StintDegredationResult(
+    return types.StintDegradationResult(
         session_key=inp.session_key,
         driver_number=inp.driver_number,
         stints=tuple(all_stints),
-        worst_degredation_stint=worst
+        worst_degradation_stint=worst,
     )
 
-        
+
+def _parquet_rows(table) -> list[dict]:
+    """Convert a pyarrow table into list-of-dicts, keeping only known channels."""
+    WANTED = [
+        "distance_m",
+        "speed_kmh",
+        "throttle",
+        "brake",
+        "gear",
+        "drs",
+        "x_pos",
+        "y_pos",
+    ]
+    available = [c for c in WANTED if c in table.column_names]
+    return [
+        {col: table.column(col)[i].as_py() for col in available}
+        for i in range(len(table))
+    ]
+
+
+def _read_artifact_full_channels(artifact: types.TelemetryArtifact) -> list[dict]:
+    """Read the every channel form the artifact (parquet or json.gz)"""
+
+    if artifact.storage_backend == "local" and artifact.format == "json.gz":
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        with gzip.open(path, "rb") as f:
+            payload = json.loads(f.read().decode("utf-8"))
+        return payload.get("samples", [])
+
+    if artifact.storage_backend == "local" and artifact.format == "parquet":
+        import pyarrow.parquet as pq
+
+        path = Path(settings.telemetry_artifact_dir) / artifact.storage_key
+        if not path.exists():
+            raise types.DataError(f"artifact file not found : {path}")
+        return _parquet_rows(pq.read_parquet(path))
+
+    if artifact.storage_backend == "r2" and artifact.format == "parquet":
+        import boto3
+        import pyarrow.parquet as pq
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=settings.r2_endpoint_url,
+            aws_access_key_id=settings.r2_access_key_id,
+            aws_secret_access_key=settings.r2_secret_access_key,
+            region_name="auto",
+        )
+        obj = client.get_object(
+            Bucket=settings.telemetry_artifact_bucket,
+            Key=artifact.storage_key,
+        )
+        return _parquet_rows(pq.read_table(io.BytesIO(obj["Body"].read())))
+
+    raise types.DataError(
+        f"unsupported artifact: {artifact.storage_backend}/{artifact.format}"
+    )
+
+
+def _to_sample_point(raw: dict) -> types.TelemetrySamplePoint:
+    """Convert one raw artifact row into a validated TelemetrySamplePoint."""
+    throttle = raw.get("throttle", 0.0) or 0.0
+    if throttle <= 1.0:
+        throttle *= 100.0
+
+    return types.TelemetrySamplePoint(
+        distance_m=float(raw.get("distance_m", 0.0) or 0.0),
+        speed_kmh=float(raw.get("speed_kmh", 0.0) or 0.0),
+        throttle_pct=round(throttle, 1),
+        brake=bool(raw.get("brake", False)),
+        gear=int(raw.get("gear", 0) or 0),
+        drs=int(raw.get("drs", 0) or 0),
+        x_pos=raw.get("x_pos"),
+        y_pos=raw.get("y_pos"),
+    )
+
+
+def _resample_telemetry(
+    samples: list[dict], max_points: int
+) -> list[types.TelemetrySamplePoint]:
+    """Downsample a lap to at most max_points points
+
+    Raw telemetry logs once per ~0.3m (~18k points/lap) — too heavy for the
+    API and the UI. We keep the SHAPE of the trace by picking, for each of
+    max_points evenly-spaced distance targets, the sample closest to it.
+    The first and last samples are always kept
+    """
+
+    if not samples:
+        return []
+    if max_points <= 1:
+        return [_to_sample_point(samples[0])]
+    ordered = sorted(samples, key=lambda s: s.get("distance_m", 0.0))
+    if len(ordered) <= max_points:
+        return [_to_sample_point(s) for s in ordered]
+
+    first_d = ordered[0].get("distance_m", 0.0)
+    last_d = ordered[-1].get("distance_m", 0.0)
+    spacing = (last_d - first_d) / (max_points - 1)
+    if spacing <= 0:
+        return [_to_sample_point(p) for p in ordered]
+
+    distances = [s.get("distance_m", 0.0) for s in ordered]
+
+    picked: list[int] = []
+    j = 0
+    for k in range(max_points):
+        target = first_d + spacing * k
+        while j + 1 < len(distances) and abs(distances[j + 1] - target) <= abs(
+            distances[j] - target
+        ):
+            j += 1
+        if not picked or picked[-1] != j:
+            picked.append(j)
+    return [_to_sample_point(ordered[i]) for i in picked]
+
+
+def _compute_trace_stats(
+    samples: list[types.TelemetrySamplePoint],
+) -> tuple[float, int]:
+    if not samples:
+        return 0.0, 0
+
+    total_d = samples[-1].distance_m - samples[0].distance_m
+    if total_d <= 0:
+        return 0.0, 0
+
+    throttle_d = sum(
+        samples[i + 1].distance_m - samples[i].distance_m
+        for i in range(len(samples) - 1)
+        if samples[i].throttle_pct >= 99.0
+    )
+    full_throttle_pct = round(throttle_d / total_d * 100, 1)
+
+    braking = sum(
+        1
+        for i in range(1, len(samples))
+        if samples[i].brake and not samples[i - 1].brake
+    )
+    return full_throttle_pct, braking
+
+
+def telemetry_inspector(
+    inp: types.TelemetryInspectorInput,
+) -> types.TelemetryInspectorResult:
+    """Load the full telemetry for (driver, laps)
+    Flow: find artifact metadata in Postgres -> read channels from storage -> resample -> compute stats.
+    """
+    if not inp.lap_numbers:
+        raise types.DataError("lap_numbers is required for telemetry inspector")
+
+    driver_laps: dict[int, list[int]] = {inp.driver_number: list(inp.lap_numbers)}
+
+    if inp.compare_driver_number is not None:
+        driver_laps.setdefault(inp.compare_driver_number, []).extend(
+            inp.compare_lap_numbers
+        )
+
+    artifacts_by_key: dict[tuple[int, int], types.TelemetryArtifact] = {}
+    for drv_num, laps in driver_laps.items():
+        if not laps:
+            continue
+        for a in get_lap_telemetry_artifacts(
+            types.GetLapTelemetryArtifactsInput(
+                session_key=inp.session_key,
+                driver_number=drv_num,
+                lap_numbers=tuple(laps),
+            )
+        ).artifacts:
+            artifacts_by_key[(a.driver_number, a.lap_number)] = a
+
+    abbrev_map: dict[int, str] = {}
+    with extensions.engine.connect() as conn:
+        drv_rows = (
+            conn.execute(
+                text(
+                    "SELECT driver_number, abbreviation FROM drivers "
+                    "WHERE session_key = :sk AND driver_number = ANY(:dns)"
+                ),
+                {"sk": inp.session_key, "dns": list(driver_laps.keys())},
+            )
+            .mappings()
+            .all()
+        )
+        for r in drv_rows:
+            abbrev_map[r["driver_number"]] = r["abbreviation"]
+
+    traces: list[types.TelemetryLapTrace] = []
+    for drv_num, laps in driver_laps.items():
+        for lap_num in laps:
+            artifact = artifacts_by_key.get((drv_num, lap_num))
+            if artifact is None:
+                continue  # missing lap is skipped; the others may still render
+            raw = _read_artifact_full_channels(artifact)
+            traces.append(
+                types.TelemetryLapTrace(
+                    driver_number=drv_num,
+                    driver_abbreviation=abbrev_map.get(drv_num, "???"),
+                    lap_number=lap_num,
+                    samples=tuple(_resample_telemetry(raw, inp.max_samples_per_lap)),
+                )
+            )
+
+    if not traces:
+        raise types.DataError("no telemetry artifacts found for the requested laps")
+
+    primary = traces[0]
+    full_throttle_pct, braking_zones = _compute_trace_stats(list(primary.samples))
+
+    speed_delta_apex = None
+    if len(traces) >= 2:
+        apex_a = min(
+            (s.speed_kmh for s in traces[0].samples if s.speed_kmh > 0),
+            default=None,
+        )
+        apex_b = min(
+            (s.speed_kmh for s in traces[1].samples if s.speed_kmh > 0),
+            default=None,
+        )
+        if apex_a is not None and apex_b is not None:
+            speed_delta_apex = round(apex_b - apex_a, 2)
+
+    return types.TelemetryInspectorResult(
+        session_key=inp.session_key,
+        traces=tuple(traces),
+        speed_delta_apex_kmh=speed_delta_apex,
+        full_throttle_pct=full_throttle_pct,
+        heavy_braking_zones_count=braking_zones,
+    )
 
 
 def _assess(checks: list[types.EvidenceCheck]) -> types.VerifyEvidenceResult:

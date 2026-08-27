@@ -233,3 +233,356 @@ def test_compute_speed_window_rejects_empty_windows():
         assert "cannot both be empty" in str(exc)
     else:
         raise AssertionError("expected DataError for empty windows")
+
+
+def _make_lap_event(
+    lap_number,
+    lap_time_ms=None,
+    pit_in=False,
+    pit_out=False,
+    rainfall=False,
+    track_status=None,
+    compound="MEDIUM",
+    stint=1,
+):
+    """Helper: build a raw LapEvent without typing every optional field."""
+    return types.LapEvent(
+        lap_number=lap_number,
+        lap_time_ms=lap_time_ms,
+        delta_to_median_ms=None,
+        sector1_ms=None,
+        sector2_ms=None,
+        sector3_ms=None,
+        compound=compound,
+        stint=stint,
+        is_pit_in=pit_in,
+        is_pit_out=pit_out,
+        is_anomaly=False,
+        rainfall=rainfall,
+        track_status=track_status,
+    )
+
+
+def test_detect_lap_anomalies_flags_slow_laps():
+    """A lap 5s off the median is flagged; a 1s lap is fine."""
+    events = [
+        _make_lap_event(1, lap_time_ms=90000),
+        _make_lap_event(2, lap_time_ms=95000),
+        _make_lap_event(3, lap_time_ms=91000),
+    ]
+    flagged = tools._detect_lap_anomalies(events, median_ms=90000)
+    assert [e.is_anomaly for e in flagged] == [False, True, False]
+
+
+def test_detect_lap_anomalies_classifies_pit_stop():
+    events = [_make_lap_event(10, lap_time_ms=115000, pit_in=True)]
+    flagged = tools._detect_lap_anomalies(events, median_ms=90000)
+
+    assert flagged[0].is_anomaly is True
+    assert flagged[0].anomaly_reason == "pit_stop"
+
+
+def test_detect_lap_anomalies_classifies_yellow_flag():
+    """track_status='4' (VSC) explains an off-pace lap."""
+    events = [_make_lap_event(20, lap_time_ms=100000, track_status="4")]
+    flagged = tools._detect_lap_anomalies(events, median_ms=90000)
+
+    assert flagged[0].anomaly_reason == "yellow_flag_vsc"
+
+
+def test_detect_lap_anomalies_classifies_rain_onset():
+    """First wet lap after dry laps is rain_onset."""
+    events = [
+        _make_lap_event(1, lap_time_ms=90000, rainfall=False),
+        _make_lap_event(2, lap_time_ms=95000, rainfall=True),
+    ]
+    flagged = tools._detect_lap_anomalies(events, median_ms=90000)
+
+    assert flagged[1].anomaly_reason == "rain_onset"
+
+
+def test_detect_lap_anomalies_unknown_is_last_resort():
+    """Slow lap with no pit/rain/flag gets the catch-all reason."""
+    events = [_make_lap_event(5, lap_time_ms=95000)]
+    flagged = tools._detect_lap_anomalies(events, median_ms=90000)
+
+    assert flagged[0].is_anomaly is True
+    assert flagged[0].anomaly_reason == "unknown_slowlap"
+
+
+# stint degredation
+
+
+def test_compute_stint_degradation_positive_slope():
+    """+500ms/lap on a perfect line = degradation, no cliff."""
+    laps = [
+        {
+            "lap_number": 5,
+            "lap_time_ms": 90000,
+            "compound": "MEDIUM",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 6,
+            "lap_time_ms": 90500,
+            "compound": "MEDIUM",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 7,
+            "lap_time_ms": 91000,
+            "compound": "MEDIUM",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 8,
+            "lap_time_ms": 91500,
+            "compound": "MEDIUM",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+    ]
+    stints = tools._compute_stint_degradation(laps)
+
+    assert len(stints) == 1
+    assert stints[0].degradation_slope_ms_per_lap == 500.0
+    assert stints[0].cliff_detected is False
+
+
+def test_compute_stint_degradation_detects_cliff():
+    """A lap 5.7s off the clean trend is a cliff at lap 14."""
+    laps = [
+        {
+            "lap_number": 10,
+            "lap_time_ms": 90000,
+            "compound": "SOFT",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 11,
+            "lap_time_ms": 90100,
+            "compound": "SOFT",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 12,
+            "lap_time_ms": 90200,
+            "compound": "SOFT",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 13,
+            "lap_time_ms": 90300,
+            "compound": "SOFT",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 14,
+            "lap_time_ms": 96000,
+            "compound": "SOFT",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+    ]
+    stints = tools._compute_stint_degradation(laps)
+
+    assert len(stints) == 1
+    assert stints[0].cliff_detected is True
+    assert stints[0].cliff_lap == 14
+
+
+def test_compute_stint_degradation_skips_pit_laps():
+    """Pit in/out laps must not corrupt the regression."""
+    laps = [
+        {
+            "lap_number": 20,
+            "lap_time_ms": 90000,
+            "compound": "HARD",
+            "stint": 3,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 21,
+            "lap_time_ms": 110000,
+            "compound": "HARD",
+            "stint": 3,
+            "pit_in_time_ms": 1.0,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 22,
+            "lap_time_ms": 95000,
+            "compound": "HARD",
+            "stint": 3,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": 2.0,
+        },
+        {
+            "lap_number": 23,
+            "lap_time_ms": 90500,
+            "compound": "HARD",
+            "stint": 3,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+    ]
+    stints = tools._compute_stint_degradation(laps)
+
+    assert len(stints) == 1
+    assert stints[0].total_laps == 2
+
+
+def test_compute_stint_degradation_multiple_stints():
+    """Different compound/stints produce separate summaries."""
+    laps = [
+        {
+            "lap_number": 1,
+            "lap_time_ms": 90000,
+            "compound": "SOFT",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 2,
+            "lap_time_ms": 90500,
+            "compound": "SOFT",
+            "stint": 1,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 10,
+            "lap_time_ms": 91000,
+            "compound": "HARD",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+        {
+            "lap_number": 11,
+            "lap_time_ms": 91200,
+            "compound": "HARD",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        },
+    ]
+    stints = tools._compute_stint_degradation(laps)
+
+    assert len(stints) == 2
+    assert stints[0].stint_index == 1
+    assert stints[0].compound == "SOFT"
+    assert stints[1].stint_index == 2
+    assert stints[1].compound == "HARD"
+
+
+# telemetry resampling
+
+
+def test_resample_telemetry_reduces_points():
+    """1000 samples must shrink to <= max_points (max_points=100 here)."""
+    samples = [
+        {
+            "distance_m": i * 1.0,
+            "speed_kmh": 200.0,
+            "throttle": 1.0,
+            "brake": False,
+            "gear": 7,
+            "drs": 1,
+        }
+        for i in range(1000)
+    ]
+    result = tools._resample_telemetry(samples, max_points=100)
+
+    assert len(result) <= 100
+    assert isinstance(result[0], types.TelemetrySamplePoint)
+
+
+def test_resample_telemetry_preserves_first_and_last():
+    """First and last distance must survive the downsample."""
+    samples = [
+        {
+            "distance_m": 0.0,
+            "speed_kmh": 100.0,
+            "throttle": 0.5,
+            "brake": False,
+            "gear": 1,
+            "drs": 0,
+        },
+        {
+            "distance_m": 100.0,
+            "speed_kmh": 200.0,
+            "throttle": 1.0,
+            "brake": False,
+            "gear": 8,
+            "drs": 1,
+        },
+    ]
+    result = tools._resample_telemetry(samples, max_points=600)
+
+    assert len(result) == 2
+    assert result[0].distance_m == 0.0
+    assert result[-1].distance_m == 100.0
+
+
+def test_resample_telemetry_single_point_when_max_points_one():
+    """max_points=1 must not divide by zero — return one point."""
+    samples = [
+        {"distance_m": 0.0, "speed_kmh": 100.0},
+        {"distance_m": 100.0, "speed_kmh": 200.0},
+    ]
+    result = tools._resample_telemetry(samples, max_points=1)
+
+    assert len(result) == 1
+
+
+def test_to_sample_point_scales_throttle():
+    """fastf1 throttle 0.8 must become 80.0%."""
+    raw = {
+        "distance_m": 100.0,
+        "speed_kmh": 250.0,
+        "throttle": 0.8,
+        "brake": False,
+        "gear": 8,
+        "drs": 1,
+    }
+    pt = tools._to_sample_point(raw)
+
+    assert pt.throttle_pct == 80.0
+    assert pt.speed_kmh == 250.0
+    assert pt.gear == 8
+
+
+def test_compute_trace_stats_counts_braking_zones():
+    """Three separate brake presses -> heavy_braking_zones_count == 3."""
+    samples = [
+        types.TelemetrySamplePoint(0.0, 300.0, 100.0, False, 8, 1, None, None),
+        types.TelemetrySamplePoint(100.0, 300.0, 100.0, False, 8, 1, None, None),
+        types.TelemetrySamplePoint(200.0, 100.0, 0.0, True, 3, 0, None, None),
+        types.TelemetrySamplePoint(300.0, 300.0, 100.0, False, 8, 1, None, None),
+        types.TelemetrySamplePoint(400.0, 100.0, 0.0, True, 3, 0, None, None),
+        types.TelemetrySamplePoint(500.0, 300.0, 100.0, False, 8, 1, None, None),
+        types.TelemetrySamplePoint(600.0, 100.0, 0.0, True, 3, 0, None, None),
+    ]
+    throttle_pct, braking_zones = tools._compute_trace_stats(samples)
+
+    assert braking_zones == 3
+    assert throttle_pct > 0

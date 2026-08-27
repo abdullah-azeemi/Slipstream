@@ -317,7 +317,7 @@ def run(question: str, progress: ProgressCallback | None = None) -> types.AgentA
         return types.AgentAnswer(
             question=question,
             intent=routed.intent,
-            answer="I cannot answer that yet. v1 only supports the pit-stop speed question.",
+            answer="I cannot answer that yet. v1 supports pit-stop, lap event, tyre degradation, and telemetry comparison questions.",
             refusals=("unsupported question",),
         )
 
