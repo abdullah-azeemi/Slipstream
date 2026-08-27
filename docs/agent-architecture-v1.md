@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-27 (L24)
+Last updated: 2026-08-27 (L25)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -133,9 +133,13 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Unknown intents and queries missing driver/race/lap/compare-driver produce typed early refusals; any node failure fails closed (dependents get `dependency failed` records, `verify` never runs, answer refused); trace re-sorted to graph order for deterministic output.
   - Commit `2a09e78` "feat(agent): replace fixed pipeline with dynamic ExecutionDAG planner and concurrent runner". Delivery record: `docs/L24-continuation.md`.
 
+- L25 — Visual Thinking Graph UI (reasoning graph canvas).
+  - Files: `apps/frontend/lib/dag-layout.ts` (+ `dag-layout.test.ts`) — pure longest-path layer layout with cycle guard; `types/agent.ts` (`AgentDAGNode`, `AgentDAGEdge`, `AgentNodeState`, `AgentNodeRunInfo`, extended `AgentProgressEvent`); `components/agent/nodes/AgentDAGNode.tsx` (n8n-style dark card, tool icon + Rajdhani title, state ring idle/`running` pulse/done+duration/error); `components/agent/edges/AnimatedLaserEdge.tsx` (bezier stroke keyed off live state: animated amber running, emerald done, red error); `components/agent/ReasoningGraphCanvas.tsx` (React Flow `@xyflow/react@12`, dots background, fitView, `onSelectNode` click hook reserved for L26); `app/agent/page.tsx` dispatches SSE `dag_init`/`node_start`/`node_complete`/`node_error` from the `progress` payloads into per-turn node states and renders the canvas above the chat; `globals.css` (Rajdhani font, `edgeFlow`/`nodeRunningPulse` keyframes, dark xyflow controls).
+  - Node/edge counts shown live in the panel gutter (`6 nodes / 7 edges`).
+  - Commit `19efc48` "feat(ui): add live reasoning-graph DAG canvas with animated execution states". Delivery record: `docs/L25-continuation.md`.
+
 ### Next
 
-- **L25 — Visual Thinking Graph UI**: Build n8n/React Flow interactive reasoning graph canvas with live SSE execution pulses.
 - **L26 — Node Inspector Drawer**: Add click-to-inspect on graph nodes to view executed SQL queries, durations, and structured evidence.
 - **L27 — Rich Multi-Channel Telemetry Visualizations**: Interactive speed/throttle/brake traces, 2D GPS track map heatmaps, and tyre degradation curves.
 
