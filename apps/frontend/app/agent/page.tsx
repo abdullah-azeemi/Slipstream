@@ -26,6 +26,9 @@ import { useEffect, useMemo, useState } from 'react'
 import EvidenceCards from '@/components/agent/EvidenceCards'
 import AgentProgressRail from '@/components/agent/AgentProgressRail'
 import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
+import TelemetryOverlayChart from '@/components/agent/TelemetryOverlayChart'
+import CircuitHeatmap from '@/components/agent/CircuitHeatmap'
+import TyreDegradationChart from '@/components/agent/TyreDegradationChart'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
 import ReasoningGraphCanvas from '@/components/agent/ReasoningGraphCanvas'
@@ -576,6 +579,9 @@ export default function AgentPage() {
                         speedWindow={turn.reply.speed_window}
                       />
                       <AgentSpeedChart speedWindow={turn.reply.speed_window} />
+                      <TelemetryOverlayChart result={turn.reply.telemetry_overlay} />
+                      <CircuitHeatmap result={turn.reply.telemetry_overlay} />
+                      <TyreDegradationChart result={turn.reply.stint_degradation} />
                       <ToolTraceAccordion
                         trace={turn.reply.trace}
                         visibility={turn.reply.trace_visibility}

@@ -494,6 +494,41 @@ def test_compute_stint_degradation_multiple_stints():
     assert stints[1].compound == "HARD"
 
 
+def test_compute_stint_degradation_carries_lap_points():
+    """Every clean lap becomes a (lap_number, tyre_age, lap_time_ms) scatter point."""
+    laps = [
+        {
+            "lap_number": lap_no,
+            "lap_time_ms": 90000 + (lap_no - 20) * 200,
+            "compound": "HARD",
+            "stint": 2,
+            "pit_in_time_ms": None,
+            "pit_out_time_ms": None,
+        }
+        for lap_no in range(20, 24)
+    ]
+    # a pit lap must be excluded from the series
+    laps.append(
+        {
+            "lap_number": 24,
+            "lap_time_ms": 120000,
+            "compound": "HARD",
+            "stint": 2,
+            "pit_in_time_ms": 1.0,
+            "pit_out_time_ms": None,
+        }
+    )
+
+    stints = tools._compute_stint_degradation(laps)
+
+    assert len(stints) == 1
+    points = stints[0].laps
+    assert [p.lap_number for p in points] == [20, 21, 22, 23]
+    assert [p.tyre_age for p in points] == [1, 2, 3, 4]
+    assert points[0].lap_time_ms == 90000
+    assert points[-1].lap_time_ms == 90600
+
+
 # telemetry resampling
 
 

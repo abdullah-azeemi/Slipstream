@@ -176,6 +176,42 @@ def test_topo_sort_rejects_cycle():
         raise AssertionError("expected DataError for a cyclic DAG")
 
 
+def test_compose_carries_chart_payloads(monkeypatch):
+    """telemetry_overlay & stint_degradation come straight from DAG node outputs."""
+    _fake_compose(monkeypatch, "debug")
+    routed = _routed(
+        "telemetry_comparison", target_lap=34, compare_driver_name="Leclerc"
+    )
+    telemetry = types.TelemetryInspectorResult(
+        session_key=1,
+        traces=(),
+        speed_delta_apex_kmh=None,
+        full_throttle_pct=42.5,
+        heavy_braking_zones_count=3,
+    )
+    outputs = {
+        "session": types.ResolvedSession(
+            session_key=1,
+            year=2026,
+            gp_name="Monaco",
+            session_type=types.SessionType.RACE,
+        ),
+        "driver": types.ResolvedDriver(
+            driver_number=55, abbreviation="SAI", full_name="Carlos Sainz"
+        ),
+        "driver_cmp": types.ResolvedDriver(
+            driver_number=16, abbreviation="LEC", full_name="Charles Leclerc"
+        ),
+        "telemetry": telemetry,
+        "verify": types.VerifyEvidenceResult(passed=True, checks=()),
+    }
+
+    answer = orchestrator._compose("q", routed, outputs, set(), ())
+
+    assert answer.telemetry_overlay is telemetry
+    assert answer.stint_degradation is None
+
+
 def test_execute_dag_runs_independent_nodes_in_parallel(monkeypatch):
     """Two root nodes must OVERLAP in time — that is the concurrency proof."""
     completion_lock = __import__("threading").Lock()

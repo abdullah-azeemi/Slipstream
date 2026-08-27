@@ -324,6 +324,16 @@ class StintSummary:
     degradation_slope_ms_per_lap: float
     cliff_detected: bool
     cliff_lap: int | None
+    laps: tuple["StintLapPoint", ...] = ()
+
+
+@dataclass(frozen=True)
+class StintLapPoint:
+    """One clean lap inside a stint — the raw (tyre_age, lap_time) scatter point."""
+
+    lap_number: int
+    tyre_age: int
+    lap_time_ms: int
 
 
 @dataclass(frozen=True)
@@ -412,5 +422,7 @@ class AgentAnswer:
     pit_stop: PitStop | None = None
     speed_window: SpeedWindowResult | None = None
     evidence: VerifyEvidenceResult | None = None
+    telemetry_overlay: TelemetryInspectorResult | None = None
+    stint_degradation: StintDegradationResult | None = None
     trace: tuple[ToolCallRecord, ...] = ()
     cost_usd: float = 0.0

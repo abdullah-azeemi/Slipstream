@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-27 (L26)
+Last updated: 2026-08-27 (L27)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -144,9 +144,16 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Verify: `pnpm lint` clean, `pnpm test` 24 passed (+3), `pnpm build` compiles.
   - Delivery record: `docs/L26-continuation.md`.
 
+- L27 — Rich telemetry, circuit & tyre-degradation visualizations.
+  - Backend: `types.py` (`StintLapPoint`, `StintSummary.laps`, `AgentAnswer.telemetry_overlay` / `AgentAnswer.stint_degradation`), `tools.py` (`_compute_stint_degradation` now stamps per-lap (lap_number, tyre_age, lap_time_ms) scatter points), `orchestrator.py` `_compose` attaches the `telemetry`/`stints` node outputs straight onto the answer so the `final` SSE payload carries chart data. Tests +2 → 119 backend.
+  - Frontend: `types/agent.ts` mirrors `TelemetryInspectorResult`/`TelemetryLapTrace`/`TelemetrySamplePoint`/`StintDegradationResult`/`StintSummary`/`StintLapPoint`; `lib/chart-data.ts` (+ `chart-data.test.ts`) — pure `normalizeCircuitPoints` (aspect-preserving SVG box, null-safe), `speedGradientColor` (red→gold→green), `degradationFit` (projects the OLS line onto the tyre-age axis); `components/agent/TelemetryOverlayChart.tsx` (dual-lap speed overlay + synchronized throttle/brake/gear/DRS mini channels over lap distance), `components/agent/CircuitHeatmap.tsx` (SVG circuit polyline colored by speed with red braking dots + gradient legend), `components/agent/TyreDegradationChart.tsx` (per-stint scatter of lap time vs tyre age with dashed OLS fit lines and red cliff reference lines); `app/agent/page.tsx` renders all three in the reply block.
+  - Verify: ruff clean, `pytest apps/backend/` 119 passed; `pnpm lint` clean, `pnpm test` 30 passed (+6), `pnpm build` compiles.
+  - Delivery record: `docs/L27-continuation.md`.
+
 ### Next
 
-- **L27 — Rich Multi-Channel Telemetry Visualizations**: Interactive speed/throttle/brake traces, 2D GPS track map heatmaps, and tyre degradation curves.
+- **L27 is the v1 feature cap** — the §8 plan (L23–L27) is complete.
+- Optional stretch (not scheduled): LLM-generated DAGs per intent (§4.1, `build_dag` currently deterministic), persisting chart payloads with conversations (L16 persistence currently stores only text messages), sending the SSE `done` terminal event (§5 mentions it but the stream currently ends on `final`).
 
 ---
 

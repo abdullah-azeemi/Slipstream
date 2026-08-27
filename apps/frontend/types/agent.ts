@@ -66,6 +66,8 @@ export interface AgentAnswer {
   pit_stop?: PitStop | null
   speed_window?: SpeedWindowResult | null
   evidence?: VerifyEvidenceResult | null
+  telemetry_overlay?: TelemetryInspectorResult | null
+  stint_degradation?: StintDegradationResult | null
   trace: ToolCallRecord[]
   conversation_id?: number | null
   trace_visibility?: 'full' | 'evidence' | string
@@ -146,4 +148,59 @@ export interface AgentNodeRunInfo {
   duration_ms?: number | null
   summary?: string | null
   error?: string | null
+}
+
+// ── Rich telemetry & circuit visualizations (L27) ──
+
+export interface TelemetrySamplePoint {
+  distance_m: number
+  speed_kmh: number
+  throttle_pct: number
+  brake: boolean
+  gear: number
+  drs: number
+  x_pos: number | null
+  y_pos: number | null
+}
+
+export interface TelemetryLapTrace {
+  driver_number: number
+  driver_abbreviation: string
+  lap_number: number
+  samples: TelemetrySamplePoint[]
+}
+
+export interface TelemetryInspectorResult {
+  session_key: number
+  traces: TelemetryLapTrace[]
+  speed_delta_apex_kmh: number | null
+  full_throttle_pct: number
+  heavy_braking_zones_count: number
+}
+
+export interface StintLapPoint {
+  lap_number: number
+  tyre_age: number
+  lap_time_ms: number
+}
+
+export interface StintSummary {
+  stint_index: number
+  compound: string
+  start_lap: number
+  end_lap: number
+  total_laps: number
+  initial_pace_ms: number
+  final_pace_ms: number
+  degradation_slope_ms_per_lap: number
+  cliff_detected: boolean
+  cliff_lap: number | null
+  laps: StintLapPoint[]
+}
+
+export interface StintDegradationResult {
+  session_key: number
+  driver_number: number
+  stints: StintSummary[]
+  worst_degradation_stint: number | null
 }

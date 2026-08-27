@@ -653,12 +653,22 @@ def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
         residuals = {x: y - (alpha + beta * x) for x, y in zip(xs, ys)}
         cliff_lap = _find_cliff_lap(clean, residuals)
 
+        start_lap = clean[0]["lap_number"]
+        points = tuple(
+            types.StintLapPoint(
+                lap_number=lap["lap_number"],
+                tyre_age=lap["lap_number"] - start_lap + 1,
+                lap_time_ms=int(lap["lap_time_ms"]),
+            )
+            for lap in clean
+        )
+
         compound = clean[0]["compound"] or "UNKNOWN"
         summaries.append(
             types.StintSummary(
                 stint_index=stint_idx,
                 compound=compound,
-                start_lap=clean[0]["lap_number"],
+                start_lap=start_lap,
                 end_lap=clean[-1]["lap_number"],
                 total_laps=len(clean),
                 initial_pace_ms=round(alpha),
@@ -666,6 +676,7 @@ def _compute_stint_degradation(laps: list[dict]) -> list[types.StintSummary]:
                 degradation_slope_ms_per_lap=round(beta, 2),
                 cliff_detected=cliff_lap is not None,
                 cliff_lap=cliff_lap,
+                laps=points,
             )
         )
     return summaries

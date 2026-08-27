@@ -554,6 +554,8 @@ def _compose(
         pit_stop=pit_stop,
         speed_window=outputs.get("window"),
         evidence=verify,
+        telemetry_overlay=outputs.get("telemetry"),
+        stint_degradation=outputs.get("stints"),
         trace=trace,
         cost_usd=compose_cost,
     )
