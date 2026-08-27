@@ -28,9 +28,13 @@ import AgentProgressRail from '@/components/agent/AgentProgressRail'
 import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
+import ReasoningGraphCanvas from '@/components/agent/ReasoningGraphCanvas'
 import { agentApi, API_URL } from '@/lib/api'
 import {
   AgentAnswer,
+  AgentDAGEdge,
+  AgentDAGNode,
+  AgentNodeRunInfo,
   AgentProgressEvent,
   AdminStats,
   ConversationSummary,
@@ -49,6 +53,9 @@ type ChatTurn = {
   reply: AgentAnswer | null
   error: string | null
   progress: AgentProgressEvent[]
+  nodes: AgentDAGNode[]
+  edges: AgentDAGEdge[]
+  nodeStates: Record<string, AgentNodeRunInfo>
 }
 
 const SYSTEM_MODULES: Array<[string, LucideIcon, boolean]> = [
@@ -102,6 +109,30 @@ function MiniMetric({
   )
 }
 
+function applyNodeEvent(
+  states: Record<string, AgentNodeRunInfo>,
+  event: AgentProgressEvent
+): Record<string, AgentNodeRunInfo> {
+  if (!event.node_id) return states
+  const nodeId = event.node_id
+  if (event.type === 'node_start') {
+    return { ...states, [nodeId]: { state: 'running' } }
+  }
+  if (event.type === 'node_complete') {
+    return {
+      ...states,
+      [nodeId]: { state: 'done', duration_ms: event.duration_ms, summary: event.summary },
+    }
+  }
+  if (event.type === 'node_error') {
+    return {
+      ...states,
+      [nodeId]: { state: 'error', duration_ms: event.duration_ms, error: event.error },
+    }
+  }
+  return states
+}
+
 export default function AgentPage() {
   const { getToken } = useAuth()
 
@@ -116,6 +147,10 @@ export default function AgentPage() {
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
+    [turns]
+  )
+  const latestDagTurn = useMemo(
+    () => [...turns].reverse().find((turn) => turn.nodes.length > 0) ?? null,
     [turns]
   )
   const latestError = useMemo(
@@ -163,6 +198,9 @@ export default function AgentPage() {
               : null,
             error: null,
             progress: [],
+            nodes: [],
+            edges: [],
+            nodeStates: {},
           })
         }
       }
@@ -189,7 +227,7 @@ export default function AgentPage() {
     const id = Date.now()
     setLoadingQuestion(trimmed)
     setQuestion('')
-    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [] }])
+    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [], nodes: [], edges: [], nodeStates: {} }])
 
     try {
       const token = await getToken()
@@ -235,10 +273,23 @@ export default function AgentPage() {
 
         const payload = JSON.parse(dataLine)
         if (event === 'progress') {
+          const p = payload as AgentProgressEvent
           setTurns((current) =>
             current.map((turn) =>
               turn.id === id
-                ? { ...turn, progress: [...turn.progress, payload as AgentProgressEvent] }
+                ? {
+                    ...turn,
+                    progress: [...turn.progress, p],
+                    nodes:
+                      p.type === 'dag_init' && Array.isArray(p.nodes)
+                        ? (p.nodes as AgentDAGNode[])
+                        : turn.nodes,
+                    edges:
+                      p.type === 'dag_init' && Array.isArray(p.edges)
+                        ? (p.edges as AgentDAGEdge[])
+                        : turn.edges,
+                    nodeStates: applyNodeEvent(turn.nodeStates, p),
+                  }
                 : turn
             )
           )
@@ -422,7 +473,10 @@ export default function AgentPage() {
           />
 
           <div className="border-b border-slate-200 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            &gt; resolve race --&gt; identify driver --&gt; load telemetry --&gt; verify evidence
+            &gt; resolve race --&gt;
+            {latestDagTurn
+              ? `${latestDagTurn.nodes.length} nodes / ${latestDagTurn.edges.length} edges`
+              : ' identify driver --&gt; verify evidence'}
           </div>
 
           <div className="grid min-h-[540px] grid-rows-[1fr_auto]">
@@ -451,6 +505,14 @@ export default function AgentPage() {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {latestDagTurn && (
+                <ReasoningGraphCanvas
+                  nodes={latestDagTurn.nodes}
+                  edges={latestDagTurn.edges}
+                  states={latestDagTurn.nodeStates}
+                />
               )}
 
               {turns.map((turn) => (

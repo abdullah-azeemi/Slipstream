@@ -78,6 +78,11 @@ export interface AgentProgressEvent {
   status: 'running' | 'ok' | 'error' | string
   label: string
   duration_ms?: number | null
+  node_id?: string
+  nodes?: AgentDAGNode[]
+  edges?: AgentDAGEdge[]
+  summary?: string | null
+  error?: string | null
 }
 
 // ── Conversation persistence types (L16) ──────────────────
@@ -114,4 +119,30 @@ export interface AdminStats {
   total_cost_usd: number
   completed: number
   refused: number
+}
+
+// ── Dynamic DAG visualization (L25) ──
+
+export interface AgentDAGNode {
+  id: string
+  tool_name: string
+  label: string
+  description?: string | null
+  depends_on: string[]
+  input_params?: Record<string, unknown>
+}
+
+export interface AgentDAGEdge {
+  source: string
+  target: string
+  label?: string | null
+}
+
+export type AgentNodeState = 'idle' | 'running' | 'done' | 'error'
+
+export interface AgentNodeRunInfo {
+  state: AgentNodeState
+  duration_ms?: number | null
+  summary?: string | null
+  error?: string | null
 }

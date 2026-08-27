@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -66,6 +66,7 @@ main.landing {
 /* ── Typography ── */
 .mono    { font-family: 'JetBrains Mono', monospace; }
 .display { font-family: 'Inter', sans-serif; }
+.rajdhani { font-family: 'Rajdhani', sans-serif; }
 
 .page-title {
   font-family: 'Inter', sans-serif;
@@ -326,3 +327,38 @@ main.landing {
   }
   .layout-wrapper { padding: 8px 8px 24px; }
 }
+
+/* ── L25 reasoning graph canvas ── */
+@keyframes graphEdgeFlow {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+.edge-laser { fill: none; stroke-linecap: round; }
+.edge-laser.edge-idle { stroke: #52525b; stroke-width: 2; }
+.edge-laser.edge-running {
+  stroke: #f59e0b;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.7));
+  animation: graphEdgeFlow 0.7s linear infinite;
+}
+.edge-laser.edge-done {
+  stroke: #10b981;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.5));
+}
+.edge-laser.edge-error { stroke: #e11d48; stroke-width: 2.5; }
+
+@keyframes nodeRunningPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.45); }
+  50% { box-shadow: 0 0 0 9px rgba(255, 215, 0, 0); }
+}
+.agent-node-running { animation: nodeRunningPulse 1.15s ease-in-out infinite; }
+
+.react-flow__controls button {
+  background: #18181b;
+  color: #e4e4e7;
+  border-bottom: 1px solid #27272a;
+}
+.react-flow__controls button:hover { background: #26262b; }
