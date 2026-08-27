@@ -29,6 +29,8 @@ import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
 import ReasoningGraphCanvas from '@/components/agent/ReasoningGraphCanvas'
+import NodeInspectorDrawer from '@/components/agent/NodeInspectorDrawer'
+import { buildNodeInspectorView, type NodeInspectorView } from '@/lib/node-inspector'
 import { agentApi, API_URL } from '@/lib/api'
 import {
   AgentAnswer,
@@ -144,6 +146,7 @@ export default function AgentPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [usage, setUsage] = useState<UsageInfo| null>(null)
   const [adminStats, setAdminStats] = useState<AdminStats| null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
@@ -153,6 +156,17 @@ export default function AgentPage() {
     () => [...turns].reverse().find((turn) => turn.nodes.length > 0) ?? null,
     [turns]
   )
+  const selectedNodeView = useMemo<NodeInspectorView | null>(() => {
+    if (!selectedNodeId) return null
+    for (const turn of [...turns].reverse()) {
+      const node = turn.nodes.find((n) => n.id === selectedNodeId)
+      if (!node) continue
+      const info = turn.nodeStates[selectedNodeId] ?? { state: 'idle' }
+      const call = turn.reply?.trace.find((t) => t.node_id === selectedNodeId) ?? null
+      return buildNodeInspectorView(node, info, call)
+    }
+    return null
+  }, [turns, selectedNodeId])
   const latestError = useMemo(
     () => [...turns].reverse().find((turn) => turn.error)?.error ?? null,
     [turns]
@@ -508,11 +522,18 @@ export default function AgentPage() {
               )}
 
               {latestDagTurn && (
-                <ReasoningGraphCanvas
-                  nodes={latestDagTurn.nodes}
-                  edges={latestDagTurn.edges}
-                  states={latestDagTurn.nodeStates}
-                />
+                <div className="relative">
+                  <ReasoningGraphCanvas
+                    nodes={latestDagTurn.nodes}
+                    edges={latestDagTurn.edges}
+                    states={latestDagTurn.nodeStates}
+                    onSelectNode={setSelectedNodeId}
+                  />
+                  <NodeInspectorDrawer
+                    view={selectedNodeView}
+                    onClose={() => setSelectedNodeId(null)}
+                  />
+                </div>
               )}
 
               {turns.map((turn) => (

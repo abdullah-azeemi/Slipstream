@@ -53,6 +53,7 @@ export interface ToolCallRecord {
   output_summary?: string | null
   error?: string | null
   duration_ms?: number | null
+  node_id?: string | null
 }
 
 export interface AgentAnswer {

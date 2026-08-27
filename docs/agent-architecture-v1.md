@@ -1,6 +1,6 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-27 (L25)
+Last updated: 2026-08-27 (L26)
 
 Status: planning document. Do not implement from memory; use this file as the step-by-step guide.
 
@@ -138,9 +138,14 @@ Live progress log. Each lesson is a small, reviewed, committed step. Work procee
   - Node/edge counts shown live in the panel gutter (`6 nodes / 7 edges`).
   - Commit `19efc48` "feat(ui): add live reasoning-graph DAG canvas with animated execution states". Delivery record: `docs/L25-continuation.md`.
 
+- L26 — Node Inspector Drawer & query traces.
+  - Files: `apps/frontend/types/agent.ts` (`ToolCallRecord.node_id` — backend already emits it via `asdict`, so trace records join 1:1 to DAG nodes); `apps/frontend/lib/node-inspector.ts` (+ `node-inspector.test.ts`) — pure `buildNodeInspectorView(node, info, call)` view-model helper, null-safe; `apps/frontend/components/agent/NodeInspectorDrawer.tsx` (dark slide-over overlay inside the canvas `relative` wrapper: tool identity + state badge + duration, `depends on` chips, query/payload from `input_summary`, evidence/output from `output_summary`, red error block); `app/agent/page.tsx` (`selectedNodeId` state, `selectedNodeView` memo scanning turns newest-first, `onSelectNode={setSelectedNodeId}`, drawer rendered over the canvas).
+  - Behavior: clicking a node opens per-node SQL query/storage key and structured input/output evidence per §6.3; closing returns to the graph.
+  - Verify: `pnpm lint` clean, `pnpm test` 24 passed (+3), `pnpm build` compiles.
+  - Delivery record: `docs/L26-continuation.md`.
+
 ### Next
 
-- **L26 — Node Inspector Drawer**: Add click-to-inspect on graph nodes to view executed SQL queries, durations, and structured evidence.
 - **L27 — Rich Multi-Channel Telemetry Visualizations**: Interactive speed/throttle/brake traces, 2D GPS track map heatmaps, and tyre degradation curves.
 
 ---
