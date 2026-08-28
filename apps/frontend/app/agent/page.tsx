@@ -22,7 +22,9 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type React from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import EvidenceCards from '@/components/agent/EvidenceCards'
 import AgentProgressRail from '@/components/agent/AgentProgressRail'
 import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
@@ -34,6 +36,7 @@ import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
 import ReasoningGraphCanvas from '@/components/agent/ReasoningGraphCanvas'
 import NodeInspectorDrawer from '@/components/agent/NodeInspectorDrawer'
 import { buildNodeInspectorView, type NodeInspectorView } from '@/lib/node-inspector'
+import { topoRankMap } from '@/lib/dag-layout'
 import { agentApi, API_URL } from '@/lib/api'
 import {
   AgentAnswer,
@@ -51,6 +54,8 @@ const SUGGESTED_QUESTIONS = [
   "What was Verstappen's pit stop speed in Monaco 2026?",
   'On which lap did Sainz pit in Monaco 2026 and what was his avg speed before and after?',
 ]
+
+type CanvasPhase = 'idle' | 'running' | 'completing' | 'minimap' | 'expanded'
 
 type ChatTurn = {
   id: number
@@ -121,7 +126,10 @@ function applyNodeEvent(
   if (!event.node_id) return states
   const nodeId = event.node_id
   if (event.type === 'node_start') {
-    return { ...states, [nodeId]: { state: 'running' } }
+    return {
+      ...states,
+      [nodeId]: { state: 'running', query_preview: event.query_preview ?? undefined },
+    }
   }
   if (event.type === 'node_complete') {
     return {
@@ -147,9 +155,12 @@ export default function AgentPage() {
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [usage, setUsage] = useState<UsageInfo| null>(null)
-  const [adminStats, setAdminStats] = useState<AdminStats| null>(null)
+  const [usage, setUsage] = useState<UsageInfo | null>(null)
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [canvasPhase, setCanvasPhase] = useState<CanvasPhase>('idle')
+  const [animationIndex, setAnimationIndex] = useState<Record<string, number>>({})
+  const dissolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
@@ -182,6 +193,8 @@ export default function AgentPage() {
   const activeTurnHasProgress = turns.some(
     (turn) => turn.question === loadingQuestion && !turn.reply && turn.progress.length > 0
   )
+  const canvasVisible =
+    canvasPhase === 'running' || canvasPhase === 'completing' || canvasPhase === 'expanded'
 
   // Load conversation list on mount.
   useEffect(() => {
@@ -195,6 +208,12 @@ export default function AgentPage() {
   useEffect(() => {
     agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
   }, [getToken])
+
+  useEffect(() => {
+    return () => {
+      if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
+    }
+  }, [])
 
   // Load a past conversation's messages into the turn view.
   async function loadConversation(convId: number) {
@@ -223,6 +242,8 @@ export default function AgentPage() {
       }
       setTurns(loaded)
       setConversationId(convId)
+      setCanvasPhase('idle')
+      if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
     } catch {
       // Silently fail — conversation list stays visible.
     } finally {
@@ -234,6 +255,9 @@ export default function AgentPage() {
   function newConversation() {
     setTurns([])
     setConversationId(null)
+    setCanvasPhase('idle')
+    setSelectedNodeId(null)
+    if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
   }
 
   async function ask(e: React.FormEvent) {
@@ -245,6 +269,7 @@ export default function AgentPage() {
     setLoadingQuestion(trimmed)
     setQuestion('')
     setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [], nodes: [], edges: [], nodeStates: {} }])
+    setCanvasPhase('running')
 
     try {
       const token = await getToken()
@@ -291,6 +316,9 @@ export default function AgentPage() {
         const payload = JSON.parse(dataLine)
         if (event === 'progress') {
           const p = payload as AgentProgressEvent
+          if (p.type === 'dag_init' && Array.isArray(p.nodes)) {
+            setAnimationIndex(topoRankMap(p.nodes as AgentDAGNode[]))
+          }
           setTurns((current) =>
             current.map((turn) =>
               turn.id === id
@@ -318,6 +346,9 @@ export default function AgentPage() {
               turn.id === id ? { ...turn, reply: streamResult.reply, error: null } : turn
             )
           )
+          setCanvasPhase('completing')
+          if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
+          dissolveTimer.current = setTimeout(() => setCanvasPhase('minimap'), 700)
         }
         if (event === 'error') {
           throw new Error(payload?.error ?? 'Agent stream failed')
@@ -352,6 +383,7 @@ export default function AgentPage() {
       setTurns((current) =>
         current.map((turn) => (turn.id === id ? { ...turn, reply: null, error: message } : turn))
       )
+      setCanvasPhase('minimap')
     } finally {
       setLoadingQuestion(null)
     }
@@ -363,7 +395,13 @@ export default function AgentPage() {
 
   return (
     <div className="min-h-[calc(100vh-140px)] bg-[#f7f8fb] bg-[linear-gradient(#e7eaf0_1px,transparent_1px),linear-gradient(90deg,#e7eaf0_1px,transparent_1px)] bg-[size:18px_18px] px-3 py-4 text-slate-900 sm:px-5 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
+      <div
+        className={`mx-auto grid max-w-[100%] gap-0 transition-all duration-500 ${
+          canvasVisible
+            ? 'grid-cols-[280px_1fr]'
+            : 'lg:grid-cols-[280px_minmax(0,1fr)_300px]'
+        }`}
+      >
         <section className="border border-slate-200 bg-white/82 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           <PanelHeader
             eyebrow="Orchestrator_v1"
@@ -477,100 +515,163 @@ export default function AgentPage() {
           </div>
         </section>
 
-        <section className="min-w-0 border border-slate-200 bg-white/76 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-          <PanelHeader
-            eyebrow="Dag_visualizer"
-            title="Race question pipeline"
-            action={
-              <div className="flex items-center gap-2 text-slate-400">
-                <Gauge className="h-3.5 w-3.5" />
-                <Braces className="h-3.5 w-3.5" />
+        <section className="min-w-0 flex flex-col" style={{ minHeight: 'calc(100vh - 140px)' }}>
+          {/* Center panel header — shown on idle */}
+          {canvasPhase === 'idle' && (
+            <>
+              <PanelHeader
+                eyebrow="Dag_visualizer"
+                title="Race question pipeline"
+                action={
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Gauge className="h-3.5 w-3.5" />
+                    <Braces className="h-3.5 w-3.5" />
+                  </div>
+                }
+              />
+              <div className="border-b border-slate-200 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                &gt; resolve race --&gt;
+                {latestDagTurn
+                  ? `${latestDagTurn.nodes.length} nodes / ${latestDagTurn.edges.length} edges`
+                  : ' identify driver --&gt; verify evidence'}
               </div>
-            }
-          />
+            </>
+          )}
 
-          <div className="border-b border-slate-200 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            &gt; resolve race --&gt;
-            {latestDagTurn
-              ? `${latestDagTurn.nodes.length} nodes / ${latestDagTurn.edges.length} edges`
-              : ' identify driver --&gt; verify evidence'}
-          </div>
+          {/* Breadcrumb trail — shown during running */}
+          {(canvasPhase === 'running' || canvasPhase === 'completing') && latestDagTurn && (
+            <div className="overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white px-4 py-2 font-mono text-[10px] uppercase tracking-[0.06em] text-slate-400">
+              {latestDagTurn.nodes
+                .filter((n) => latestDagTurn.nodeStates[n.id]?.state === 'done')
+                .map((n) => n.tool_name.replace(/_/g, ' ').toUpperCase())
+                .join(' › ')}
+              {loadingQuestion && <span className="ml-2 animate-pulse text-amber-500">›</span>}
+            </div>
+          )}
 
-          <div className="grid min-h-[540px] grid-rows-[1fr_auto]">
-            <div className="space-y-5 overflow-hidden p-4 sm:p-6">
-              {turns.length === 0 && !loadingQuestion && (
-                <div className="grid h-full place-items-center">
-                  <div className="w-full max-w-xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-                    <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-rose-500">
-                      <Zap className="h-3.5 w-3.5" />
-                      Strategy bot listening
+          {/* FULL CANVAS — running/completing/expanded phases */}
+          {latestDagTurn && canvasVisible && (
+            <div
+              className={`relative flex-1 ${
+                canvasPhase === 'completing' ? 'canvas-dissolving' : ''
+              }`}
+              style={{ minHeight: canvasPhase === 'expanded' ? '80vh' : 'calc(100vh - 200px)' }}
+            >
+              {canvasPhase === 'expanded' && (
+                <button
+                  onClick={() => setCanvasPhase('minimap')}
+                  className="absolute right-3 top-3 z-10 flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
+                  title="Collapse reasoning graph"
+                >
+                  collapse
+                </button>
+              )}
+              <ReasoningGraphCanvas
+                nodes={latestDagTurn.nodes}
+                edges={latestDagTurn.edges}
+                states={latestDagTurn.nodeStates}
+                onSelectNode={setSelectedNodeId}
+                phase={canvasPhase === 'expanded' ? 'expanded' : 'running'}
+                animationIndex={animationIndex}
+              />
+              <NodeInspectorDrawer
+                view={selectedNodeView}
+                onClose={() => setSelectedNodeId(null)}
+              />
+            </div>
+          )}
+
+          {/* MINIMAP STRIP — after canvas dissolves */}
+          {latestDagTurn && canvasPhase === 'minimap' && (
+            <div
+              className="relative cursor-pointer border-b border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100"
+              style={{ height: '150px' }}
+              onClick={() => setCanvasPhase('expanded')}
+              title="Click to re-expand reasoning graph"
+            >
+              <ReasoningGraphCanvas
+                nodes={latestDagTurn.nodes}
+                edges={latestDagTurn.edges}
+                states={latestDagTurn.nodeStates}
+                onSelectNode={() => {}}
+                phase="minimap"
+                animationIndex={animationIndex}
+              />
+              {/* Overlay label */}
+              <div className="absolute bottom-2 right-3 rounded border border-slate-200 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 shadow-sm">
+                {latestDagTurn.nodes.length} nodes · {latestDagTurn.edges.length} edges · Click to
+                expand
+              </div>
+            </div>
+          )}
+
+          {/* CONVERSATION TURNS — shown in idle and minimap phases */}
+          <div
+            className={`flex-1 space-y-5 overflow-y-auto p-4 sm:p-6 ${
+              (canvasPhase === 'running' || canvasPhase === 'completing') ? 'hidden' : 'block'
+            }`}
+          >
+            {turns.length === 0 && !loadingQuestion && canvasPhase === 'idle' && (
+              <div className="grid h-full place-items-center">
+                <div className="w-full max-w-xl border border-slate-200 bg-white/90 p-5 shadow-sm">
+                  <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-rose-500">
+                    <Zap className="h-3.5 w-3.5" />
+                    Strategy bot listening
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    Ask for a race, driver, pit stop, and speed comparison. The agent will keep
+                    the math in deterministic tools and only use the model to route and explain.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {SUGGESTED_QUESTIONS.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => fillSuggestion(q)}
+                        className="border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {turns.map((turn) => (
+              <div key={turn.id} className="space-y-3">
+                <div className="flex justify-end">
+                  <div className="max-w-[92%] border border-slate-300 bg-white px-4 py-3 shadow-sm sm:max-w-[78%]">
+                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                      User input
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      Ask for a race, driver, pit stop, and speed comparison. The agent will keep
-                      the math in deterministic tools and only use the model to route and explain.
+                    <p className="text-sm font-semibold leading-6 text-slate-800">
+                      {turn.question}
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {SUGGESTED_QUESTIONS.map((q) => (
-                        <button
-                          key={q}
-                          onClick={() => fillSuggestion(q)}
-                          className="border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
-              )}
 
-              {latestDagTurn && (
-                <div className="relative">
-                  <ReasoningGraphCanvas
-                    nodes={latestDagTurn.nodes}
-                    edges={latestDagTurn.edges}
-                    states={latestDagTurn.nodeStates}
-                    onSelectNode={setSelectedNodeId}
-                  />
-                  <NodeInspectorDrawer
-                    view={selectedNodeView}
-                    onClose={() => setSelectedNodeId(null)}
-                  />
-                </div>
-              )}
-
-              {turns.map((turn) => (
-                <div key={turn.id} className="space-y-3">
-                  <div className="flex justify-end">
-                    <div className="max-w-[92%] border border-slate-300 bg-white px-4 py-3 shadow-sm sm:max-w-[78%]">
-                      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                        User input
-                      </div>
-                      <p className="text-sm font-semibold leading-6 text-slate-800">
-                        {turn.question}
-                      </p>
-                    </div>
-                  </div>
-
-                  {turn.reply && (
-                    <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4 text-rose-500" />
-                          <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                            Strategy_bot
-                          </span>
-                          <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-600">
-                            processed
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          intent: {turn.reply.intent}
+                {turn.reply && (
+                  <div className="answer-reveal border-l-2 border-rose-500 bg-white/90 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-4 w-4 text-rose-500" />
+                        <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                          Strategy_bot
+                        </span>
+                        <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-600">
+                          processed
                         </span>
                       </div>
-                      <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        intent: {turn.reply.intent}
+                      </span>
+                    </div>
+                    <div className="pitwall-prose px-4 py-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {turn.reply.answer}
-                      </p>
+                      </ReactMarkdown>
+                    </div>
+                    <div className="space-y-4 px-4 pb-4">
                       <RefusalBanner refusals={turn.reply.refusals} />
                       <EvidenceCards
                         session={turn.reply.session}
@@ -587,184 +688,194 @@ export default function AgentPage() {
                         visibility={turn.reply.trace_visibility}
                       />
                     </div>
-                  )}
-
-                  {!turn.reply && !turn.error && turn.progress.length > 0 && (
-                    <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
-                      <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                        <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                        Running agent pipeline
-                      </div>
-                      <AgentProgressRail events={turn.progress} />
-                    </div>
-                  )}
-
-                  {turn.error && (
-                    <div className="border-l-2 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                      {turn.error}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {loadingQuestion && !activeTurnHasProgress && (
-                <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
-                  <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                    Synthesizing weather delta with lap history
                   </div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                    {['Resolve session', 'Read telemetry', 'Verify result'].map((step) => (
-                      <div key={step} className="h-16 animate-pulse border border-slate-200 bg-slate-50 p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                          {step}
-                        </div>
-                        <div className="mt-3 h-1.5 w-2/3 bg-rose-200" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            <form onSubmit={ask} className="border-t border-slate-200 bg-white/94 p-3">
-              <div className="flex gap-2">
-                <input
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Calculate optimal pit window given incoming rain in 12 mins..."
-                  disabled={Boolean(loadingQuestion)}
-                  className="min-w-0 flex-1 border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-[12px] placeholder:font-semibold placeholder:text-slate-400 focus:border-rose-400 focus:bg-white"
-                />
-                <button
-                  type="submit"
-                  disabled={Boolean(loadingQuestion) || !question.trim()}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center bg-rose-600 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  aria-label="Send question"
-                  title="Send question"
-                >
-                  {loadingQuestion ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </button>
+                {!turn.reply && !turn.error && turn.progress.length > 0 && (
+                  <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
+                    <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                      Running agent pipeline
+                    </div>
+                    <AgentProgressRail events={turn.progress} />
+                  </div>
+                )}
+
+                {turn.error && (
+                  <div className="border-l-2 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                    {turn.error}
+                  </div>
+                )}
               </div>
-            </form>
+            ))}
+
+            {loadingQuestion && !activeTurnHasProgress && !latestDagTurn && (
+              <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
+                <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                  Synthesizing weather delta with lap history
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {['Resolve session', 'Read telemetry', 'Verify result'].map((step) => (
+                    <div key={step} className="h-16 animate-pulse border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                        {step}
+                      </div>
+                      <div className="mt-3 h-1.5 w-2/3 bg-rose-200" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Input form */}
+          <form onSubmit={ask} className="border-t border-slate-200 bg-white/94 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-rose-500">
+                Strategy_Bot Listening
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="In British GP 2024, when did Carlos pit?"
+                disabled={Boolean(loadingQuestion)}
+                className="min-w-0 flex-1 border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-[12px] placeholder:font-semibold placeholder:text-slate-400 focus:border-rose-400 focus:bg-white"
+              />
+              <button
+                type="submit"
+                disabled={Boolean(loadingQuestion) || !question.trim()}
+                className="flex h-12 w-12 shrink-0 items-center justify-center bg-rose-600 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                aria-label="Send question"
+                title="Send question"
+              >
+                {loadingQuestion ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </form>
         </section>
 
-        <aside className="space-y-4">
-          <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-            <PanelHeader eyebrow="Sys_status" title="Agent telemetry" />
-            <div className="space-y-3 p-4">
-              <div className="grid grid-cols-2 gap-3">
-                <MiniMetric
-                  label="runtime"
-                  value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
-                  tone={totalTraceMs ? 'green' : 'slate'}
-                />
-                <MiniMetric 
-                  label="remaining"
-                  value={usage ? `${usage.remaining} / ${usage.limit}`: '...'}
-                  tone={usage && usage.remaining <= 2? 'red' : 'green'}/>
-              </div>
-              <div className="border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                  <Flag className="h-3.5 w-3.5 text-rose-500" />
-                  Target Context
-                </div>
-                <div className="space-y-2 text-xs text-slate-600">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Session</span>
-                    <strong className="text-right text-slate-800">
-                      {latestReply?.session
-                        ? `${latestReply.session.year} ${latestReply.session.gp_name}`
-                        : 'Awaiting query'}
-                    </strong>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Driver</span>
-                    <strong className="text-right text-slate-800">
-                      {latestReply?.driver
-                        ? `${latestReply.driver.full_name} #${latestReply.driver.driver_number}`
-                        : 'Unresolved'}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-            <PanelHeader eyebrow="Runtime_logs" title="Latest signals" />
-            <div className="divide-y divide-slate-200 text-[11px]">
-              {latestReply?.trace.length ? (
-                latestReply.trace.slice(0, 5).map((call, index) => (
-                  <div key={`${call.tool_name}-${index}`} className="p-3">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="font-extrabold uppercase tracking-[0.06em] text-rose-500">
-                        [{call.tool_name}]
-                      </span>
-                      <span className="font-mono text-[10px] font-bold text-slate-400">
-                        {call.duration_ms ?? 0}ms
-                      </span>
-                    </div>
-                    <p className="line-clamp-2 leading-5 text-slate-500">{call.output_summary ?? call.input_summary}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="p-4 text-slate-500">
-                  <div className="mb-2 flex items-center gap-2 font-black uppercase text-slate-400">
-                    <Terminal className="h-3.5 w-3.5" />
-                    Waiting for first run
-                  </div>
-                  <p className="leading-5">
-                    Tool call summaries will appear here after the agent resolves a race question.
-                  </p>
-                </div>
-              )}
-              {latestError && (
-                <div className="bg-rose-50 p-3 font-bold text-rose-600">
-                  [ERROR] {latestError}
-                </div>
-              )}
-            </div>
-          </section>
-
-         {adminStats && (
+        {(canvasPhase === 'idle' || canvasPhase === 'minimap') && (
+          <aside className="space-y-4">
             <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-              <PanelHeader eyebrow="Admin" title="Daily stats" />
+              <PanelHeader eyebrow="Sys_status" title="Agent telemetry" />
               <div className="space-y-3 p-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <MiniMetric label="runs today" value={String(adminStats.total_runs)} />
                   <MiniMetric
-                    label="cost today"
-                    value={`$${adminStats.total_cost_usd.toFixed(4)}`}
-                    tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'}
+                    label="runtime"
+                    value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
+                    tone={totalTraceMs ? 'green' : 'slate'}
                   />
-                  <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
-                  <MiniMetric label="refused" value={String(adminStats.refused)} tone="amber" />
+                  <MiniMetric
+                    label="remaining"
+                    value={usage ? `${usage.remaining} / ${usage.limit}` : '...'}
+                    tone={usage && usage.remaining <= 2 ? 'red' : 'green'}
+                  />
+                </div>
+                <div className="border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                    <Flag className="h-3.5 w-3.5 text-rose-500" />
+                    Target Context
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-600">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Session</span>
+                      <strong className="text-right text-slate-800">
+                        {latestReply?.session
+                          ? `${latestReply.session.year} ${latestReply.session.gp_name}`
+                          : 'Awaiting query'}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Driver</span>
+                      <strong className="text-right text-slate-800">
+                        {latestReply?.driver
+                          ? `${latestReply.driver.full_name} #${latestReply.driver.driver_number}`
+                          : 'Unresolved'}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
-          )}
 
-          <section className="border border-slate-200 bg-white/86 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-            <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-              <Clock3 className="h-3.5 w-3.5 text-rose-500" />
-              Next build targets
-            </div>
-            <div className="mt-3 space-y-2">
-               {['Streaming progress', 'Telemetry charts'].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                  {item}
+            <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+              <PanelHeader eyebrow="Runtime_logs" title="Latest signals" />
+              <div className="divide-y divide-slate-200 text-[11px]">
+                {latestReply?.trace.length ? (
+                  latestReply.trace.slice(0, 5).map((call, index) => (
+                    <div key={`${call.tool_name}-${index}`} className="p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="font-extrabold uppercase tracking-[0.06em] text-rose-500">
+                          [{call.tool_name}]
+                        </span>
+                        <span className="font-mono text-[10px] font-bold text-slate-400">
+                          {call.duration_ms ?? 0}ms
+                        </span>
+                      </div>
+                      <p className="line-clamp-2 leading-5 text-slate-500">{call.output_summary ?? call.input_summary}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-slate-500">
+                    <div className="mb-2 flex items-center gap-2 font-black uppercase text-slate-400">
+                      <Terminal className="h-3.5 w-3.5" />
+                      Waiting for first run
+                    </div>
+                    <p className="leading-5">
+                      Tool call summaries will appear here after the agent resolves a race question.
+                    </p>
+                  </div>
+                )}
+                {latestError && (
+                  <div className="bg-rose-50 p-3 font-bold text-rose-600">
+                    [ERROR] {latestError}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {adminStats && (
+              <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                <PanelHeader eyebrow="Admin" title="Daily stats" />
+                <div className="space-y-3 p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <MiniMetric label="runs today" value={String(adminStats.total_runs)} />
+                    <MiniMetric
+                      label="cost today"
+                      value={`$${adminStats.total_cost_usd.toFixed(4)}`}
+                      tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'}
+                    />
+                    <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
+                    <MiniMetric label="refused" value={String(adminStats.refused)} tone="amber" />
+                  </div>
                 </div>
-              ))}
-            </div>
-          </section>
-        </aside>
+              </section>
+            )}
+
+            <section className="border border-slate-200 bg-white/86 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                <Clock3 className="h-3.5 w-3.5 text-rose-500" />
+                Next build targets
+              </div>
+              <div className="mt-3 space-y-2">
+                {['Streaming progress', 'Telemetry charts'].map((item) => (
+                  <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        )}
       </div>
     </div>
   )

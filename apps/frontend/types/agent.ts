@@ -75,7 +75,17 @@ export interface AgentAnswer {
 }
 
 export interface AgentProgressEvent {
-  type: 'stage' | 'tool' | string
+  type:
+    | 'stage'
+    | 'tool'
+    | 'dag_init'
+    | 'node_start'
+    | 'node_complete'
+    | 'node_error'
+    | 'route'
+    | 'plan'
+    | 'compose'
+    | string
   stage?: string
   tool_name?: string
   status: 'running' | 'ok' | 'error' | string
@@ -84,6 +94,7 @@ export interface AgentProgressEvent {
   node_id?: string
   nodes?: AgentDAGNode[]
   edges?: AgentDAGEdge[]
+  query_preview?: string | null
   summary?: string | null
   error?: string | null
 }
@@ -148,6 +159,7 @@ export interface AgentNodeRunInfo {
   duration_ms?: number | null
   summary?: string | null
   error?: string | null
+  query_preview?: string | null
 }
 
 // ── Rich telemetry & circuit visualizations (L27) ──

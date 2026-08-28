@@ -44,6 +44,43 @@ export default function NodeInspectorDrawer({ view, onClose }: Props) {
         </button>
       </header>
 
+      {/* ACTIVE / PROCESSING badge — shown while the node is running */}
+      {view.state === 'running' && (
+        <div className="flex items-center gap-2 border-b border-[#2A2A2A] bg-[#1a0a00] px-3 py-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-red-400">
+            ACTIVE
+          </span>
+          <span className="ml-auto font-mono text-[9px] text-amber-400">● PROCESSING</span>
+        </div>
+      )}
+
+      {/* CPU / MEM mock stats — shown while running */}
+      {view.state === 'running' && (
+        <div className="flex gap-4 border-b border-[#2A2A2A] px-3 py-2">
+          <div>
+            <div className="font-mono text-[8px] text-slate-600">CPU</div>
+            <div className="font-mono text-[11px] font-bold text-slate-300">84.2%</div>
+          </div>
+          <div>
+            <div className="font-mono text-[8px] text-slate-600">MEM</div>
+            <div className="font-mono text-[11px] font-bold text-slate-300">2.14G</div>
+          </div>
+        </div>
+      )}
+
+      {/* Thinking text when synthesizer is running */}
+      {view.toolName === 'synthesizer' && view.state === 'running' && (
+        <div className="border-b border-[#2A2A2A] px-3 py-3">
+          <div className="font-mono text-[10px] leading-5 text-emerald-300">
+            Received session + driver + pit data.
+            <br />
+            Computing final debrief
+            <span className="animate-pulse">...</span>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`border px-1.5 py-0.5 font-mono text-[9px] font-bold ${meta.className}`}>

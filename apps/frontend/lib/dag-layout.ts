@@ -62,3 +62,25 @@ export function layeredLayout(nodes: DagLayoutNodeSpec[]): Record<string, DagLay
   }
   return result
 }
+
+// Returns { [nodeId]: rank } where rank is 0-based topo layer index. Used to
+// stagger ghost node entrance (each layer appears 60ms after the previous one).
+export function topoRankMap(nodes: Array<{ id: string; depends_on?: string[] }>): Record<string, number> {
+  const deps: Record<string, string[]> = {}
+  nodes.forEach((n) => {
+    deps[n.id] = [...(n.depends_on ?? [])]
+  })
+  const rank: Record<string, number> = {}
+  const visited = new Set<string>()
+
+  function dfs(id: string): number {
+    if (visited.has(id)) return rank[id] ?? 0
+    visited.add(id)
+    const depRanks = (deps[id] ?? []).map(dfs)
+    rank[id] = depRanks.length ? Math.max(...depRanks) + 1 : 0
+    return rank[id]
+  }
+
+  nodes.forEach((n) => dfs(n.id))
+  return rank
+}
