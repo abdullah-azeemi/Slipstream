@@ -8,11 +8,21 @@ The test suite creates its own tables in the connected database,
 seeds minimal data, and tears everything down afterwards.
 """
 
+import os
+
 import pytest
 from sqlalchemy import create_engine, text
 
-from backend import create_app
-from backend.config import settings
+# Dev/postgres infra: the local Dockerised TimescaleDB owns loopback `:5432`
+# (`.env` DATABASE_URL). The brew Postgres instance that runs the test suite is
+# pinned to `:5433` and MUST be targeted explicitly — never route pytest at the
+# real database, its fixtures drop the tables it creates.
+os.environ["DATABASE_URL"] = (
+    "postgresql+psycopg://pitwall:pitwall@localhost:5433/pitwall"
+)
+
+from backend import create_app  # noqa: E402
+from backend.config import settings  # noqa: E402
 
 
 # ── SQL to create all tables needed by tests ──────────────────────────────────
