@@ -79,10 +79,10 @@ def persist_run(
                 """
                 INSERT INTO agent_runs (
                     conversation_id, user_id, status, model,
-                    started_at, completed_at, cost_estimate_usd, error
+                    started_at, completed_at, cost_estimate_usd, error, context_json
                 ) VALUES (
                     :conversation_id, :user_id, :status, NULL, :started_at,
-                    :completed_at, :cost_estimate_usd, :error
+                    :completed_at, :cost_estimate_usd, :error, CAST(:context_json AS JSONB)
                 )
                 RETURNING id
                 """
@@ -95,12 +95,41 @@ def persist_run(
                 "completed_at": datetime.now(started_at.tzinfo),
                 "cost_estimate_usd": answer.cost_usd,
                 "error": answer.refusals[0] if answer.refusals else None,
+                "context_json": json.dumps(answer.routing_context, default=str)
+                if answer.routing_context
+                else None,
             },
         ).first()
+
         run_id = row.id
         for call in answer.trace:
             _insert_tool_call(conn, run_id, call)
     return run_id
+
+
+def load_last_context(conversation_id: int, clerk_user_id: str) -> dict | None:
+    """The most recent routing context persisted for this conversation.
+    Returns None when there's nothing to merge against (fresh conversation,
+    or the last run carried no context).
+    """
+    with extensions.engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT r.context_json
+                FROM agent_runs r
+                JOIN agent_conversations c ON c.id = r.conversation_id
+                JOIN users u ON u.id = c.user_id
+                WHERE r.conversation_id = :cid
+                  AND u.clerk_user_id = :clerk_user_id
+                  AND r.context_json IS NOT NULL
+                ORDER BY r.id DESC
+                LIMIT 1
+                """
+            ),
+            {"cid": conversation_id, "clerk_user_id": clerk_user_id},
+        ).first()
+        return row.context_json if row else None
 
 
 def count_runs_today(clerk_user_id: str) -> int:

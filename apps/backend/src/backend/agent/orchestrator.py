@@ -6,11 +6,12 @@ Every tool call is recorded in the trace for debugging and the future UI.
 """
 
 from __future__ import annotations
-import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import asdict, replace
+import time
 from typing import Any, Callable
 
+from backend.agent import context as agent_context
 from backend.agent import llm, tools, types
 
 ProgressCallback = Callable[[dict], None]
@@ -448,6 +449,7 @@ def _compose(
     progress: ProgressCallback | None = None,
 ) -> types.AgentAnswer:
     """Build the final structured answer from the DAG's node outputs."""
+
     _emit(
         progress,
         type="stage",
@@ -455,7 +457,6 @@ def _compose(
         status="running",
         label="Composing evidence-backed answer",
     )
-
     refusals: list[str] = []
     if failed_ids:
         refusals.append("one or more evidence steps failed; the answer was not trusted")
@@ -498,11 +499,12 @@ def _compose(
 
     fallback_lines: list[str] = []
     if routed.intent is types.Intent.PIT_STOP_SPEED_DELTA:
+        stop = outputs["pits"].pit_stops[0]
         window = outputs["window"]
         fallback_lines.extend(
             [
-                f"{driver.full_name} made a pit stop across lap {pit_stop.pit_in_lap} "
-                f"into lap {pit_stop.pit_out_lap}.",
+                f"{driver.full_name} made a pit stop across lap {stop.pit_in_lap} "
+                f"into lap {stop.pit_out_lap}.",
                 "",
                 f"Using telemetry sample average speed, the {routed.laps_window}-lap pre-stop "
                 f"window averaged {window.before_avg_speed_kmh} km/h, while the "
@@ -510,28 +512,29 @@ def _compose(
                 f"That is a {window.delta_kmh:+.1f} km/h change.",
             ]
         )
-        if pit_stop.compound_before and pit_stop.compound_after:
+        if stop.compound_before and stop.compound_after:
             fallback_lines.append(
-                f"He switched from {pit_stop.compound_before} to {pit_stop.compound_after} tyres."
+                f"He switched from {stop.compound_before} to {stop.compound_after} tyres."
             )
+
     elif routed.intent is types.Intent.LAP_EVENT_INVESTIGATION:
         laps = outputs["laps"]
         fallback_lines.append(
-            f"{driver.full_name} had {laps.anomaly_count} off-pace lap(s) in that "
-            f"session; median clean pace was {laps.median_pace_ms} ms."
+            f"{driver.full_name} had {laps.anomaly_count} off-pace lap(s) in that session; median clean pace was {laps.median_pace_ms} ms."
         )
+
     elif routed.intent is types.Intent.TYRE_DEGRADATION_ANALYSIS:
         stints = outputs["stints"]
         fallback_lines.append(
-            f"Found {len(stints.stints)} stint(s); the worst degradation stint was "
-            f"stint {stints.worst_degradation_stint}."
+            f"Found {len(stints.stints)} stint(s); the worst degradation stint was stint {stints.worst_degradation_stint}."
         )
-    else:  # TELEMETRY_COMPARISON
+
+    else:
         telemetry = outputs["telemetry"]
         fallback_lines.append(
-            f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle "
-            f"share was {telemetry.full_throttle_pct}%."
+            f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%."
         )
+
     fallback_text = "\n".join(fallback_lines)
 
     evidence_payload = {
@@ -559,18 +562,35 @@ def _compose(
         trace=trace,
         cost_usd=compose_cost,
     )
-    _emit(
-        progress,
-        type="stage",
-        stage="compose",
-        status="ok",
-        label="Answer composed",
-    )
+    _emit(progress, type="stage", stage="compose", status="ok", label="Answer composed")
     return answer
 
 
-def run(question: str, progress: ProgressCallback | None = None) -> types.AgentAnswer:
-    """Public entry point: one question in, one structured answer out."""
+def _clarify(
+    question: str, routed: types.RoutedQuestion, missing: str, text: str, refusal: str
+) -> types.AgentAnswer:
+    """A structured counter question, No DAG runs here, the pipeline halts to ask the user for one missing enitity.
+
+    The reply carries:
+        - clarification -> {missing, question} rendered by the UI
+        - routing_context -> entities resolved so far plus the missing spot, the next agent turn merges it
+    """
+    return types.AgentAnswer(
+        question=question,
+        intent=routed.intent,
+        answer=text,
+        refusals=(refusal,),
+        clarification={"missing": [missing], "question": text},
+        routing_context=agent_context.routed_to_context(routed, missing=[missing]),
+    )
+
+
+def run(
+    question: str,
+    progress: ProgressCallback | None = None,
+    context: dict[str, Any] | None = None,
+) -> types.AgentAnswer:
+    """Public entry point: one question in, one structured answer out"""
     _emit(
         progress,
         type="stage",
@@ -592,18 +612,14 @@ def run(question: str, progress: ProgressCallback | None = None) -> types.AgentA
             question=question,
             intent=types.Intent.UNSUPPORTED,
             answer=(
-                "I could not process that question because the question "
-                f"router is unavailable {exc}"
+                f"I could not process that question because the question router is unavailable {exc}"
             ),
             refusals=("llm_router_unavailable",),
         )
-    _emit(
-        progress,
-        type="stage",
-        stage="route",
-        status="ok",
-        label="Question routed",
-    )
+    _emit(progress, type="stage", stage="route", status="ok", label="Question routed")
+
+    if context is not None:
+        routed = agent_context.merge_context(context, routed)
 
     if routed.intent is types.Intent.UNSUPPORTED:
         return types.AgentAnswer(
@@ -611,41 +627,43 @@ def run(question: str, progress: ProgressCallback | None = None) -> types.AgentA
             intent=routed.intent,
             answer="I cannot answer that yet. v1 supports pit-stop, lap event, tyre degradation, and telemetry comparison questions.",
             refusals=("unsupported question",),
+            routing_context=agent_context.routed_to_context(routed),
         )
 
     if not routed.driver_name:
-        return types.AgentAnswer(
-            question=question,
-            intent=routed.intent,
-            answer="Which driver should I look at? Name one, e.g. 'Sainz'.",
-            refusals=("missing_driver",),
+        return _clarify(
+            question,
+            routed,
+            missing="driver",
+            text="Which driver should I look at? Name one, e.g. 'Sainz'.",
+            refusal="missing_driver",
         )
 
     if not routed.gp_name or routed.year is None:
-        return types.AgentAnswer(
-            question=question,
-            intent=routed.intent,
-            answer=(
-                "Which race should I use? Name the year and Grand Prix, "
-                "e.g. '2026 Monaco GP'."
-            ),
-            refusals=("missing_race",),
+        return _clarify(
+            question,
+            routed,
+            missing="race",
+            text="Which race should I use? Name the year and Grand Prix, e.g. '2026 Monaco GP'.",
+            refusal="missing_race",
         )
 
     if routed.intent is types.Intent.TELEMETRY_COMPARISON:
         if not routed.target_lap:
-            return types.AgentAnswer(
-                question=question,
-                intent=routed.intent,
-                answer="Which lap should I compare? Name a lap number, e.g. 'lap 34'.",
-                refusals=("missing_lap",),
+            return _clarify(
+                question,
+                routed,
+                missing="target_lap",
+                text="Which lap should I compare? Name a lap number, e.g. 'lap 34'.",
+                refusal="missing_lap",
             )
         if not routed.compare_driver_name:
-            return types.AgentAnswer(
-                question=question,
-                intent=routed.intent,
-                answer="Which second driver should I compare against?",
-                refusals=("missing_compare_driver",),
+            return _clarify(
+                question,
+                routed,
+                missing="compare_driver",
+                text="Which second driver should I compare against?",
+                refusal="missing_compare_driver",
             )
 
     dag = build_dag(routed)
@@ -657,6 +675,11 @@ def run(question: str, progress: ProgressCallback | None = None) -> types.AgentA
         edges=[asdict(e) for e in dag.edges],
         label="Execution graph prepared",
     )
+
     trace, outputs, failed_ids = _execute_dag(dag, routed, progress)
     answer = _compose(question, routed, outputs, failed_ids, trace, progress)
-    return replace(answer, cost_usd=round(routing_cost + answer.cost_usd, 6))
+    return replace(
+        answer,
+        cost_usd=round(routing_cost + answer.cost_usd, 6),
+        routing_context=agent_context.routed_to_context(routed),
+    )

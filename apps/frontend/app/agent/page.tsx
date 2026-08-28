@@ -5,6 +5,7 @@ import {
   Bot,
   Braces,
   ChevronRight,
+  CircleHelp,
   CircuitBoard,
   Clock3,
   Database,
@@ -671,6 +672,23 @@ export default function AgentPage() {
                         {turn.reply.answer}
                       </ReactMarkdown>
                     </div>
+
+                    {/* L29: counter-question box — the agent needs one more
+                        detail to finish the original question. */}
+                    {turn.reply.clarification && (
+                      <div className="mx-4 mb-4 flex items-start gap-3 border border-sky-200 bg-sky-50 px-3 py-2.5">
+                        <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+                        <div>
+                          <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-sky-600">
+                            Need {turn.reply.clarification.missing.join(', ')}
+                          </div>
+                          <p className="mt-0.5 text-[13px] font-medium leading-5 text-sky-900">
+                            {turn.reply.clarification.question}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-4 px-4 pb-4">
                       <RefusalBanner refusals={turn.reply.refusals} />
                       <EvidenceCards

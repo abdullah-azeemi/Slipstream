@@ -426,3 +426,5 @@ class AgentAnswer:
     stint_degradation: StintDegradationResult | None = None
     trace: tuple[ToolCallRecord, ...] = ()
     cost_usd: float = 0.0
+    clarification: dict | None = None
+    routing_context: dict | None = None

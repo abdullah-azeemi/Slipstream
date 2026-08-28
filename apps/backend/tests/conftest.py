@@ -188,7 +188,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     started_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at        TIMESTAMPTZ,
     cost_estimate_usd   NUMERIC,
-    error               TEXT
+    error               TEXT,
+    context_json        JSONB
 );
 
 CREATE TABLE IF NOT EXISTS agent_tool_calls (

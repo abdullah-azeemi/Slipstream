@@ -93,14 +93,20 @@ def _prepare_conversation(payload: dict, question: str):
                 {"cid": incoming_conv_id, "uid": user_id},
             ).first()
             if owner is None:
-                return None, (jsonify({"error": "Conversation not found"}), 404)
+                return None, None, (jsonify({"error": "Conversation not found"}), 404)
             conv_id = int(incoming_conv_id)
         else:
             title = question.strip()[:80]
             conv_id = persistence.create_conversation(conn, user_id, title)
 
         persistence.insert_message(conn, conv_id, "user", question.strip())
-    return conv_id, None
+
+    context = (
+        persistence.load_last_context(conv_id, g.clerk_user_id)
+        if incoming_conv_id is not None
+        else None
+    )
+    return conv_id, context, None
 
 
 def _finalize_run(answer, started_at, clerk_user_id: str, conv_id: int):
@@ -168,13 +174,13 @@ def agent_query():
             {"error": "Daily question limit reached. Try again tomorrow."}
         ), 429
 
-    conv_id, error_response = _prepare_conversation(payload, question)
+    conv_id, context, error_response = _prepare_conversation(payload, question)
     if error_response:
         return error_response
 
     # ── Run the orchestrator ────────────────────────────────────────────
     started_at = datetime.now().astimezone()
-    answer = orchestrator.run(question.strip())
+    answer = orchestrator.run(question.strip(), context=context)
 
     # ── Store the assistant message + persist run ───────────────────────
     _finalize_run(answer, started_at, g.clerk_user_id, conv_id)
@@ -208,7 +214,7 @@ def agent_query_stream():
             {"error": "Daily question limit reached. Try again tomorrow."}
         ), 429
 
-    conv_id, error_response = _prepare_conversation(payload, question)
+    conv_id, context, error_response = _prepare_conversation(payload, question)
     if error_response:
         return error_response
 
@@ -222,6 +228,7 @@ def agent_query_stream():
             answer = orchestrator.run(
                 question.strip(),
                 progress=lambda payload: events.put(("progress", payload)),
+                context=context,
             )
             _finalize_run(answer, started_at, clerk_user_id, conv_id)
             events.put(

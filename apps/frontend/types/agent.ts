@@ -72,6 +72,8 @@ export interface AgentAnswer {
   conversation_id?: number | null
   trace_visibility?: 'full' | 'evidence' | string
   cost_usd?: number
+  clarification?: { missing: string[]; question: string } | null
+  routing_context?: Record<string, unknown> | null
 }
 
 export interface AgentProgressEvent {
