@@ -217,6 +217,25 @@ class SpeedWindowResult:
     sample_count_before: int = 0
     sample_count_after: int = 0
 
+@dataclass(frozen=True)
+class GapPositionInput:
+    session_key: int
+    driver_number: int
+    target_lap: int | None = None
+
+@dataclass(frozen=True)
+class GapPositionSnapshot:
+    lap_number: int
+    position: int | None
+    cumulative_ms: int | None  
+    leader_number: int | None
+    leader_cumulative_ms: int | None
+    gap_to_leader_ms: int | None
+    car_ahead_number: int | None
+    car_ahead_gap_ms: int | None
+    car_behind_number: int | None
+    car_behind_gap_ms: int | None
+
 
 @dataclass(frozen=True)
 class RoutedQuestion:

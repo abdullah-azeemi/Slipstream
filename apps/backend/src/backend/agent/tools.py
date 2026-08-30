@@ -158,6 +158,62 @@ def _derive_pit_stops(laps: list[dict]) -> list[types.PitStop]:
         )
     return stops
 
+def _cumulative_race_times(laps: list[dict], up_to_lap: int) -> dict[int, int]:
+    """ Commulative race time per driver through 'up_to_lap' 
+    
+        Input: raw lap rows {driver_number, lap_number, lap_time_ms}
+        Output: {driver_number: ms}.
+        A "cumulative time" is just the sum of a driver's completed lap times so far — lower = ahead on track.    
+    """
+
+    by_driver: dict[list, list[dict]] = {}
+    for lap in laps:
+        if lap.get("lap_time_ms") is None:
+            continue
+        by_driver.setdefault(lap["driver_number"], []).append(lap)
+
+    commulative: dict[int, int] = {}
+    for dn, driver_laps in by_driver.items():
+        total = 0
+        for lap in sorted(driver_laps, key=lambda ln: ln["lap_number"]):
+            if lap["lap_number"] > up_to_lap:
+                break
+            total += int(lap["lap_time_ms"])
+        commulative[dn] = total
+    return commulative
+
+def _gap_snapshot(commulative: dict[int, int], driver_number: int, target_lap: int, stored_position: int | None) -> types.GapPositionSnapshot:
+    """ Turn commulative times into a gapped snapshot at one lap.
+    
+        rank = sort ascending by commulative time (smallest = first = leader)
+        'car ahead': the driver who's time is just smaller than ours
+        'car behind': the driver who's time is just bigger than ours
+    """
+
+    if driver_number not in commulative:
+        raise types.NotFoundError(f"Driver {driver_number} has not completed upto lap {target_lap}")
+
+    ordered = sorted(commulative.items(), key=lambda kv:kv[1])
+    idx = ordered.index((driver_number, commulative[driver_number]))
+    rank = {dn: i + 1 for i, (dn, _) in enumerate(ordered)}
+    own = commulative[driver_number]
+    leader_number, leader_ms = ordered[0]
+    ahead_number, ahead_ms = ordered[idx-1] if idx > 0 else (None, None)
+    behind_number, behind_ms = ordered[idx+1] if idx < len(ordered) - 1 else (None, None)
+
+    return types.GapPositionSnapshot(
+        lap_number=target_lap,
+        position=stored_position if stored_position is not None else rank[driver_number],
+        cumulative_ms=int(own),
+        leader_number=leader_number,
+        leader_cumulative_ms=int(leader_ms),
+        gap_to_leader_ms=int(own - leader_ms),
+        car_ahead_number=ahead_number,
+        car_ahead_gap_ms=int(own - ahead_ms) if ahead_ms is not None else None,
+        car_behind_number=behind_number,
+        car_behind_gap_ms=int(behind_ms - own) if behind_ms is not None else None,
+    )
+
 
 def find_pit_stops(inp: types.FindPitStopsInput) -> types.PitStopsResult:
     """Detect pit stops for one driver in one session."""
@@ -181,10 +237,48 @@ def find_pit_stops(inp: types.FindPitStopsInput) -> types.PitStopsResult:
     stops = _derive_pit_stops([dict(r) for r in rows])
     return types.PitStopsResult(driver_number=inp.driver_number, pit_stops=tuple(stops))
 
+def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionSnapshot:
+    """Snapshot the field at one lap: the driver's position, gap to the leader, and gaps to the car directly ahead and behind """
+    with extensions.engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+                    SELECT driver_number, lap_number, lap_time_ms, position
+                    FROM lap_times
+                    WHERE session_key = :sk
+                      AND deleted = FALSE
+                      AND lap_time_ms IS NOT NULL
+                    ORDER BY driver_number ASC, lap_number ASC
+                """), {"sk": inp.session_key},
+            )
+            .mappings()
+            .all()
+        )
 
-def get_lap_telemetry_artifacts(
-    inp: types.GetLapTelemetryArtifactsInput,
-) -> types.LapTelemetryResult:
+    if not rows:
+        raise types.NotFoundError(f"No lap data found for session {inp.session_key}")
+
+    target_lap = inp.target_lap
+    if target_lap is None:
+        driver_laps = [r for r in rows if r["driver_number"] == inp.driver_number]
+        if not driver_laps:
+            raise types.NotFoundError(f"Driver {inp.driver_number} has no laps in session {inp.session_key}")
+        target_lap = max(r["lap_number"] for r in driver_laps)
+
+    cumulative = _cumulative_race_times([dict(r) for r in rows], target_lap)
+
+    stored_position = next(
+        (
+            r["position"]
+            for r in rows
+            if r["driver_number"] == inp.driver_number and r["lap_number"] == target_lap
+        ),
+        None,
+    )
+
+    return _gap_snapshot(cumulative, inp.driver_number, target_lap, stored_position)
+
+def get_lap_telemetry_artifacts(inp: types.GetLapTelemetryArtifactsInput) -> types.LapTelemetryResult:
     """
     Return artifact metadata (not raw samples) for the requested laps.
     This proves telemetry exists before we compute speed from it.
