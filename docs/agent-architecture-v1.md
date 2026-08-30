@@ -1,14 +1,14 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-28 (L28 shipped, L29 planned)
+Last updated: 2026-08-31 (L29 shipped, L30 planned)
 
-Status: **L1–L28 complete and shipped. L29 (continuous conversation) is the next planned work.**
+Status: **L1–L29 complete and shipped. L30 (position & gap tracking) is the next planned work.**
 
 ---
 
-## Completed Work — Summary (L1 – L27)
+## Completed Work — Summary (L1 – L29)
 
-Everything below is done and committed. Do not re-implement it. Read this to understand what already exists before starting L28.
+Everything below is done and committed. Do not re-implement it. Read this to understand what already exists before starting L30. L28 and L29 are documented in their own dedicated sections below.
 
 ### Backend (`apps/backend/src/backend/agent/`)
 
@@ -82,7 +82,7 @@ Everything below is done and committed. Do not re-implement it. Read this to und
 
 ## L28 — Cinematic DAG Canvas + Claude-Quality Output
 
-### Status: NOT YET IMPLEMENTED — implement this next.
+### Status: IMPLEMENTED + shipped (2026-08-28).
 
 This lesson is a **pure frontend overhaul**. Zero backend changes needed. All the SSE events, node states, and data payloads already exist from L24–L27. L28 only changes how the frontend renders them.
 
@@ -1144,6 +1144,30 @@ pnpm build
 
 ---
 
+## L29 — Continuous Conversation & Counter-Question Context
+
+### Status: SHIPPED (2026-08-29).
+
+Built on top of L28. When the router cannot extract a required entity (driver, race, lap, compare driver), the pipeline now **halts and asks a short counter-question** instead of failing. The user's next reply is merged onto the previous turn's routed context, and the **same DAG is re-run** with the resolved parameter — no re-extraction needed.
+
+### Files changed (`commit 162a17c`)
+
+| File | What it does |
+|---|---|
+| `agent/types.py` | `AgentAnswer.clarification: dict` (the `{missing, question}` payload) and `AgentAnswer.routing_context: dict` (resolved entities snapshot for the next turn) |
+| `agent/context.py` | `routed_to_context(routed, missing)` — serialises a `RoutedQuestion` to a flat dict; `merge_context(prev, current)` — overlays a follow-up turn's extracted params onto the previous turn's context and returns a complete `RoutedQuestion` |
+| `agent/orchestrator.py` | `_clarify()` builds a refusal-style answer with `clarification` + `routing_context`; `run()` returns it early when an entity is missing; `run(question, progress, context=...)` accepts the persisted context and merges it before building the DAG |
+| `agent/persistence.py` | `load_last_context(conversation_id, clerk_user_id)` / save on run so the merge can be re-applied across HTTP turns |
+| `api/v1/agent.py` | Reads the prior turn's `routing_context` from the conversation and passes it into the orchestrator |
+| `migrations/versions/0020_add_agent_run_context.py` | Adds `routing_context` and `clarification` to `agent_messages` |
+| `app/agent/page.tsx` + `types/agent.ts` | Renders the counter-question in the answer; replies continue the same `conversation_id` |
+
+### Consequence for future lessons
+
+Every future tool/intent change now lives behind the same merge path — a counter-question can ask for *any* missing entity, and L30 reuses this machinery for its own missing params (e.g. `target_lap`).
+
+---
+
 ## Established Conventions — Always Follow
 
 These apply to every future lesson:
@@ -1167,9 +1191,11 @@ The system's three invariants:
 2. **Zero hallucinations** — the evidence gate refuses rather than inventing numbers.
 3. **Parameterized SQL only** — the LLM can choose a tool, never write SQL.
 
-## L29+ — Future Agent Capabilities (Agent Expansion)
+## L30+ — Future Agent Capabilities (Agent Expansion)
 
-These features are prioritized for development after L28 to expand the chatbot's domain knowledge and answering capabilities.
+> Status: L29 (item 6, Continuous Conversation) shipped 2026-08-29. The backlog below is prioritized top-down. **Next planned: Item 1 — Position and Gap Tracking.** Items 1–5 and 7 are not yet implemented in the code.
+
+These features are prioritized for development after L29 to expand the chatbot's domain knowledge and answering capabilities.
 
 ### 1. Position and Gap Tracking
 * **Goal**: Answer questions like "What was Sainz's gap to the leader when he pitted?" and "Did the undercut work?"
@@ -1211,7 +1237,7 @@ These features are prioritized for development after L28 to expand the chatbot's
   * Create `weather_events` table (timestamp, track_temp, air_temp, humidity, rainfall, wind_speed).
   * Add tool `fetch_weather_window(session_key, lap_range)`.
 
-### 6. Continuous Conversation & Counter-Question Context (L29 — next)
+### 6. Continuous Conversation & Counter-Question Context — [SHIPPED 2026-08-29]
 * **Goal**: Real multi-turn chat. Follow-up questions reference prior context instead of re-stating the whole question. When a detail is missing, the agent asks a short counter-question, and the user's reply resolves that detail back into the **ORIGINAL query context** — then the same DAG plan is re-run.
   * Example: user asks "Compare Verstappen and Hamilton in Monaco GP 2026" → agent replies "Which lap?" → user answers "Lap 40" → agent runs the original comparison DAG with `target_lap=40`, without re-extracting year/GP/driver context.
 * **Implementation**:

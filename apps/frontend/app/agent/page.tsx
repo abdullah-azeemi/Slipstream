@@ -5,7 +5,6 @@ import {
   Bot,
   Braces,
   ChevronRight,
-  CircleHelp,
   CircuitBoard,
   Clock3,
   Database,
@@ -20,6 +19,7 @@ import {
   Sparkles,
   Terminal,
   Zap,
+  CircleHelp
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type React from 'react'
@@ -672,9 +672,11 @@ export default function AgentPage() {
                         {turn.reply.answer}
                       </ReactMarkdown>
                     </div>
-
-                    {/* L29: counter-question box — the agent needs one more
-                        detail to finish the original question. */}
+                    <div className="pitwall-prose px-4 py-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {turn.reply.answer}
+                      </ReactMarkdown>
+                    </div>
                     {turn.reply.clarification && (
                       <div className="mx-4 mb-4 flex items-start gap-3 border border-sky-200 bg-sky-50 px-3 py-2.5">
                         <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
@@ -689,6 +691,8 @@ export default function AgentPage() {
                       </div>
                     )}
 
+                    <div className="space-y-4 px-4 pb-4">
+                      <RefusalBanner refusals={turn.reply.refusals} />
                     <div className="space-y-4 px-4 pb-4">
                       <RefusalBanner refusals={turn.reply.refusals} />
                       <EvidenceCards

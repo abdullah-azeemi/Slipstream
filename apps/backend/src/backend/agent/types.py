@@ -18,6 +18,7 @@ class Intent(str, Enum):
     LAP_EVENT_INVESTIGATION = "lap_event_investigation"
     TYRE_DEGRADATION_ANALYSIS = "tyre_degradation_analysis"
     TELEMETRY_COMPARISON = "telemetry_comparison"
+    POSITION_GAP_TRACKING = "position_gap_tracking"
     UNSUPPORTED = "unsupported"
 
 
@@ -41,6 +42,7 @@ class ToolName(str, Enum):
     STINT_DEGRADATION_SCANNER = "stint_degradation_scanner"
     TELEMETRY_INSPECTOR = "telemetry_inspector"
     VERIFY_EVIDENCE = "verify_evidence"
+    GAP_POSITION_SNAPSHOT = "gap_position_snapshot"
 
 
 @dataclass(frozen=True)
