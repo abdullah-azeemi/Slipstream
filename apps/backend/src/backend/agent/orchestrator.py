@@ -36,6 +36,7 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.INSPECT_LAP_EVENTS: tools.inspect_lap_events,
     types.ToolName.STINT_DEGRADATION_SCANNER: tools.stint_degradation_scanner,
     types.ToolName.TELEMETRY_INSPECTOR: tools.telemetry_inspector,
+    types.ToolName.GAP_POSITION_SNAPSHOT: tools.gap_and_position_snapshot,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -147,6 +148,11 @@ def _bind_telemetry(params, env):
         compare_lap_numbers=params.get("compare_lap_numbers") or (),
     )
 
+@_register(types.ToolName.GAP_POSITION_SNAPSHOT)
+def _bind_gap(params, env):
+    target_lap = params.get("target_lap") or env["routed"].target_lap
+    target_lap = env["pits"].pit_stops[0].pit_in_lap
+    return types.GapPositionInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, target_lap=target_lap)
 
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:
     """Clean laps around a pitstop (pit in / pit out laps excluded)"""
@@ -258,6 +264,28 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
             )
         )
         nodes.append(_verify_node(depends_on=("session", "driver")))
+
+    elif routed.intent is types.Intent.POSITION_GAP_TRACKING:
+        nodes.append(
+            types.DAGNode(
+                id="pits",
+                tool_name=types.ToolName.FIND_PIT_STOPS,
+                label="Find Pit Stops",
+                description="Locate the driver's pitstop laps",
+                depends_on=("session", "driver"),
+            )
+        )
+        nodes.append(
+            types.DAGNode(
+                id="gap",
+                tool_name=types.ToolName.GAP_POSITION_SNAPSHOT,
+                label="Gap and. Position Snapshot",
+                description="Commulative-time ranking at one lap",
+                depends_on=("pits", ),
+                input_params={"target_lap": routed.target_lap},
+            )
+        )
+        nodes.append(_verify_node(depends_on=("pits", "gap")))
 
     else:  # The telemetry comparison
         nodes.append(
