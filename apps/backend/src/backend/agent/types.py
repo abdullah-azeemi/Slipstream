@@ -445,6 +445,7 @@ class AgentAnswer:
     evidence: VerifyEvidenceResult | None = None
     telemetry_overlay: TelemetryInspectorResult | None = None
     stint_degradation: StintDegradationResult | None = None
+    gap_position: GapPositionSnapshot | None = None
     trace: tuple[ToolCallRecord, ...] = ()
     cost_usd: float = 0.0
     clarification: dict | None = None

@@ -557,11 +557,18 @@ def _compose(
             f"Found {len(stints.stints)} stint(s); the worst degradation stint was stint {stints.worst_degradation_stint}."
         )
 
+    elif routed.intent is types.Intent.POSITION_GAP_TRACKING:
+        gap = outputs["gap"]
+        pos = gap.position if gap.position is not None else "?"
+        fallback_lines.append(f"At lap {gap.lap_number}, {driver.full_name} was P{pos}.")
+        if gap.gap_to_leader_ms is not None:
+            fallback_lines.append(f"On cumulative race time he was {gap.gap_to_leader_ms} ms behind the leader (#{gap.leader_number}).")
+        if gap.car_ahead_number is not None:
+            fallback_lines.append(f"The car ahead (#{gap.car_ahead_number}) was {gap.car_ahead_gap_ms} ms ahead; the car behind (#{gap.car_behind_number}) trailed by {gap.car_behind_gap_ms} ms.")
+
     else:
         telemetry = outputs["telemetry"]
-        fallback_lines.append(
-            f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%."
-        )
+        fallback_lines.append(f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%.")
 
     fallback_text = "\n".join(fallback_lines)
 
@@ -587,6 +594,7 @@ def _compose(
         evidence=verify,
         telemetry_overlay=outputs.get("telemetry"),
         stint_degradation=outputs.get("stints"),
+        gap_position=outputs.get("gap"),
         trace=trace,
         cost_usd=compose_cost,
     )
