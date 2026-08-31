@@ -148,10 +148,10 @@ def _bind_telemetry(params, env):
         compare_lap_numbers=params.get("compare_lap_numbers") or (),
     )
 
-@_register(types.ToolName.GAP_POSITION_SNAPSHOT)
 def _bind_gap(params, env):
     target_lap = params.get("target_lap") or env["routed"].target_lap
-    target_lap = env["pits"].pit_stops[0].pit_in_lap
+    if target_lap is None and env.get("pits") and env["pits"].pit_stops:
+        target_lap = env["pits"].pit_stops[0].pit_in_lap
     return types.GapPositionInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, target_lap=target_lap)
 
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:

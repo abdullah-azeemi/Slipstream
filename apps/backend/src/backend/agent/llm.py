@@ -25,6 +25,7 @@ Allowed Intents:
     - "lap_event_investigation" : the question asks why a specific lap/anomaly happened for a driver.
     - "tyre_degradation_analysis" : the question asks about tyre wear / stint degradation.
     - "telemetry_comparison" : the question asks to compare two laps or two drivers' telemetry.
+    - "position_gap_tracking" : the question asks about a driver's position, gap to leader, gap to cars ahead/behind, or whether an undercut/overcut worked.
     - "unsupported" : everything else (weather, other sports, live timing etc)
 
 Field Rules:
@@ -179,9 +180,7 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         payload = json.loads(text)
         intent_value = payload["intent"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise types.LLMError(
-            f"router returned unparseable response: {text[:200]}"
-        ) from exc
+        raise types.LLMError(f"router returned unparseable response: {text[:200]}") from exc
 
     if intent_value not in {member.value for member in types.Intent}:
         raise types.LLMError(f"router returned unknown intent: {intent_value}")
