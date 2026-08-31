@@ -19,6 +19,7 @@ class Intent(str, Enum):
     TYRE_DEGRADATION_ANALYSIS = "tyre_degradation_analysis"
     TELEMETRY_COMPARISON = "telemetry_comparison"
     POSITION_GAP_TRACKING = "position_gap_tracking"
+    RACE_CONTROL_EVENTS = "race_control_events"
     UNSUPPORTED = "unsupported"
 
 
@@ -42,6 +43,7 @@ class ToolName(str, Enum):
     STINT_DEGRADATION_SCANNER = "stint_degradation_scanner"
     TELEMETRY_INSPECTOR = "telemetry_inspector"
     VERIFY_EVIDENCE = "verify_evidence"
+    FETCH_RACE_CONTROL_WINDOW = "fetch_race_control_window"
     GAP_POSITION_SNAPSHOT = "gap_position_snapshot"
 
 
@@ -236,6 +238,34 @@ class GapPositionSnapshot:
     car_behind_number: int | None
     car_behind_gap_ms: int | None
 
+@dataclass(frozen=True)
+class RaceControlWindowInput:
+    """A lap window (inclusive) to scan for flag/SC events."""
+    session_key: int
+    driver_number: int | None = None
+    from_lap: int | None = None
+    to_lap: int | None = None
+
+
+@dataclass(frozen=True)
+class RaceControlEvent:
+    """One flag / safety car / VSC event."""
+    category: str | None
+    flag: str | None
+    scope: str | None
+    driver_number: int | None
+    sector: int | None
+    lap_number: int | None
+    message: str | None
+
+
+@dataclass(frozen=True)
+class RaceControlWindowResult:
+    """All events intersecting the requested window."""
+    from_lap: int | None
+    to_lap: int | None
+    events: tuple[RaceControlEvent, ...]
+    safety_car_periods: int = 0 
 
 @dataclass(frozen=True)
 class RoutedQuestion:
@@ -450,3 +480,4 @@ class AgentAnswer:
     cost_usd: float = 0.0
     clarification: dict | None = None
     routing_context: dict | None = None
+    race_control: RaceControlWindowResult | None = None

@@ -278,6 +278,62 @@ def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionS
 
     return _gap_snapshot(cumulative, inp.driver_number, target_lap, stored_position)
 
+def _count_sc_periods(rows: list[dict]) -> int:
+    """Count distinct contiguous period ranges that are under SC or VSC """
+    sc_laps = sorted(
+        {
+            r["lap_number"]
+            for r in rows
+            if r["flag"] in ("SC", "VSC", "SAFETY CAR", "VIRTUAL SAFETY CAR", "RED")
+            and r["lap_number"] is not None
+        }
+    )
+    if not sc_laps:
+        return 0
+    periods = 1
+    for i in range(1, len(sc_laps)):
+        if sc_laps[i] != sc_laps[i - 1] + 1:
+            periods += 1 
+    return periods
+
+def fetch_race_control_window(inp: types.RaceControlWindowInput) -> types.RaceControlWindowResult:
+    """All flag/SC/VSC events intersecting a lap window for a session."""
+    with extensions.engine.connect() as conn:
+        sql = """
+            SELECT category, flag, scope, driver_number, sector,
+                   lap_number, message
+            FROM race_control_events
+            WHERE session_key = :sk
+        """
+        binds: dict = {"sk": inp.session_key}
+        if inp.driver_number is not None:
+            sql += " AND (driver_number = :dn OR scope = 'Track')"
+            binds["dn"] = inp.driver_number
+        if inp.from_lap is not None:
+            sql += " AND lap_number >= :fl"
+            binds["fl"] = inp.from_lap
+        if inp.to_lap is not None:
+            sql += " AND lap_number <= :tl"
+            binds["tl"] = inp.to_lap
+        sql += " ORDER BY lap_number ASC, id ASC"
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    events = tuple(
+        types.RaceControlEvent(
+            category=r["category"],
+            flag=r["flag"],
+            scope=r["scope"],
+            driver_number=r["driver_number"],
+            sector=r["sector"],
+            lap_number=r["lap_number"],
+            message=r["message"],
+        )
+        for r in rows
+    )
+
+    sc_periods = _count_sc_periods(rows)
+    return types.RaceControlWindowResult(from_lap=inp.from_lap, to_lap=inp.to_lap, events=events, safety_car_periods=sc_periods)
+
 def get_lap_telemetry_artifacts(inp: types.GetLapTelemetryArtifactsInput) -> types.LapTelemetryResult:
     """
     Return artifact metadata (not raw samples) for the requested laps.

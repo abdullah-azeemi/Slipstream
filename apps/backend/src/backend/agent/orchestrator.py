@@ -37,6 +37,7 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.STINT_DEGRADATION_SCANNER: tools.stint_degradation_scanner,
     types.ToolName.TELEMETRY_INSPECTOR: tools.telemetry_inspector,
     types.ToolName.GAP_POSITION_SNAPSHOT: tools.gap_and_position_snapshot,
+    types.ToolName.FETCH_RACE_CONTROL_WINDOW: tools.fetch_race_control_window,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -153,6 +154,19 @@ def _bind_gap(params, env):
     if target_lap is None and env.get("pits") and env["pits"].pit_stops:
         target_lap = env["pits"].pit_stops[0].pit_in_lap
     return types.GapPositionInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, target_lap=target_lap)
+
+@_register(types.ToolName.FETCH_RACE_CONTROL_WINDOW)
+def _bind_race_control(params, env):
+
+    pits = env.get("pits")
+    stop = pits.pit_stops[0] if pits and pits.pit_stops else None
+    target = env["routed"].target_lap
+    from_lap = params.get("from_lap") or (target or (stop.pit_in_lap if stop else None))
+    to_lap = params.get("to_lap")
+    if to_lap is None and stop:
+        to_lap = stop.pit_out_lap
+
+    return types.RaceControlWindowInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, from_lap=from_lap, to_lap=to_lap )
 
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:
     """Clean laps around a pitstop (pit in / pit out laps excluded)"""
@@ -286,6 +300,27 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
             )
         )
         nodes.append(_verify_node(depends_on=("pits", "gap")))
+
+    elif routed.intent is types.Intent.RACE_CONTROL_EVENTS:
+        nodes.append(
+            types.DAGNode(
+                id="pits",
+                tool_name=types.ToolName.FIND_PIT_STOPS,
+                label="Find Pit Stops",
+                description="Locate the driver's pitstop laps to bound the race-control window",
+                depends_on=("session", "driver"),
+            )
+        )
+        nodes.append(
+            types.DAGNode(
+                id="rc",
+                tool_name=types.ToolName.FETCH_RACE_CONTROL_WINDOW,
+                label="Race Control Window",
+                description="Scan flag/SC/VSC events around the pit window",
+                depends_on=("pits",),
+            )
+        )
+        nodes.append(_verify_node(depends_on=("pits", "rc")))
 
     else:  # The telemetry comparison
         nodes.append(
@@ -566,6 +601,14 @@ def _compose(
         if gap.car_ahead_number is not None:
             fallback_lines.append(f"The car ahead (#{gap.car_ahead_number}) was {gap.car_ahead_gap_ms} ms ahead; the car behind (#{gap.car_behind_number}) trailed by {gap.car_behind_gap_ms} ms.")
 
+    elif routed.intent is types.Intent.RACE_CONTROL_EVENTS:
+        rc = outputs["rc"]
+        if rc.events:
+            flags = ", ".join( sorted({f"{e.flag or e.category}@{e.lap_number}" for e in rc.events}) )
+            fallback_lines.append(f"Between laps {rc.from_lap} and {rc.to_lap}, race control reported: {flags}. Distinct safety-car/VSC periods: {rc.safety_car_periods} ")
+        else:
+            fallback_lines.append(f"No race control events found between laps {rc.from_lap} and {rc.to_lap}.")
+
     else:
         telemetry = outputs["telemetry"]
         fallback_lines.append(f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%.")
@@ -595,6 +638,7 @@ def _compose(
         telemetry_overlay=outputs.get("telemetry"),
         stint_degradation=outputs.get("stints"),
         gap_position=outputs.get("gap"),
+        race_control=outputs.get("rc"),
         trace=trace,
         cost_usd=compose_cost,
     )

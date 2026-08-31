@@ -6,6 +6,7 @@ from ingestion.fastf1_client import (
     extract_drivers,
     extract_laps,
     extract_telemetry,
+    extract_race_control,
 )
 from ingestion.loader import (
     upsert_session,
@@ -13,6 +14,7 @@ from ingestion.loader import (
     load_laps,
     load_telemetry,
     update_session_weather,
+    load_race_control,
 )
 
 log = structlog.get_logger()
@@ -102,17 +104,12 @@ def main():
         )
         tel_count = load_telemetry(tel, session_key)
     elif not args.skip_telemetry and args.session.upper() not in TELEMETRY_SESSIONS:
-        log.info(
-            "telemetry.skipped",
-            reason="non-qualifying session — telemetry not stored by design",
-            session=args.session,
-        )
+        log.info("telemetry.skipped", reason="non-qualifying session — telemetry not stored by design", session=args.session)
 
-    print(
-        f"\n✅  session={session_key}  drivers={len(drivers)}"
-        f"  laps={lap_count}  telemetry={tel_count}"
-        f"  weather={'yes' if weather else 'no'}"
-    )
+    rc_events = extract_race_control(session, session_key)
+    rc_count = load_race_control(rc_events, session_key)
+    
+    print(f"\n✅  session={session_key}  drivers={len(drivers)} laps={lap_count}  telemetry={tel_count}  weather={'yes' if weather else 'no'}, race_control={rc_count}")
 
 
 if __name__ == "__main__":

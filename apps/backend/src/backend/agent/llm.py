@@ -26,6 +26,7 @@ Allowed Intents:
     - "tyre_degradation_analysis" : the question asks about tyre wear / stint degradation.
     - "telemetry_comparison" : the question asks to compare two laps or two drivers' telemetry.
     - "position_gap_tracking" : the question asks about a driver's position, gap to leader, gap to cars ahead/behind, or whether an undercut/overcut worked.
+    - "race_control_events" : the question asks about safety cars, VSC, yellow/red flags, or race control messages during a race.
     - "unsupported" : everything else (weather, other sports, live timing etc)
 
 Field Rules:

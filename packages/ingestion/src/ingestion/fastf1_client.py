@@ -3,6 +3,7 @@ FastF1 client — fetches and normalises session data.
 """
 
 from __future__ import annotations
+import math
 import warnings
 import fastf1
 import pandas as pd
@@ -51,7 +52,7 @@ def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
     fastf1.Cache.enable_cache("./fastf1_cache")
     session = fastf1.get_session(year, gp, session_type)
     load_weather = True
-    session.load(telemetry=True, weather=load_weather, messages=False)
+    session.load(telemetry=True, weather=load_weather, messages=True, livedata=None)
     log.info(
         "session.loaded",
         year=year,
@@ -164,13 +165,54 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     log.info("laps.extracted", session_key=session_key, count=len(results))
     return results
 
+def extract_race_control(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    """ Extract the race control messages (safety car, VSC, yellow/red flags, DRS) into a list of events dicts for storage"""
+    try:
+        rc = session.race_control_messages
+    except Exception as e:
+        log.warning("race_control.extract_failed", error=str(e))
+        return []
 
-def extract_telemetry(
-    session: fastf1.core.Session,
-    session_key: int,
-    all_drivers: bool = False,
-    all_laps: bool = False,
-) -> list[dict]:
+    if rc is None or rc.empty:
+        log.info("race_control.empty", session_key=session_key)
+        return []
+
+    results = []
+    for _, row in rc.iterrows():
+        results.append(
+            {
+                "session_key": session_key,
+                "category": _clean(row.get("Category")),
+                "flag": _clean(row.get("Flag")),
+                "scope": _clean(row.get("Scope")),
+                "driver_number": _to_int(row.get("DriverNumber")),
+                "sector": _to_int(row.get("Sector")),
+                "lap_number": _to_int(row.get("LapNumber")),
+                "message": _clean(row.get("Message")),
+            }
+        )
+    log.info("race_control.extracted", session_key=session_key, count=len(results))
+    return results
+
+def _clean(val):
+    """sanitise a string field (NaN → None)"""
+    if val is None or (isinstance(val, float) and math.isnan(val)) or str(val).strip() == "":
+        return None
+    return str(val).strip()
+
+
+def _to_int(val):
+    """sanitise an int field (NaN/empty → None)"""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+
+def extract_telemetry(session: fastf1.core.Session, session_key: int, all_drivers: bool = False, all_laps: bool = False ) -> list[dict]:
     """
     Extract telemetry samples for a session.
 

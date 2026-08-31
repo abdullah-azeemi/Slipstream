@@ -288,6 +288,41 @@ def load_laps(laps: list[dict], session_key: int) -> int:
     return len(laps)
 
 
+def load_race_control(events: list[dict], session_key: int) -> int:
+    """ Replace all the race control events for a season with the giiven list"""
+    if not events:
+        return 0
+
+    engine = _get_engine()
+    rows = [
+        {
+            "session_key": session_key,
+            "category": _clean_str(ev.get("category")),
+            "flag": _clean_str(ev.get("flag")),
+            "scope": _clean_str(ev.get("scope")),
+            "driver_number": _clean_int(ev.get("driver_number")),
+            "sector": _clean_int(ev.get("sector")),
+            "lap_number": _clean_int(ev.get("lap_number")),
+            "message": _clean_str(ev.get("message")),
+        }
+        for ev in events
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text(""" DELETE FROM race_control_events WHERE session_key = :sk """), {"sk": session_key}, )
+
+        conn.execute(text(
+            """
+                INSERT INTO race_control_events (
+                    session_key, category, flag, scope, driver_number, sector, lap_number, message) 
+                VALUES (
+                    :session_key, :category, :flag, :scope, :driver_number, :sector, :lap_number, :message)
+            """
+        ), rows, 
+        )
+    log.info("loader.race_control_loaded", count=len(events), session_key=session_key)
+    return len(events)
+
 # ── Telemetry ─────────────────────────────────────────────────────────────────
 
 _TEL_INSERT = """

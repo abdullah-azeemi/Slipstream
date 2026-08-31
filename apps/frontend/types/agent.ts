@@ -68,6 +68,7 @@ export interface AgentAnswer {
   evidence?: VerifyEvidenceResult | null
   telemetry_overlay?: TelemetryInspectorResult | null
   stint_degradation?: StintDegradationResult | null
+  race_control?: RaceControlWindowResult | null
   trace: ToolCallRecord[]
   conversation_id?: number | null
   trace_visibility?: 'full' | 'evidence' | string
@@ -217,4 +218,21 @@ export interface StintDegradationResult {
   driver_number: number
   stints: StintSummary[]
   worst_degradation_stint: number | null
+}
+
+export interface RaceControlEvent {
+  category: string | null
+  flag: string | null
+  scope: string | null
+  driver_number: number | null
+  sector: number | null
+  lap_number: number | null
+  message: string | null
+}
+
+export interface RaceControlWindowResult {
+  from_lap: number | null
+  to_lap: number | null
+  events: RaceControlEvent[]
+  safety_car_periods: number
 }

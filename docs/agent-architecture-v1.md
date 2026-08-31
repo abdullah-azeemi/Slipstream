@@ -1,14 +1,14 @@
 # Pitwall Agent Architecture v1
 
-Last updated: 2026-08-31 (L29 shipped, L30 planned)
+Last updated: 2026-09-01 (L30 & L31 shipped)
 
-Status: **L1–L29 complete and shipped. L30 (position & gap tracking) is the next planned work.**
+Status: **L1–L31 complete and shipped. L32 (Qualifying Intent & DAG) is the next planned work.**
 
 ---
 
 ## Completed Work — Summary (L1 – L29)
 
-Everything below is done and committed. Do not re-implement it. Read this to understand what already exists before starting L30. L28 and L29 are documented in their own dedicated sections below.
+Everything below is done and committed. Do not re-implement it. Read this to understand what already exists before starting the next lesson. L28, L29, L30 and L31 are documented in their own dedicated sections below.
 
 ### Backend (`apps/backend/src/backend/agent/`)
 
@@ -1168,6 +1168,66 @@ Every future tool/intent change now lives behind the same merge path — a count
 
 ---
 
+## L30 — Position and Gap Tracking
+
+### Status: SHIPPED (2026-09-01).
+
+Answer "What was Sainz's gap to the leader when he pitted?" and "Did the undercut work?". Most of the machinery already existed; this lesson fixed the wiring and completed the router.
+
+### Files changed
+
+| File | What it does |
+|---|---|
+| `agent/llm.py` | `_ROUTER_SYSTEM_PROMPT` now lists `position_gap_tracking` as an allowed intent so the router can emit it |
+| `agent/orchestrator.py` | Fixed `_bind_gap` — `target_lap` now respects the user's routed lap, with the pit-in lap as a fallback default instead of a hard override |
+
+### What already existed (not re-implemented)
+
+- `position` column in `lap_times` (migration 0002)
+- `Position` extracted in `extract_laps()` and loaded via `load_laps()`
+- `GapPositionInput` / `GapPositionSnapshot` types, `_cumulative_race_times()` + `_gap_snapshot()` helpers, and the full `gap_and_position_snapshot()` tool
+- DAG branch for `POSITION_GAP_TRACKING`, `_bind_gap`, and the `_compose` fallback text
+
+### Bug fixed — `_bind_gap`
+
+**Before**: `target_lap = env["pits"].pit_stops[0].pit_in_lap` unconditionally overwrote the value, so the tool always snapped to the pit-in lap regardless of what the user asked.
+**After**: `params` → `routed.target_lap` → pit-in lap fallback only when the user gave no lap.
+
+**Lesson — the binder fallback chain.** A binder pulls `target_lap` from (1) the DAG node's `input_params`, (2) the LLM's extracted `routed` entities, then (3) a sensible default (the pit-in lap — the moment the undercut decision matters). Each hop is a fallback, never an overwrite.
+
+---
+
+## L31 — Race Control Events (Safety Cars, Yellow Flags)
+
+### Status: SHIPPED (2026-09-01).
+
+Answer "Was there a safety car when Sainz pitted on lap 26?" and "Was there a VSC during Hamilton's slow lap?". End-to-end: ingest FastF1 `race_control_messages` → store in a new table → query via a new tool wired into the DAG.
+
+### Files changed
+
+| File | What it does |
+|---|---|
+| `ingestion/fastf1_client.py` | `session.load(..., messages=True)` enables the feed; new `extract_race_control()` + `_clean`/`_to_int` sanitizers |
+| `ingestion/loader.py` | `load_race_control()` — delete-then-insert idempotent load |
+| `ingestion/ingest_session.py` | Calls `extract_race_control()` + `load_race_control()` in `main()`; print includes `race_control` count |
+| `migrations/versions/0021_add_race_control_events.py` | New `race_control_events` table + `(session_key, lap_number)` and `(session_key, driver_number)` indexes |
+| `agent/types.py` | `Intent.RACE_CONTROL_EVENTS`, `ToolName.FETCH_RACE_CONTROL_WINDOW`, `RaceControlWindowInput`, `RaceControlEvent`, `RaceControlWindowResult`, `AgentAnswer.race_control` |
+| `agent/tools.py` | `fetch_race_control_window()` tool + `_count_sc_periods()` pure helper |
+| `agent/orchestrator.py` | Tool registry entry, `_bind_race_control` binder, `RACE_CONTROL_EVENTS` DAG branch, `_compose` fallback + `AgentAnswer` payload |
+| `agent/llm.py` | `_ROUTER_SYSTEM_PROMPT` lists `race_control_events` |
+| `frontend/types/agent.ts` | `RaceControlEvent`, `RaceControlWindowResult`, `AgentAnswer.race_control?` |
+| `frontend/app/agent/page.tsx` | Cleanup — removed duplicated markdown block and duplicated `<div>`/`<RefusalBanner>` that caused JSX syntax errors |
+
+### Key design decisions
+
+- **Dedicated table, not the generic JSONB store.** Race control messages are high-volume and queried by lap range (`WHERE session_key=:sk AND lap_number BETWEEN :a AND :b`); dedicated indexed columns are cheaper to filter than JSONB.
+- **Two composite indexes**, both leading with `session_key` (the lap-range hot path and the per-driver path).
+- **SQL gathers, Python derives.** `_count_sc_periods()` computes distinct SC/VSC period counts in pure Python; the tool query never counts — it just returns rows.
+- **The `scope = 'Track'` OR.** When querying a driver, include both `driver_number = :dn OR scope = 'Track'` so driver-scoped and full-course flags are both captured, while the lap-range filters stay correctly parenthesized.
+- **Route tests**: 119 backend tests pass, `ruff check` clean, `pnpm tsc --noEmit` clean.
+
+---
+
 ## Established Conventions — Always Follow
 
 These apply to every future lesson:
@@ -1193,24 +1253,22 @@ The system's three invariants:
 
 ## L30+ — Future Agent Capabilities (Agent Expansion)
 
-> Status: L29 (item 6, Continuous Conversation) shipped 2026-08-29. The backlog below is prioritized top-down. **Next planned: Item 1 — Position and Gap Tracking.** Items 1–5 and 7 are not yet implemented in the code.
+> Status: L30 (Item 1) and L31 (Item 2) shipped 2026-09-01. The backlog below is prioritized top-down. **Next planned: Item 3 — Qualifying Intent & DAG.**
 
-These features are prioritized for development after L29 to expand the chatbot's domain knowledge and answering capabilities.
-
-### 1. Position and Gap Tracking
+### 1. Position and Gap Tracking — [SHIPPED 2026-09-01 as L30]
 * **Goal**: Answer questions like "What was Sainz's gap to the leader when he pitted?" and "Did the undercut work?"
 * **Data Source**: FastF1 `session.laps["Position"]` (already extracted in `extract_laps()`, just needs to be saved to Postgres).
 * **Implementation**:
-  * Add `position` column to `lap_times` table.
-  * Add tool `gap_and_position_snapshot(session_key, driver_number, lap_number)` returning position, gap to leader, and gap to cars ahead/behind.
-  * Wire into the existing `GAP_AND_STRATEGY_ANALYZER` tool.
+  * Add `position` column to `lap_times` table. *(Already present since migration 0002.)*
+  * Add tool `gap_and_position_snapshot(session_key, driver_number, lap_number)` returning position, gap to leader, and gap to cars ahead/behind. *(Done.)*
+  * Wire into the existing `GAP_AND_STRATEGY_ANALYZER` tool. *(Router `position_gap_tracking` + DAG branch done.)*
 
-### 2. Race Control Events (Safety Cars, Yellow Flags)
+### 2. Race Control Events (Safety Cars, Yellow Flags) — [SHIPPED 2026-09-01 as L31]
 * **Goal**: Answer questions like "Was there a safety car when Sainz pitted on lap 26?"
 * **Data Source**: FastF1 `session.race_control_messages`.
 * **Implementation**:
-  * Create `race_control_events` table (flag type, timestamp, sector).
-  * Add tool `fetch_race_control_window(session_key, lap_range)` to return flags/SC events intersecting a driver's lap window.
+  * Create `race_control_events` table (flag type, timestamp, sector). *(Done — migration 0021.)*
+  * Add tool `fetch_race_control_window(session_key, lap_range)` to return flags/SC events intersecting a driver's lap window. *(Done.)*
 
 ### 3. Qualifying Intent & DAG
 * **Goal**: Answer questions like "What was Sainz's Q3 time?" or "Which sector was Hamilton fastest in qualifying?"
