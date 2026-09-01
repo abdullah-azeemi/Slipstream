@@ -70,6 +70,9 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check apps/backend/src/ packages/
 
+      - name: Golden eval
+        run: cd apps/backend && uv run python -m pytest tests/agent/test_golden_eval.py -v
+
   frontend:
     runs-on: ubuntu-latest
     steps:
