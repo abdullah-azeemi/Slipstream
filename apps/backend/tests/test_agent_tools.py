@@ -67,6 +67,41 @@ def test_derive_pit_stops_missing_pit_out_defaults_to_next_lap():
     assert stops[0].compound_after is None
 
 
+def _sample(lap_number, track_temp, rainfall):
+    return types.WeatherEventSample(
+        timestamp="2024-07-07T13:00:00Z",
+        lap_number=lap_number,
+        track_temp_c=track_temp,
+        air_temp_c=15.0,
+        humidity_pct=60.0,
+        rainfall=rainfall,
+        wind_speed_ms=3.5,
+    )
+
+
+def test_rain_stats_counts_rainy_laps_and_track_delta():
+    samples = [
+        _sample(1, 18.0, True),
+        _sample(2, 20.0, False),
+        _sample(3, 30.0, False),
+        _sample(6, 22.0, True),
+    ]
+    stats = tools._rain_stats(samples)
+
+    assert stats["rainfall_laps"] == 2
+    assert stats["total_laps"] == 4
+    assert stats["rain_share_pct"] == 50.0
+    assert stats["track_temp_delta_c"] == 12.0  # 30 - 18
+
+
+def test_rain_stats_empty_samples():
+    stats = tools._rain_stats([])
+    assert stats["rainfall_laps"] == 0
+    assert stats["total_laps"] == 0
+    assert stats["rain_share_pct"] == 0.0
+    assert stats["track_temp_delta_c"] is None
+
+
 def test_derive_pit_stops_no_pit_laps_returns_empty():
     laps = [_lap(1, compound="SOFT"), _lap(2, compound="SOFT")]
     assert tools._derive_pit_stops(laps) == []

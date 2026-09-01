@@ -215,6 +215,33 @@ CREATE INDEX IF NOT EXISTS idx_race_intelligence_events_session_type
     ON race_intelligence_events (session_key, event_type);
 CREATE INDEX IF NOT EXISTS idx_race_intelligence_events_driver
     ON race_intelligence_events (session_key, driver_number);
+
+CREATE TABLE IF NOT EXISTS team_radio (
+    id              SERIAL PRIMARY KEY,
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number   INTEGER NOT NULL,
+    lap_number      INTEGER,
+    date            TIMESTAMPTZ,
+    recording_url   TEXT NOT NULL,
+    transcript      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS weather_events (
+    id              SERIAL PRIMARY KEY,
+    session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
+    timestamp       TIMESTAMPTZ NOT NULL,
+    lap_number      INTEGER,
+    track_temp_c    DOUBLE PRECISION,
+    air_temp_c      DOUBLE PRECISION,
+    humidity_pct    DOUBLE PRECISION,
+    rainfall        BOOLEAN,
+    wind_speed_ms   DOUBLE PRECISION
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_radio_session_driver
+    ON team_radio (session_key, driver_number);
+CREATE INDEX IF NOT EXISTS idx_weather_events_session_lap
+    ON weather_events (session_key, lap_number);
 """
 
 
@@ -267,6 +294,8 @@ def _create_tables(db_engine):
         conn.execute(text("DROP TABLE IF EXISTS race_results CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry_artifacts CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS telemetry CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS weather_events CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS team_radio CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS lap_times CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS drivers CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS sessions CASCADE;"))

@@ -126,6 +126,139 @@ def test_build_dag_telemetry_compare_spawns_second_driver_branch():
     assert by_id["driver_cmp"].input_params == {"name": "Leclerc"}
 
 
+def test_build_dag_team_radio_shape():
+    dag = orchestrator.build_dag(_routed("team_radio"))
+    by_id = {n.id: n for n in dag.nodes}
+    assert by_id["radio"].tool_name is types.ToolName.FETCH_RADIO_MESSAGES
+    assert by_id["radio"].depends_on == ("pits",)
+    assert by_id["pits"].depends_on == ("session", "driver")
+    assert by_id["verify"].depends_on == ("pits", "radio")
+
+
+def test_build_dag_weather_correlation_shape():
+    dag = orchestrator.build_dag(_routed("weather_correlation"))
+    by_id = {n.id: n for n in dag.nodes}
+    assert by_id["weather"].tool_name is types.ToolName.FETCH_WEATHER_WINDOW
+    assert by_id["weather"].depends_on == ("pits",)
+    assert by_id["verify"].depends_on == ("pits", "weather")
+
+
+def test_compose_carries_radio_and_weather_payloads(monkeypatch):
+    _fake_compose(monkeypatch, "debug")
+    routed = _routed("team_radio")
+    radio = types.RadioWindowResult(
+        driver_number=55,
+        from_lap=13,
+        to_lap=15,
+        messages=(
+            types.RadioMessage(
+                date="2024-07-07T13:00:00Z", recording_url="https://cdn.f1.com/a.mp3"
+            ),
+        ),
+        clip_count=1,
+    )
+    weather = types.WeatherWindowResult(
+        from_lap=13,
+        to_lap=15,
+        samples=(),
+        rainfall_laps=0,
+        total_laps=0,
+        rain_share_pct=0.0,
+        track_temp_delta_c=None,
+    )
+    outputs = {
+        "session": types.ResolvedSession(
+            session_key=1,
+            year=2026,
+            gp_name="Monaco",
+            session_type=types.SessionType.RACE,
+        ),
+        "driver": types.ResolvedDriver(
+            driver_number=55, abbreviation="SAI", full_name="Carlos Sainz"
+        ),
+        "pits": types.PitStopsResult(
+            driver_number=55,
+            pit_stops=(types.PitStop(stop_index=1, pit_in_lap=13, pit_out_lap=14),),
+        ),
+        "radio": radio,
+        "weather": weather,
+        "verify": types.VerifyEvidenceResult(passed=True, checks=()),
+    }
+
+    answer = orchestrator._compose("q", routed, outputs, set(), ())
+    assert answer.team_radio is radio
+    assert answer.weather is weather
+
+
+def test_run_team_radio_through_dag(app, db_engine, monkeypatch):
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO team_radio (
+                    session_key, driver_number, lap_number, date, recording_url, transcript
+                ) VALUES (:sk, 55, 5, NOW(), 'https://cdn.f1.com/box.mp3', 'Box box box')
+                """
+            ),
+            {"sk": SESSION_KEY},
+        )
+    _fake_route(monkeypatch, _routed("team_radio"))
+    _fake_compose(monkeypatch, "Carlos's engineer called him in.")
+
+    try:
+        answer = orchestrator.run(
+            "What did Sainz's engineer say before the pit in Monaco 2026?"
+        )
+        assert answer.refusals == ()
+        assert answer.intent is types.Intent.TEAM_RADIO
+        assert answer.team_radio is not None
+        assert answer.team_radio.clip_count == 1
+        assert all(r.status == "ok" for r in answer.trace)
+    finally:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM team_radio WHERE session_key = :sk"),
+                {"sk": SESSION_KEY},
+            )
+        _cleanup(db_engine)
+
+
+def test_run_weather_correlation_through_dag(app, db_engine, monkeypatch):
+    _insert_session_and_driver(db_engine)
+    _insert_laps(db_engine)
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO weather_events (
+                    session_key, timestamp, lap_number,
+                    track_temp_c, air_temp_c, humidity_pct, rainfall, wind_speed_ms
+                ) VALUES (:sk, NOW(), 5, 18.0, 14.0, 85.0, true, 4.0)
+                """
+            ),
+            {"sk": SESSION_KEY},
+        )
+    _fake_route(monkeypatch, _routed("weather_correlation"))
+    _fake_compose(monkeypatch, "It was raining when he pitted.")
+
+    try:
+        answer = orchestrator.run("Was it raining when Sainz pitted in Monaco 2026?")
+        assert answer.refusals == ()
+        assert answer.intent is types.Intent.WEATHER_CORRELATION
+        assert answer.weather is not None
+        assert answer.weather.rainfall_laps == 1
+        assert all(r.status == "ok" for r in answer.trace)
+    finally:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM weather_events WHERE session_key = :sk"),
+                {"sk": SESSION_KEY},
+            )
+        _cleanup(db_engine)
+
+
 # ── topo_sort ────────────────────────────────────────────────────────────────
 
 

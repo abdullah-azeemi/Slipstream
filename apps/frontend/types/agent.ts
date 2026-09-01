@@ -69,6 +69,8 @@ export interface AgentAnswer {
   telemetry_overlay?: TelemetryInspectorResult | null
   stint_degradation?: StintDegradationResult | null
   race_control?: RaceControlWindowResult | null
+  team_radio?: RadioWindowResult | null
+  weather?: WeatherWindowResult | null
   trace: ToolCallRecord[]
   conversation_id?: number | null
   trace_visibility?: 'full' | 'evidence' | string
@@ -235,4 +237,38 @@ export interface RaceControlWindowResult {
   to_lap: number | null
   events: RaceControlEvent[]
   safety_car_periods: number
+}
+
+export interface RadioMessage {
+  date: string | null
+  recording_url: string | null
+  transcript?: string | null
+}
+
+export interface RadioWindowResult {
+  driver_number: number
+  from_lap: number | null
+  to_lap: number | null
+  messages: RadioMessage[]
+  clip_count: number
+}
+
+export interface WeatherEventSample {
+  timestamp: string | null
+  lap_number: number | null
+  track_temp_c: number | null
+  air_temp_c: number | null
+  humidity_pct: number | null
+  rainfall: boolean
+  wind_speed_ms: number | null
+}
+
+export interface WeatherWindowResult {
+  from_lap: number | null
+  to_lap: number | null
+  samples: WeatherEventSample[]
+  rainfall_laps: number
+  total_laps: number
+  rain_share_pct: number
+  track_temp_delta_c: number | null
 }

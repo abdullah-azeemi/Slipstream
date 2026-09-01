@@ -28,7 +28,9 @@ Allowed Intents:
     - "position_gap_tracking" : the question asks about a driver's position, gap to leader, gap to cars ahead/behind, or whether an undercut/overcut worked.
     - "race_control_events" : the question asks about safety cars, VSC, yellow/red flags, or race control messages during a race.
     - "qualifying_lap_analysis" : the question asks about qualifying, a Q1/Q2/Q3 time, qualifying sector speed, or grid position. Sets session_type to "Q".
-    - "unsupported" : everything else (weather, other sports, live timing etc)
+    - "team_radio" : the question asks what a driver's engineer/team said on the radio, or wants a radio clip / message inside the car.
+    - "weather_correlation" : the question asks about rain, wet/dry conditions, track or air temperature, humidity, or wind during a session.
+    - "unsupported" : everything else (other sports, live timing etc)
 
 Field Rules:
     - "driver" : the surname, full name, number or abbreviation the user asks about; null if none
@@ -100,7 +102,9 @@ def _post(messages: list[dict], model: str, temperature: float) -> dict:
         raise types.LLMError(f"OpenRouter call failed: {exc}") from exc
 
 
-def _chat(messages: list[dict], model: str | None = None, temperature: float = 0.0) -> tuple[str, dict]:
+def _chat(
+    messages: list[dict], model: str | None = None, temperature: float = 0.0
+) -> tuple[str, dict]:
     """One chat completion. Returns (text, usage_summary) and logs tokens/cost."""
     model = model or settings.openrouter_routing_model
     payload = _post(messages, model, temperature)
@@ -162,6 +166,7 @@ def _coerce_target_lap(value) -> int | None:
         raise types.LLMError(f"router returned bad target lap : {value!r}") from None
     return lap if lap > 0 else None
 
+
 def _coerce_session_type(value) -> "types.SessionType | None":
     """Map an LLM session_type string ('Q', 'R', ...) to a SessionType, else None."""
     if not value:
@@ -183,12 +188,16 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
         {"role": "user", "content": question},
     ]
-    text, usage = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
+    text, usage = _chat(
+        messages, model=settings.openrouter_routing_model, temperature=0.0
+    )
     try:
         payload = json.loads(text)
         intent_value = payload["intent"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise types.LLMError(f"router returned unparseable response: {text[:200]}") from exc
+        raise types.LLMError(
+            f"router returned unparseable response: {text[:200]}"
+        ) from exc
 
     if intent_value not in {member.value for member in types.Intent}:
         raise types.LLMError(f"router returned unknown intent: {intent_value}")

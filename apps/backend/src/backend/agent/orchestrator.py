@@ -38,6 +38,8 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.TELEMETRY_INSPECTOR: tools.telemetry_inspector,
     types.ToolName.GAP_POSITION_SNAPSHOT: tools.gap_and_position_snapshot,
     types.ToolName.FETCH_RACE_CONTROL_WINDOW: tools.fetch_race_control_window,
+    types.ToolName.FETCH_RADIO_MESSAGES: tools.fetch_radio_messages,
+    types.ToolName.FETCH_WEATHER_WINDOW: tools.fetch_weather_window,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -110,8 +112,17 @@ def _bind_window(params, env):
 @_register(types.ToolName.VERIFY_EVIDENCE)
 def _bind_verify(params, env):
     required_laps: tuple[int, ...] = ()
-    if "pits" in env:
-        required_laps = _pit_laps(env["pits"].pit_stops[0], env["routed"].laps_window)
+    routed = env["routed"]
+    if (
+        "pits" in env
+        and env["pits"].pit_stops
+        and routed.intent
+        in (
+            types.Intent.PIT_STOP_SPEED_DELTA,
+            types.Intent.RACE_CONTROL_EVENTS,
+        )
+    ):
+        required_laps = _pit_laps(env["pits"].pit_stops[0], routed.laps_window)
     return types.VerifyEvidenceInput(
         session_key=env["session"].session_key,
         driver_number=env["driver"].driver_number,
@@ -149,11 +160,17 @@ def _bind_telemetry(params, env):
         compare_lap_numbers=params.get("compare_lap_numbers") or (),
     )
 
+
 def _bind_gap(params, env):
     target_lap = params.get("target_lap") or env["routed"].target_lap
     if target_lap is None and env.get("pits") and env["pits"].pit_stops:
         target_lap = env["pits"].pit_stops[0].pit_in_lap
-    return types.GapPositionInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, target_lap=target_lap)
+    return types.GapPositionInput(
+        session_key=env["session"].session_key,
+        driver_number=env["driver"].driver_number,
+        target_lap=target_lap,
+    )
+
 
 @_register(types.ToolName.FETCH_RACE_CONTROL_WINDOW)
 def _bind_race_control(params, env):
@@ -166,7 +183,48 @@ def _bind_race_control(params, env):
     if to_lap is None and stop:
         to_lap = stop.pit_out_lap
 
-    return types.RaceControlWindowInput(session_key=env["session"].session_key, driver_number=env["driver"].driver_number, from_lap=from_lap, to_lap=to_lap )
+    return types.RaceControlWindowInput(
+        session_key=env["session"].session_key,
+        driver_number=env["driver"].driver_number,
+        from_lap=from_lap,
+        to_lap=to_lap,
+    )
+
+
+@_register(types.ToolName.FETCH_RADIO_MESSAGES)
+def _bind_radio(params, env):
+    pits = env.get("pits")
+    stop = pits.pit_stops[0] if pits and pits.pit_stops else None
+    target = env["routed"].target_lap
+    from_lap = params.get("from_lap") or (target or (stop.pit_in_lap if stop else None))
+    to_lap = params.get("to_lap")
+    if to_lap is None and stop:
+        to_lap = stop.pit_out_lap
+
+    return types.RadioWindowInput(
+        session_key=env["session"].session_key,
+        driver_number=env["driver"].driver_number,
+        from_lap=from_lap,
+        to_lap=to_lap,
+    )
+
+
+@_register(types.ToolName.FETCH_WEATHER_WINDOW)
+def _bind_weather(params, env):
+    pits = env.get("pits")
+    stop = pits.pit_stops[0] if pits and pits.pit_stops else None
+    target = env["routed"].target_lap
+    from_lap = params.get("from_lap") or (target or (stop.pit_in_lap if stop else None))
+    to_lap = params.get("to_lap")
+    if to_lap is None and stop:
+        to_lap = stop.pit_out_lap
+
+    return types.WeatherWindowInput(
+        session_key=env["session"].session_key,
+        from_lap=from_lap,
+        to_lap=to_lap,
+    )
+
 
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:
     """Clean laps around a pitstop (pit in / pit out laps excluded)"""
@@ -295,7 +353,7 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
                 tool_name=types.ToolName.GAP_POSITION_SNAPSHOT,
                 label="Gap and. Position Snapshot",
                 description="Commulative-time ranking at one lap",
-                depends_on=("pits", ),
+                depends_on=("pits",),
                 input_params={"target_lap": routed.target_lap},
             )
         )
@@ -322,8 +380,49 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
         )
         nodes.append(_verify_node(depends_on=("pits", "rc")))
 
+    elif routed.intent is types.Intent.TEAM_RADIO:
+        nodes.append(
+            types.DAGNode(
+                id="pits",
+                tool_name=types.ToolName.FIND_PIT_STOPS,
+                label="Find Pit Stops",
+                description="Locate the driver's pitstop laps to bound the radio window",
+                depends_on=("session", "driver"),
+            )
+        )
+        nodes.append(
+            types.DAGNode(
+                id="radio",
+                tool_name=types.ToolName.FETCH_RADIO_MESSAGES,
+                label="Team Radio Clips",
+                description="Fetch team radio clips around the pit window",
+                depends_on=("pits",),
+            )
+        )
+        nodes.append(_verify_node(depends_on=("pits", "radio")))
+
+    elif routed.intent is types.Intent.WEATHER_CORRELATION:
+        nodes.append(
+            types.DAGNode(
+                id="pits",
+                tool_name=types.ToolName.FIND_PIT_STOPS,
+                label="Find Pit Stops",
+                description="Locate the driver's pitstop laps to bound the weather window",
+                depends_on=("session", "driver"),
+            )
+        )
+        nodes.append(
+            types.DAGNode(
+                id="weather",
+                tool_name=types.ToolName.FETCH_WEATHER_WINDOW,
+                label="Weather Window",
+                description="Fetch weather events around the pit window",
+                depends_on=("pits",),
+            )
+        )
+        nodes.append(_verify_node(depends_on=("pits", "weather")))
+
     elif routed.intent is types.Intent.QUALIFYING_LAP_ANALYSIS:
-        # Qualifying: no pit stops. Pull lap/sector event data + telemetry for the driver.
         nodes.append(
             types.DAGNode(
                 id="qlaps",
@@ -624,30 +723,75 @@ def _compose(
     elif routed.intent is types.Intent.POSITION_GAP_TRACKING:
         gap = outputs["gap"]
         pos = gap.position if gap.position is not None else "?"
-        fallback_lines.append(f"At lap {gap.lap_number}, {driver.full_name} was P{pos}.")
+        fallback_lines.append(
+            f"At lap {gap.lap_number}, {driver.full_name} was P{pos}."
+        )
         if gap.gap_to_leader_ms is not None:
-            fallback_lines.append(f"On cumulative race time he was {gap.gap_to_leader_ms} ms behind the leader (#{gap.leader_number}).")
+            fallback_lines.append(
+                f"On cumulative race time he was {gap.gap_to_leader_ms} ms behind the leader (#{gap.leader_number})."
+            )
         if gap.car_ahead_number is not None:
-            fallback_lines.append(f"The car ahead (#{gap.car_ahead_number}) was {gap.car_ahead_gap_ms} ms ahead; the car behind (#{gap.car_behind_number}) trailed by {gap.car_behind_gap_ms} ms.")
+            fallback_lines.append(
+                f"The car ahead (#{gap.car_ahead_number}) was {gap.car_ahead_gap_ms} ms ahead; the car behind (#{gap.car_behind_number}) trailed by {gap.car_behind_gap_ms} ms."
+            )
 
     elif routed.intent is types.Intent.RACE_CONTROL_EVENTS:
         rc = outputs["rc"]
         if rc.events:
-            flags = ", ".join( sorted({f"{e.flag or e.category}@{e.lap_number}" for e in rc.events}) )
-            fallback_lines.append(f"Between laps {rc.from_lap} and {rc.to_lap}, race control reported: {flags}. Distinct safety-car/VSC periods: {rc.safety_car_periods} ")
+            flags = ", ".join(
+                sorted({f"{e.flag or e.category}@{e.lap_number}" for e in rc.events})
+            )
+            fallback_lines.append(
+                f"Between laps {rc.from_lap} and {rc.to_lap}, race control reported: {flags}. Distinct safety-car/VSC periods: {rc.safety_car_periods} "
+            )
         else:
-            fallback_lines.append(f"No race control events found between laps {rc.from_lap} and {rc.to_lap}.")
+            fallback_lines.append(
+                f"No race control events found between laps {rc.from_lap} and {rc.to_lap}."
+            )
+
+    elif routed.intent is types.Intent.TEAM_RADIO:
+        radio = outputs["radio"]
+        if radio.messages:
+            clips = len(radio.messages)
+            first_date = radio.messages[0].date
+            fallback_lines.append(
+                f"Found {clips} team radio clip(s) for {driver.full_name} (first at {first_date})."
+            )
+            fallback_lines.append(
+                f"The recordings are attached below — from_lap {radio.from_lap} to lap {radio.to_lap}."
+            )
+        else:
+            fallback_lines.append(
+                f"No team radio clips found for {driver.full_name} between laps {radio.from_lap} and {radio.to_lap}."
+            )
+
+    elif routed.intent is types.Intent.WEATHER_CORRELATION:
+        weather = outputs["weather"]
+        if weather.samples:
+            fallback_lines.append(
+                f"Across {weather.total_laps} lap(s) in the window, rain was present on {weather.rainfall_laps} "
+                f"(~{weather.rain_share_pct}% of laps)."
+            )
+            if weather.track_temp_delta_c is not None:
+                fallback_lines.append(
+                    f"Track temperature swung {weather.track_temp_delta_c:+.1f}\u00b0C across the window."
+                )
+        else:
+            fallback_lines.append(
+                f"No weather events found between laps {weather.from_lap} and {weather.to_lap}."
+            )
 
     elif routed.intent is types.Intent.QUALIFYING_LAP_ANALYSIS:
         laps = outputs["qlaps"]
         fallback_lines.append(
-            f"{driver.full_name} had {laps.anomaly_count} off-pace qualifying lap(s); "
-            f"median clean pace was {laps.median_pace_ms} ms."
+            f"{driver.full_name} had {laps.anomaly_count} off-pace qualifying lap(s); median clean pace was {laps.median_pace_ms} ms."
         )
 
     else:
         telemetry = outputs["telemetry"]
-        fallback_lines.append(f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%.")
+        fallback_lines.append(
+            f"Compared {len(telemetry.traces)} telemetry trace(s); full-throttle share was {telemetry.full_throttle_pct}%."
+        )
 
     fallback_text = "\n".join(fallback_lines)
 
@@ -675,6 +819,8 @@ def _compose(
         stint_degradation=outputs.get("stints"),
         gap_position=outputs.get("gap"),
         race_control=outputs.get("rc"),
+        team_radio=outputs.get("radio"),
+        weather=outputs.get("weather"),
         trace=trace,
         cost_usd=compose_cost,
     )
@@ -741,7 +887,7 @@ def run(
         return types.AgentAnswer(
             question=question,
             intent=routed.intent,
-            answer="I cannot answer that yet. v1 supports pit-stop, lap event, tyre degradation, and telemetry comparison questions.",
+            answer="I cannot answer that yet. v1 supports pit-stop, lap event, tyre degradation, telemetry comparison, position/gap, race control, qualifying, team radio, and weather questions.",
             refusals=("unsupported question",),
             routing_context=agent_context.routed_to_context(routed),
         )

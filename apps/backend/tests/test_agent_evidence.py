@@ -242,3 +242,122 @@ def test_compute_speed_window_refuses_missing_artifact_lap(
         assert "9" in str(exc)
     finally:
         _cleanup(db_engine)
+
+
+# ── Team radio (Item 4) ──────────────────────────────────────────────────────
+
+
+def _insert_team_radio(db_engine):
+    with db_engine.begin() as conn:
+        for lap, url, transcript in [
+            (2, "https://cdn.f1.com/clip_02.mp3", "Box box box"),
+            (5, "https://cdn.f1.com/clip_05.mp3", None),
+            (6, "https://cdn.f1.com/clip_06.mp3", "Tyre degradation high"),
+            (9, "https://cdn.f1.com/clip_09.mp3", "Race control says green"),
+        ]:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO team_radio (
+                        session_key, driver_number, lap_number, date, recording_url, transcript
+                    ) VALUES (
+                        :sk, 1, :lap, NOW() + :lap * INTERVAL '1 minute', :url, :transcript
+                    )
+                    """
+                ),
+                {"sk": SESSION_KEY, "lap": lap, "url": url, "transcript": transcript},
+            )
+
+
+def _cleanup_radio_weather(db_engine):
+    with db_engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM team_radio WHERE session_key = :sk"), {"sk": SESSION_KEY}
+        )
+        conn.execute(
+            text("DELETE FROM weather_events WHERE session_key = :sk"),
+            {"sk": SESSION_KEY},
+        )
+
+
+def test_fetch_radio_messages_window(app, db_engine):
+    _insert_session_and_driver(db_engine)
+    _insert_team_radio(db_engine)
+    try:
+        result = tools.fetch_radio_messages(
+            types.RadioWindowInput(
+                session_key=SESSION_KEY, driver_number=1, from_lap=5, to_lap=6
+            )
+        )
+        assert result.clip_count == 2
+        assert [m.transcript for m in result.messages] == [
+            None,
+            "Tyre degradation high",
+        ]
+        assert all(m.recording_url for m in result.messages)
+    finally:
+        _cleanup_radio_weather(db_engine)
+        _cleanup(db_engine)
+
+
+# ── Weather correlation (Item 5) ─────────────────────────────────────────────
+
+
+def _insert_weather_events(db_engine):
+    with db_engine.begin() as conn:
+        rows = [
+            (1, 18.0, True),
+            (2, 20.0, False),
+            (3, 26.0, False),
+            (4, 30.0, False),
+            (5, 28.0, False),
+            (6, 22.0, True),
+        ]
+        for lap, track_temp, rain in rows:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO weather_events (
+                        session_key, timestamp, lap_number,
+                        track_temp_c, air_temp_c, humidity_pct,
+                        rainfall, wind_speed_ms
+                    ) VALUES (
+                        :sk, NOW() + :lap * INTERVAL '1 minute', :lap,
+                        :tt, 15.0, 60.0, :rain, 3.5
+                    )
+                    """
+                ),
+                {"sk": SESSION_KEY, "lap": lap, "tt": track_temp, "rain": rain},
+            )
+
+
+def test_fetch_weather_window_rain_stats(app, db_engine):
+    _insert_session_and_driver(db_engine)
+    _insert_weather_events(db_engine)
+    try:
+        result = tools.fetch_weather_window(
+            types.WeatherWindowInput(session_key=SESSION_KEY, from_lap=1, to_lap=6)
+        )
+        assert result.total_laps == 6
+        assert result.rainfall_laps == 2  # laps 1 and 6
+        assert result.rain_share_pct == 33.33
+        assert result.track_temp_delta_c == 12.0  # 30 - 18
+        assert len(result.samples) == 6
+    finally:
+        _cleanup_radio_weather(db_engine)
+        _cleanup(db_engine)
+
+
+def test_fetch_weather_window_empty_window(app, db_engine):
+    _insert_session_and_driver(db_engine)
+    _insert_weather_events(db_engine)
+    try:
+        result = tools.fetch_weather_window(
+            types.WeatherWindowInput(session_key=SESSION_KEY, from_lap=99, to_lap=100)
+        )
+        assert result.samples == ()
+        assert result.total_laps == 0
+        assert result.rain_share_pct == 0.0
+    finally:
+        _cleanup_radio_weather(db_engine)
+        _cleanup(db_engine)

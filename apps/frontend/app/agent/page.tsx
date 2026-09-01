@@ -31,6 +31,8 @@ import AgentProgressRail from '@/components/agent/AgentProgressRail'
 import AgentSpeedChart from '@/components/agent/AgentSpeedChart'
 import TelemetryOverlayChart from '@/components/agent/TelemetryOverlayChart'
 import CircuitHeatmap from '@/components/agent/CircuitHeatmap'
+import RadioClip from '@/components/agent/RadioClip'
+import WeatherEvidence from '@/components/agent/WeatherEvidence'
 import TyreDegradationChart from '@/components/agent/TyreDegradationChart'
 import RefusalBanner from '@/components/agent/RefusalBanner'
 import ToolTraceAccordion from '@/components/agent/ToolTraceAccordion'
@@ -698,6 +700,8 @@ export default function AgentPage() {
                       <TelemetryOverlayChart result={turn.reply.telemetry_overlay} />
                       <CircuitHeatmap result={turn.reply.telemetry_overlay} />
                       <TyreDegradationChart result={turn.reply.stint_degradation} />
+                      <RadioClip result={turn.reply.team_radio} />
+                      <WeatherEvidence result={turn.reply.weather} />
                       <ToolTraceAccordion
                         trace={turn.reply.trace}
                         visibility={turn.reply.trace_visibility}

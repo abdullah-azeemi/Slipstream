@@ -289,7 +289,7 @@ def load_laps(laps: list[dict], session_key: int) -> int:
 
 
 def load_race_control(events: list[dict], session_key: int) -> int:
-    """ Replace all the race control events for a season with the giiven list"""
+    """Replace all the race control events for a season with the giiven list"""
     if not events:
         return 0
 
@@ -309,19 +309,112 @@ def load_race_control(events: list[dict], session_key: int) -> int:
     ]
     with engine.begin() as conn:
         conn.execute(
-            text(""" DELETE FROM race_control_events WHERE session_key = :sk """), {"sk": session_key}, )
+            text(""" DELETE FROM race_control_events WHERE session_key = :sk """),
+            {"sk": session_key},
+        )
 
-        conn.execute(text(
-            """
+        conn.execute(
+            text(
+                """
                 INSERT INTO race_control_events (
                     session_key, category, flag, scope, driver_number, sector, lap_number, message) 
                 VALUES (
                     :session_key, :category, :flag, :scope, :driver_number, :sector, :lap_number, :message)
             """
-        ), rows, 
+            ),
+            rows,
         )
     log.info("loader.race_control_loaded", count=len(events), session_key=session_key)
     return len(events)
+
+
+def load_team_radio(rows: list[dict], session_key: int) -> int:
+    """Replace all team radio clips for a session with the given list."""
+    if not rows:
+        return 0
+
+    engine = _get_engine()
+    clean = [
+        {
+            "session_key": session_key,
+            "driver_number": _clean_int(r.get("driver_number")),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "date": r.get("date"),
+            "recording_url": _clean_str(r.get("recording_url")),
+            "transcript": _clean_str(r.get("transcript")),
+        }
+        for r in rows
+        if r.get("recording_url")
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM team_radio WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        if clean:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO team_radio (
+                        session_key, driver_number, lap_number, date,
+                        recording_url, transcript
+                    ) VALUES (
+                        :session_key, :driver_number, :lap_number, :date,
+                        :recording_url, :transcript
+                    )
+                """
+                ),
+                clean,
+            )
+    log.info("loader.team_radio_loaded", count=len(clean), session_key=session_key)
+    return len(clean)
+
+
+def load_weather_events(rows: list[dict], session_key: int) -> int:
+    """Replace all weather events for a session with the given list."""
+    if not rows:
+        return 0
+
+    engine = _get_engine()
+    clean = [
+        {
+            "session_key": session_key,
+            "timestamp": r.get("timestamp"),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "track_temp_c": _clean_float(r.get("track_temp_c")),
+            "air_temp_c": _clean_float(r.get("air_temp_c")),
+            "humidity_pct": _clean_float(r.get("humidity_pct")),
+            "rainfall": _clean_bool(r.get("rainfall")),
+            "wind_speed_ms": _clean_float(r.get("wind_speed_ms")),
+        }
+        for r in rows
+        if r.get("timestamp")
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM weather_events WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        if clean:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO weather_events (
+                        session_key, timestamp, lap_number,
+                        track_temp_c, air_temp_c, humidity_pct,
+                        rainfall, wind_speed_ms
+                    ) VALUES (
+                        :session_key, :timestamp, :lap_number,
+                        :track_temp_c, :air_temp_c, :humidity_pct,
+                        :rainfall, :wind_speed_ms
+                    )
+                """
+                ),
+                clean,
+            )
+    log.info("loader.weather_events_loaded", count=len(clean), session_key=session_key)
+    return len(clean)
+
 
 # ── Telemetry ─────────────────────────────────────────────────────────────────
 

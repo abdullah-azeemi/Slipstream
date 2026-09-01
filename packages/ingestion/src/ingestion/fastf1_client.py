@@ -165,8 +165,9 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     log.info("laps.extracted", session_key=session_key, count=len(results))
     return results
 
+
 def extract_race_control(session: fastf1.core.Session, session_key: int) -> list[dict]:
-    """ Extract the race control messages (safety car, VSC, yellow/red flags, DRS) into a list of events dicts for storage"""
+    """Extract the race control messages (safety car, VSC, yellow/red flags, DRS) into a list of events dicts for storage"""
     try:
         rc = session.race_control_messages
     except Exception as e:
@@ -194,9 +195,111 @@ def extract_race_control(session: fastf1.core.Session, session_key: int) -> list
     log.info("race_control.extracted", session_key=session_key, count=len(results))
     return results
 
+
+def _lap_start_times(session, driver_number=None):
+    """
+    Build a sorted list of (lap_number, LapStartDate) covering the session's
+    recorded laps (optionally one driver). Used to derive a lap_number from an
+    absolute timestamp (team radio, weather). Returns [] when lap data is absent.
+    """
+    laps = session.laps
+    if laps is None or laps.empty or "LapStartDate" not in laps:
+        return []
+    rows = []
+    for _, row in laps.iterrows():
+        drv = row.get("DriverNumber")
+        try:
+            drv = int(drv)
+        except (TypeError, ValueError):
+            continue
+        if driver_number is not None and drv != driver_number:
+            continue
+        start = row.get("LapStartDate")
+        lap = row.get("LapNumber")
+        try:
+            lap = int(lap)
+        except (TypeError, ValueError):
+            continue
+        if start is None or lap is None:
+            continue
+        try:
+            if pd.isna(start):
+                continue
+        except Exception:
+            pass
+        rows.append((int(lap), start))
+    rows.sort(key=lambda r: r[1])
+    return rows
+
+
+def _lap_for_timestamp(lap_starts: list[tuple[int, object]], ts) -> int | None:
+    """Return the lap_number whose [start, next_start) window contains ts."""
+    if not lap_starts or ts is None:
+        return None
+    try:
+        if isinstance(ts, str):
+            ts = pd.Timestamp(ts)
+    except (ValueError, TypeError):
+        return None
+    best_lap = None
+    for lap, start in lap_starts:
+        try:
+            if pd.isna(start):
+                continue
+        except Exception:
+            pass
+        if start <= ts:
+            best_lap = lap
+        else:
+            break
+    return best_lap
+
+
+def extract_weather_events(
+    session: fastf1.core.Session, session_key: int
+) -> list[dict]:
+    """
+    Extract every weather sample from session.weather_data into event rows,
+    deriving the lap_number each sample belongs to from lap start times.
+    This powers "Was it raining when he pitted?" style queries.
+    """
+    try:
+        wx = session.weather_data
+    except Exception as e:
+        log.warning("weather_events.extract_failed", error=str(e))
+        return []
+    if wx is None or wx.empty:
+        return []
+
+    lap_starts = _lap_start_times(session)
+
+    results = []
+    for _, row in wx.iterrows():
+        ts = row.get("Time") if "Time" in wx else row.name
+        rainfall = row.get("RainFull", row.get("Rainfall", False))
+        results.append(
+            {
+                "session_key": session_key,
+                "timestamp": str(ts) if ts is not None else None,
+                "lap_number": _lap_for_timestamp(lap_starts, ts),
+                "track_temp_c": _to_float(row.get("TrackTemp")),
+                "air_temp_c": _to_float(row.get("AirTemp")),
+                "humidity_pct": _to_float(row.get("Humidity")),
+                "rainfall": bool(rainfall),
+                "wind_speed_ms": _to_float(row.get("WindSpeed")),
+            }
+        )
+    log.info("weather_events.extracted", session_key=session_key, count=len(results))
+    return results
+
+
 def _clean(val):
     """sanitise a string field (NaN → None)"""
-    if val is None or (isinstance(val, float) and math.isnan(val)) or str(val).strip() == "":
+    if (
+        val is None
+        or (isinstance(val, float) and math.isnan(val))
+        or str(val).strip() == ""
+    ):
         return None
     return str(val).strip()
 
@@ -211,8 +314,22 @@ def _to_int(val):
         return None
 
 
+def _to_float(val):
+    """sanitise a float field (NaN/empty → None)"""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
-def extract_telemetry(session: fastf1.core.Session, session_key: int, all_drivers: bool = False, all_laps: bool = False ) -> list[dict]:
+
+def extract_telemetry(
+    session: fastf1.core.Session,
+    session_key: int,
+    all_drivers: bool = False,
+    all_laps: bool = False,
+) -> list[dict]:
     """
     Extract telemetry samples for a session.
 

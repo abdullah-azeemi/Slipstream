@@ -7,6 +7,9 @@ from ingestion.fastf1_client import (
     extract_laps,
     extract_telemetry,
     extract_race_control,
+    extract_weather_events,
+    _lap_start_times,
+    _lap_for_timestamp,
 )
 from ingestion.loader import (
     upsert_session,
@@ -15,7 +18,10 @@ from ingestion.loader import (
     load_telemetry,
     update_session_weather,
     load_race_control,
+    load_team_radio,
+    load_weather_events,
 )
+from ingestion.openf1_client import fetch_team_radio
 
 log = structlog.get_logger()
 
@@ -104,12 +110,28 @@ def main():
         )
         tel_count = load_telemetry(tel, session_key)
     elif not args.skip_telemetry and args.session.upper() not in TELEMETRY_SESSIONS:
-        log.info("telemetry.skipped", reason="non-qualifying session — telemetry not stored by design", session=args.session)
+        log.info(
+            "telemetry.skipped",
+            reason="non-qualifying session — telemetry not stored by design",
+            session=args.session,
+        )
 
     rc_events = extract_race_control(session, session_key)
     rc_count = load_race_control(rc_events, session_key)
-    
-    print(f"\n✅  session={session_key}  drivers={len(drivers)} laps={lap_count}  telemetry={tel_count}  weather={'yes' if weather else 'no'}, race_control={rc_count}")
+
+    wx_events = extract_weather_events(session, session_key)
+    wx_count = load_weather_events(wx_events, session_key)
+
+    radio_rows = fetch_team_radio(session_key)
+    for r in radio_rows:
+        r["lap_number"] = _lap_for_timestamp(
+            _lap_start_times(session, driver_number=r["driver_number"]), r["date"]
+        )
+    radio_count = load_team_radio(radio_rows, session_key)
+
+    print(
+        f"\n✅  session={session_key}  drivers={len(drivers)} laps={lap_count}  telemetry={tel_count}  weather={'yes' if weather else 'no'}, race_control={rc_count}, weather_events={wx_count}, team_radio={radio_count}"
+    )
 
 
 if __name__ == "__main__":

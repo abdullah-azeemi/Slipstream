@@ -158,12 +158,13 @@ def _derive_pit_stops(laps: list[dict]) -> list[types.PitStop]:
         )
     return stops
 
+
 def _cumulative_race_times(laps: list[dict], up_to_lap: int) -> dict[int, int]:
-    """ Commulative race time per driver through 'up_to_lap' 
-    
-        Input: raw lap rows {driver_number, lap_number, lap_time_ms}
-        Output: {driver_number: ms}.
-        A "cumulative time" is just the sum of a driver's completed lap times so far — lower = ahead on track.    
+    """Commulative race time per driver through 'up_to_lap'
+
+    Input: raw lap rows {driver_number, lap_number, lap_time_ms}
+    Output: {driver_number: ms}.
+    A "cumulative time" is just the sum of a driver's completed lap times so far — lower = ahead on track.
     """
 
     by_driver: dict[list, list[dict]] = {}
@@ -182,28 +183,40 @@ def _cumulative_race_times(laps: list[dict], up_to_lap: int) -> dict[int, int]:
         commulative[dn] = total
     return commulative
 
-def _gap_snapshot(commulative: dict[int, int], driver_number: int, target_lap: int, stored_position: int | None) -> types.GapPositionSnapshot:
-    """ Turn commulative times into a gapped snapshot at one lap.
-    
-        rank = sort ascending by commulative time (smallest = first = leader)
-        'car ahead': the driver who's time is just smaller than ours
-        'car behind': the driver who's time is just bigger than ours
+
+def _gap_snapshot(
+    commulative: dict[int, int],
+    driver_number: int,
+    target_lap: int,
+    stored_position: int | None,
+) -> types.GapPositionSnapshot:
+    """Turn commulative times into a gapped snapshot at one lap.
+
+    rank = sort ascending by commulative time (smallest = first = leader)
+    'car ahead': the driver who's time is just smaller than ours
+    'car behind': the driver who's time is just bigger than ours
     """
 
     if driver_number not in commulative:
-        raise types.NotFoundError(f"Driver {driver_number} has not completed upto lap {target_lap}")
+        raise types.NotFoundError(
+            f"Driver {driver_number} has not completed upto lap {target_lap}"
+        )
 
-    ordered = sorted(commulative.items(), key=lambda kv:kv[1])
+    ordered = sorted(commulative.items(), key=lambda kv: kv[1])
     idx = ordered.index((driver_number, commulative[driver_number]))
     rank = {dn: i + 1 for i, (dn, _) in enumerate(ordered)}
     own = commulative[driver_number]
     leader_number, leader_ms = ordered[0]
-    ahead_number, ahead_ms = ordered[idx-1] if idx > 0 else (None, None)
-    behind_number, behind_ms = ordered[idx+1] if idx < len(ordered) - 1 else (None, None)
+    ahead_number, ahead_ms = ordered[idx - 1] if idx > 0 else (None, None)
+    behind_number, behind_ms = (
+        ordered[idx + 1] if idx < len(ordered) - 1 else (None, None)
+    )
 
     return types.GapPositionSnapshot(
         lap_number=target_lap,
-        position=stored_position if stored_position is not None else rank[driver_number],
+        position=stored_position
+        if stored_position is not None
+        else rank[driver_number],
         cumulative_ms=int(own),
         leader_number=leader_number,
         leader_cumulative_ms=int(leader_ms),
@@ -237,8 +250,9 @@ def find_pit_stops(inp: types.FindPitStopsInput) -> types.PitStopsResult:
     stops = _derive_pit_stops([dict(r) for r in rows])
     return types.PitStopsResult(driver_number=inp.driver_number, pit_stops=tuple(stops))
 
+
 def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionSnapshot:
-    """Snapshot the field at one lap: the driver's position, gap to the leader, and gaps to the car directly ahead and behind """
+    """Snapshot the field at one lap: the driver's position, gap to the leader, and gaps to the car directly ahead and behind"""
     with extensions.engine.connect() as conn:
         rows = (
             conn.execute(
@@ -249,7 +263,8 @@ def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionS
                       AND deleted = FALSE
                       AND lap_time_ms IS NOT NULL
                     ORDER BY driver_number ASC, lap_number ASC
-                """), {"sk": inp.session_key},
+                """),
+                {"sk": inp.session_key},
             )
             .mappings()
             .all()
@@ -262,7 +277,9 @@ def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionS
     if target_lap is None:
         driver_laps = [r for r in rows if r["driver_number"] == inp.driver_number]
         if not driver_laps:
-            raise types.NotFoundError(f"Driver {inp.driver_number} has no laps in session {inp.session_key}")
+            raise types.NotFoundError(
+                f"Driver {inp.driver_number} has no laps in session {inp.session_key}"
+            )
         target_lap = max(r["lap_number"] for r in driver_laps)
 
     cumulative = _cumulative_race_times([dict(r) for r in rows], target_lap)
@@ -278,8 +295,9 @@ def gap_and_position_snapshot(inp: types.GapPositionInput) -> types.GapPositionS
 
     return _gap_snapshot(cumulative, inp.driver_number, target_lap, stored_position)
 
+
 def _count_sc_periods(rows: list[dict]) -> int:
-    """Count distinct contiguous period ranges that are under SC or VSC """
+    """Count distinct contiguous period ranges that are under SC or VSC"""
     sc_laps = sorted(
         {
             r["lap_number"]
@@ -293,10 +311,13 @@ def _count_sc_periods(rows: list[dict]) -> int:
     periods = 1
     for i in range(1, len(sc_laps)):
         if sc_laps[i] != sc_laps[i - 1] + 1:
-            periods += 1 
+            periods += 1
     return periods
 
-def fetch_race_control_window(inp: types.RaceControlWindowInput) -> types.RaceControlWindowResult:
+
+def fetch_race_control_window(
+    inp: types.RaceControlWindowInput,
+) -> types.RaceControlWindowResult:
     """All flag/SC/VSC events intersecting a lap window for a session."""
     with extensions.engine.connect() as conn:
         sql = """
@@ -332,9 +353,117 @@ def fetch_race_control_window(inp: types.RaceControlWindowInput) -> types.RaceCo
     )
 
     sc_periods = _count_sc_periods(rows)
-    return types.RaceControlWindowResult(from_lap=inp.from_lap, to_lap=inp.to_lap, events=events, safety_car_periods=sc_periods)
+    return types.RaceControlWindowResult(
+        from_lap=inp.from_lap,
+        to_lap=inp.to_lap,
+        events=events,
+        safety_car_periods=sc_periods,
+    )
 
-def get_lap_telemetry_artifacts(inp: types.GetLapTelemetryArtifactsInput) -> types.LapTelemetryResult:
+
+def _radio_lap_counts(messages: tuple[types.RadioMessage, ...]) -> int:
+    return len(messages)
+
+
+def fetch_radio_messages(inp: types.RadioWindowInput) -> types.RadioWindowResult:
+    """All team radio clips intersecting a lap window for a driver."""
+    with extensions.engine.connect() as conn:
+        sql = """
+            SELECT date, recording_url, transcript
+            FROM team_radio
+            WHERE session_key = :sk
+              AND driver_number = :dn
+        """
+        binds: dict = {"sk": inp.session_key, "dn": inp.driver_number}
+        if inp.from_lap is not None:
+            sql += " AND lap_number >= :fl"
+            binds["fl"] = inp.from_lap
+        if inp.to_lap is not None:
+            sql += " AND lap_number <= :tl"
+            binds["tl"] = inp.to_lap
+        sql += " ORDER BY date ASC NULLS LAST, id ASC"
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    messages = tuple(
+        types.RadioMessage(
+            date=r["date"],
+            recording_url=r["recording_url"],
+            transcript=r["transcript"],
+        )
+        for r in rows
+    )
+    return types.RadioWindowResult(
+        driver_number=inp.driver_number,
+        from_lap=inp.from_lap,
+        to_lap=inp.to_lap,
+        messages=messages,
+        clip_count=_radio_lap_counts(messages),
+    )
+
+
+def _rain_stats(samples: list[types.WeatherEventSample]) -> dict:
+    """Derive rain + track-temp stats from a list of weather samples."""
+    distinct_laps = sorted({s.lap_number for s in samples if s.lap_number is not None})
+    rainfall_laps = sorted(
+        {s.lap_number for s in samples if s.rainfall and s.lap_number is not None}
+    )
+    track_temps = [s.track_temp_c for s in samples if s.track_temp_c is not None]
+    track_temp_delta = None
+    if track_temps:
+        track_temp_delta = round(max(track_temps) - min(track_temps), 2)
+    return {
+        "rainfall_laps": len(rainfall_laps),
+        "total_laps": len(distinct_laps),
+        "rain_share_pct": round(len(rainfall_laps) / len(distinct_laps) * 100, 2)
+        if distinct_laps
+        else 0.0,
+        "track_temp_delta_c": track_temp_delta,
+    }
+
+
+def fetch_weather_window(inp: types.WeatherWindowInput) -> types.WeatherWindowResult:
+    """All weather events intersecting a lap window for a session."""
+    with extensions.engine.connect() as conn:
+        sql = """
+            SELECT timestamp, lap_number, track_temp_c, air_temp_c,
+                   humidity_pct, rainfall, wind_speed_ms
+            FROM weather_events
+            WHERE session_key = :sk
+        """
+        binds: dict = {"sk": inp.session_key}
+        if inp.from_lap is not None:
+            sql += " AND lap_number >= :fl"
+            binds["fl"] = inp.from_lap
+        if inp.to_lap is not None:
+            sql += " AND lap_number <= :tl"
+            binds["tl"] = inp.to_lap
+        sql += " ORDER BY timestamp ASC NULLS LAST"
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    samples = tuple(
+        types.WeatherEventSample(
+            timestamp=r["timestamp"],
+            lap_number=r["lap_number"],
+            track_temp_c=r["track_temp_c"],
+            air_temp_c=r["air_temp_c"],
+            humidity_pct=r["humidity_pct"],
+            rainfall=bool(r["rainfall"]),
+            wind_speed_ms=r["wind_speed_ms"],
+        )
+        for r in rows
+    )
+    stats = _rain_stats(list(samples))
+    return types.WeatherWindowResult(
+        from_lap=inp.from_lap,
+        to_lap=inp.to_lap,
+        samples=samples,
+        **stats,
+    )
+
+
+def get_lap_telemetry_artifacts(
+    inp: types.GetLapTelemetryArtifactsInput,
+) -> types.LapTelemetryResult:
     """
     Return artifact metadata (not raw samples) for the requested laps.
     This proves telemetry exists before we compute speed from it.
@@ -680,7 +809,9 @@ def inspect_lap_events(
         )
 
     if not rows:
-        raise types.NotFoundError(f"No laps found for driver : {inp.driver_number} in session : {inp.session_key}")
+        raise types.NotFoundError(
+            f"No laps found for driver : {inp.driver_number} in session : {inp.session_key}"
+        )
 
     events = [
         types.LapEvent(

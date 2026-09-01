@@ -21,6 +21,8 @@ class Intent(str, Enum):
     POSITION_GAP_TRACKING = "position_gap_tracking"
     RACE_CONTROL_EVENTS = "race_control_events"
     QUALIFYING_LAP_ANALYSIS = "qualifying_lap_analysis"
+    TEAM_RADIO = "team_radio"
+    WEATHER_CORRELATION = "weather_correlation"
     UNSUPPORTED = "unsupported"
 
 
@@ -46,6 +48,8 @@ class ToolName(str, Enum):
     VERIFY_EVIDENCE = "verify_evidence"
     FETCH_RACE_CONTROL_WINDOW = "fetch_race_control_window"
     GAP_POSITION_SNAPSHOT = "gap_position_snapshot"
+    FETCH_RADIO_MESSAGES = "fetch_radio_messages"
+    FETCH_WEATHER_WINDOW = "fetch_weather_window"
 
 
 @dataclass(frozen=True)
@@ -220,17 +224,19 @@ class SpeedWindowResult:
     sample_count_before: int = 0
     sample_count_after: int = 0
 
+
 @dataclass(frozen=True)
 class GapPositionInput:
     session_key: int
     driver_number: int
     target_lap: int | None = None
 
+
 @dataclass(frozen=True)
 class GapPositionSnapshot:
     lap_number: int
     position: int | None
-    cumulative_ms: int | None  
+    cumulative_ms: int | None
     leader_number: int | None
     leader_cumulative_ms: int | None
     gap_to_leader_ms: int | None
@@ -239,9 +245,11 @@ class GapPositionSnapshot:
     car_behind_number: int | None
     car_behind_gap_ms: int | None
 
+
 @dataclass(frozen=True)
 class RaceControlWindowInput:
     """A lap window (inclusive) to scan for flag/SC events."""
+
     session_key: int
     driver_number: int | None = None
     from_lap: int | None = None
@@ -251,6 +259,7 @@ class RaceControlWindowInput:
 @dataclass(frozen=True)
 class RaceControlEvent:
     """One flag / safety car / VSC event."""
+
     category: str | None
     flag: str | None
     scope: str | None
@@ -263,10 +272,77 @@ class RaceControlEvent:
 @dataclass(frozen=True)
 class RaceControlWindowResult:
     """All events intersecting the requested window."""
+
     from_lap: int | None
     to_lap: int | None
     events: tuple[RaceControlEvent, ...]
-    safety_car_periods: int = 0 
+    safety_car_periods: int = 0
+
+
+@dataclass(frozen=True)
+class RadioWindowInput:
+    """A lap window (inclusive) to scan for team radio clips for a driver."""
+
+    session_key: int
+    driver_number: int
+    from_lap: int | None = None
+    to_lap: int | None = None
+
+
+@dataclass(frozen=True)
+class RadioMessage:
+    """One team radio clip, optionally with a transcript."""
+
+    date: str | None
+    recording_url: str | None
+    transcript: str | None = None
+
+
+@dataclass(frozen=True)
+class RadioWindowResult:
+    """All radio clips intersecting the requested window."""
+
+    driver_number: int
+    from_lap: int | None
+    to_lap: int | None
+    messages: tuple[RadioMessage, ...]
+    clip_count: int = 0
+
+
+@dataclass(frozen=True)
+class WeatherWindowInput:
+    """A lap window (inclusive) to scan for weather events in a session."""
+
+    session_key: int
+    from_lap: int | None = None
+    to_lap: int | None = None
+
+
+@dataclass(frozen=True)
+class WeatherEventSample:
+    """One weather sample, correlated to a lap where possible."""
+
+    timestamp: str | None
+    lap_number: int | None
+    track_temp_c: float | None
+    air_temp_c: float | None
+    humidity_pct: float | None
+    rainfall: bool
+    wind_speed_ms: float | None
+
+
+@dataclass(frozen=True)
+class WeatherWindowResult:
+    """All weather events intersecting the requested window, plus derived rain stats."""
+
+    from_lap: int | None
+    to_lap: int | None
+    samples: tuple[WeatherEventSample, ...]
+    rainfall_laps: int = 0
+    total_laps: int = 0
+    rain_share_pct: float = 0.0
+    track_temp_delta_c: float | None = None
+
 
 @dataclass(frozen=True)
 class RoutedQuestion:
@@ -280,6 +356,7 @@ class RoutedQuestion:
     laps_window: int = 3
     target_lap: int | None = None
     session_type: SessionType | None = None
+
 
 @dataclass(frozen=True)
 class EvidenceCheck:
@@ -336,7 +413,8 @@ class LapEvent:
     rainfall: bool
     track_status: str | None
     anomaly_reason: str | None = None  # pit_stop / rain_onset / yellow_flag_vsc / ...
-    quali_segment: int | None = None 
+    quali_segment: int | None = None
+
 
 @dataclass(frozen=True)
 class InspectLapEventsResult:
@@ -482,3 +560,5 @@ class AgentAnswer:
     clarification: dict | None = None
     routing_context: dict | None = None
     race_control: RaceControlWindowResult | None = None
+    team_radio: RadioWindowResult | None = None
+    weather: WeatherWindowResult | None = None
