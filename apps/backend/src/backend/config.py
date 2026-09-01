@@ -4,6 +4,7 @@ Reads from environment variables. Falls back to .env file locally.
 """
 
 from __future__ import annotations
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +46,8 @@ class Settings(BaseSettings):
     agent_free_daily_cost_usd: float = 0.30
     llm_breaker_failure_threshold: int = 3
     llm_breaker_open_timeout_seconds: int = 60
+
+    agent_planner_mode: Literal["template", "llm"] = "template"
 
     clerk_issuer: str = ""
     clerk_admin_user_ids: str = ""

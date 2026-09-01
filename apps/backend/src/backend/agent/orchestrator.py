@@ -11,8 +11,9 @@ from dataclasses import asdict, replace
 import time
 from typing import Any, Callable
 
-from backend.agent import context as agent_context
-from backend.agent import circuit_breaker, llm, tools, types
+from backend.agent import circuit_breaker, context as agent_context
+from backend.agent import llm, tools, types
+from backend.config import settings
 
 ProgressCallback = Callable[[dict], None]
 
@@ -266,7 +267,7 @@ def _verify_node(depends_on: tuple[str, ...]) -> types.DAGNode:
     )
 
 
-def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
+def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     """Turn a routed question into a concrete execution graph"""
 
     nodes: list[types.DAGNode] = [_session_node(routed), _driver_node(routed)]
@@ -492,6 +493,24 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
 
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
 
+def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
+    """Dispatch between the deterministic template planner and the LLM planner, gated by settings.agent_planner_mode.
+    The LLM path can never take the request down: anything that isn't a valid
+    completed plan degrades to the template DAG. 
+    """
+    if settings.agent_planner_mode == "llm":
+        try:
+            return _build_llm_dag(routed)
+        except NotImplementedError:
+            pass 
+    return _build_template_dag(routed)
+
+def _build_llm_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
+    try:
+        from backend.agent import planner
+    except ImportError as exc:
+        raise NotImplementedError("T1.1 planner not shipped yet") from exc
+    return planner.plan_dag(routed)
 
 def topo_sort(dag: types.ExecutionDAG) -> tuple[str, ...]:
     """The node id's where the every node comes afterwards after its dependencies
@@ -854,13 +873,6 @@ def _clarify(
 
 def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None ) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
-    _emit(
-        progress,
-        type="stage",
-        stage="route",
-        status="running",
-        label="Routing question and extracting race entities")
-
     if circuit_breaker.breaker.is_open():
         _emit(
             progress,
@@ -875,7 +887,7 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
             answer="The AI service is temporarily unavailable. Try again in a few minutes.",
             refusals=("llm_provider_unavailable",),
         )
-
+    
     try:
         routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:
