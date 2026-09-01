@@ -1282,18 +1282,18 @@ The system's three invariants:
 * **Goal**: Answer questions like "What did Carlos's engineer say before the pit?" and provide playable audio clips.
 * **Data Source**: OpenF1 API (`GET /v1/team_radio?session_key=X&driver_number=Y`).
 * **Implementation**:
-  * **Ingestion**: Fetch metadata (timestamp, `recording_url`). Correlate `date` timestamp with the driver's lap start/end times from `lap_times` to derive `lap_number`.
-  * **Transcription (Stretch)**: Run audio `.mp3` through an offline Whisper model to generate text transcripts, enabling text-searchable radio queries.
-  * **Storage**: `team_radio` table (session_key, driver_number, lap_number, date, recording_url, transcript).
-  * **Tool**: `fetch_radio_messages(session_key, driver_number, lap_range)`.
-  * **UI**: New `<RadioClip>` React component to play F1 CDN `.mp3` files inline inside the markdown answer.
+  * **Ingestion**: Fetch metadata (timestamp, `recording_url`). Correlate `date` timestamp with the driver's lap start/end times from `lap_times` to derive `lap_number`. *(Done — migration 0022, `openf1_client`, radio lap correlation via FastF1 `LapStartDate`.)*
+  * **Transcription (Stretch)**: Run audio `.mp3` through an offline Whisper model to generate text transcripts, enabling text-searchable radio queries. *(Not done — `transcript` column exists, Whisper is a stretch.)*
+  * **Storage**: `team_radio` table (session_key, driver_number, lap_number, date, recording_url, transcript). *(Done.)*
+  * **Tool**: `fetch_radio_messages(session_key, driver_number, lap_range)`. *(Done.)*
+  * **UI**: New `<RadioClip>` React component to play F1 CDN `.mp3` files inline inside the markdown answer. *(Done.)*
 
 ### 5. Weather Correlation
 * **Goal**: Answer questions like "Was it raining when he pitted?" or "Track temp delta between stints?"
 * **Data Source**: FastF1 `session.weather_data`.
 * **Implementation**:
-  * Create `weather_events` table (timestamp, track_temp, air_temp, humidity, rainfall, wind_speed).
-  * Add tool `fetch_weather_window(session_key, lap_range)`.
+  * Create `weather_events` table (timestamp, track_temp, air_temp, humidity, rainfall, wind_speed). *(Done — migration 0022, per-sample `weather_data` ingestion with lap correlation.)*
+  * Add tool `fetch_weather_window(session_key, lap_range)`. *(Done.)*
 
 ### 6. Continuous Conversation & Counter-Question Context — [SHIPPED 2026-08-29]
 * **Goal**: Real multi-turn chat. Follow-up questions reference prior context instead of re-stating the whole question. When a detail is missing, the agent asks a short counter-question, and the user's reply resolves that detail back into the **ORIGINAL query context** — then the same DAG plan is re-run.
