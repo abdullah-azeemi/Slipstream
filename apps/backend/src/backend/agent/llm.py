@@ -27,6 +27,7 @@ Allowed Intents:
     - "telemetry_comparison" : the question asks to compare two laps or two drivers' telemetry.
     - "position_gap_tracking" : the question asks about a driver's position, gap to leader, gap to cars ahead/behind, or whether an undercut/overcut worked.
     - "race_control_events" : the question asks about safety cars, VSC, yellow/red flags, or race control messages during a race.
+    - "qualifying_lap_analysis" : the question asks about qualifying, a Q1/Q2/Q3 time, qualifying sector speed, or grid position. Sets session_type to "Q".
     - "unsupported" : everything else (weather, other sports, live timing etc)
 
 Field Rules:
@@ -35,6 +36,7 @@ Field Rules:
     - "year" and "gp_name" : only when the user names the race; null otherwise. Never guess a race
     - "laps_window" : how many laps before and after the stop to compare; 3 unless the user says otherwise
     - "target_lap" : the specific lap number the user asks about; null if none is specified
+    - "session_type" : "Q" if the question is about qualifying, "R" for a race, null if unclear. Default "R" for race questions.
     - For "unsupported" questions every other field must be null.
 """
 
@@ -98,9 +100,7 @@ def _post(messages: list[dict], model: str, temperature: float) -> dict:
         raise types.LLMError(f"OpenRouter call failed: {exc}") from exc
 
 
-def _chat(
-    messages: list[dict], model: str | None = None, temperature: float = 0.0
-) -> tuple[str, dict]:
+def _chat(messages: list[dict], model: str | None = None, temperature: float = 0.0) -> tuple[str, dict]:
     """One chat completion. Returns (text, usage_summary) and logs tokens/cost."""
     model = model or settings.openrouter_routing_model
     payload = _post(messages, model, temperature)
@@ -162,6 +162,15 @@ def _coerce_target_lap(value) -> int | None:
         raise types.LLMError(f"router returned bad target lap : {value!r}") from None
     return lap if lap > 0 else None
 
+def _coerce_session_type(value) -> "types.SessionType | None":
+    """Map an LLM session_type string ('Q', 'R', ...) to a SessionType, else None."""
+    if not value:
+        return None
+    try:
+        return types.SessionType(value)
+    except ValueError:
+        return None
+
 
 def _coerce_compare_driver(value) -> str | None:
     """The second driver is just a name like the primary one"""
@@ -174,9 +183,7 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
         {"role": "user", "content": question},
     ]
-    text, usage = _chat(
-        messages, model=settings.openrouter_routing_model, temperature=0.0
-    )
+    text, usage = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
     try:
         payload = json.loads(text)
         intent_value = payload["intent"]
@@ -198,6 +205,7 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         year=_coerce_year(payload.get("year")),
         laps_window=_coerce_window(payload.get("laps_window")),
         target_lap=_coerce_target_lap(payload.get("target_lap")),
+        session_type=_coerce_session_type(payload.get("session_type")),
     ), cost
 
 

@@ -665,7 +665,7 @@ def inspect_lap_events(
                 text(
                     """ 
                         SELECT l.lap_number, l.lap_time_ms, l.s1_ms AS sector1_ms, l.s2_ms AS sector2_ms, l.s3_ms AS sector3_ms,
-                                l.compound, l.stint, l.pit_in_time_ms, l.pit_out_time_ms, l.track_status, s.rainfall
+                                l.compound, l.stint, l.pit_in_time_ms, l.pit_out_time_ms, l.track_status, l.quali_segment, s.rainfall
                         FROM lap_times l
                         JOIN sessions s ON s.session_key = l.session_key
                         WHERE l.session_key = :sk
@@ -680,9 +680,7 @@ def inspect_lap_events(
         )
 
     if not rows:
-        raise types.NotFoundError(
-            f"No laps found for driver : {inp.driver_number} in session : {inp.session_key}"
-        )
+        raise types.NotFoundError(f"No laps found for driver : {inp.driver_number} in session : {inp.session_key}")
 
     events = [
         types.LapEvent(
@@ -699,6 +697,7 @@ def inspect_lap_events(
             is_anomaly=False,
             rainfall=bool(r["rainfall"]),
             track_status=r["track_status"],
+            quali_segment=r["quali_segment"],
         )
         for r in rows
     ]

@@ -12,6 +12,7 @@ _ENTITY_KEYS = (
     "gp_name",
     "year",
     "target_lap",
+    "session_type",
 )
 
 
@@ -30,6 +31,7 @@ def routed_to_context(
         "year": routed.year,
         "laps_window": routed.laps_window,
         "target_lap": routed.target_lap,
+        "session_type": routed.session_type.value if routed.session_type else None,
         "missing": list(missing),
     }
 
@@ -94,4 +96,9 @@ def merge_context(
         year=merged.get("year"),
         laps_window=laps_window,
         target_lap=merged.get("target_lap"),
+        session_type=(
+            types.SessionType(merged["session_type"])
+            if merged.get("session_type")
+            else None
+        ),
     )

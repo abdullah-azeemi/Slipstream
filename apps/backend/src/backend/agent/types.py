@@ -20,6 +20,7 @@ class Intent(str, Enum):
     TELEMETRY_COMPARISON = "telemetry_comparison"
     POSITION_GAP_TRACKING = "position_gap_tracking"
     RACE_CONTROL_EVENTS = "race_control_events"
+    QUALIFYING_LAP_ANALYSIS = "qualifying_lap_analysis"
     UNSUPPORTED = "unsupported"
 
 
@@ -278,7 +279,7 @@ class RoutedQuestion:
     year: int | None = None
     laps_window: int = 3
     target_lap: int | None = None
-
+    session_type: SessionType | None = None
 
 @dataclass(frozen=True)
 class EvidenceCheck:
@@ -335,7 +336,7 @@ class LapEvent:
     rainfall: bool
     track_status: str | None
     anomaly_reason: str | None = None  # pit_stop / rain_onset / yellow_flag_vsc / ...
-
+    quali_segment: int | None = None 
 
 @dataclass(frozen=True)
 class InspectLapEventsResult:

@@ -62,7 +62,7 @@ def _bind_session(params, env):
     return types.ResolveSessionInput(
         year=params["year"],
         gp_name=params["gp_name"],
-        session_type=types.SessionType.RACE,
+        session_type=env["routed"].session_type or types.SessionType.RACE,
     )
 
 
@@ -321,6 +321,35 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
             )
         )
         nodes.append(_verify_node(depends_on=("pits", "rc")))
+
+    elif routed.intent is types.Intent.QUALIFYING_LAP_ANALYSIS:
+        # Qualifying: no pit stops. Pull lap/sector event data + telemetry for the driver.
+        nodes.append(
+            types.DAGNode(
+                id="qlaps",
+                tool_name=types.ToolName.INSPECT_LAP_EVENTS,
+                label="Qualifying Lap Events",
+                description="Flag qualifying laps and sectors for the driver",
+                depends_on=("session", "driver"),
+                input_params={
+                    "target_lap": routed.target_lap,
+                    "laps_window": routed.laps_window,
+                },
+            )
+        )
+        nodes.append(
+            types.DAGNode(
+                id="telemetry",
+                tool_name=types.ToolName.TELEMETRY_INSPECTOR,
+                label="Inspect Telemetry",
+                description="Lap trace for the driver's best qualifying lap",
+                depends_on=("session", "driver"),
+                input_params={
+                    "lap_numbers": (routed.target_lap,) if routed.target_lap else (),
+                },
+            )
+        )
+        nodes.append(_verify_node(depends_on=("qlaps", "telemetry")))
 
     else:  # The telemetry comparison
         nodes.append(
@@ -608,6 +637,13 @@ def _compose(
             fallback_lines.append(f"Between laps {rc.from_lap} and {rc.to_lap}, race control reported: {flags}. Distinct safety-car/VSC periods: {rc.safety_car_periods} ")
         else:
             fallback_lines.append(f"No race control events found between laps {rc.from_lap} and {rc.to_lap}.")
+
+    elif routed.intent is types.Intent.QUALIFYING_LAP_ANALYSIS:
+        laps = outputs["qlaps"]
+        fallback_lines.append(
+            f"{driver.full_name} had {laps.anomaly_count} off-pace qualifying lap(s); "
+            f"median clean pace was {laps.median_pace_ms} ms."
+        )
 
     else:
         telemetry = outputs["telemetry"]
