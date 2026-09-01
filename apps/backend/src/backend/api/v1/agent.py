@@ -9,7 +9,7 @@ import threading
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from backend import auth, extensions
-from backend.agent import orchestrator, persistence
+from backend.agent import orchestrator, persistence, rate_limit
 from backend.config import settings
 from sqlalchemy import text as sql_text
 
@@ -38,9 +38,7 @@ def _public_tool_summary(call) -> str:
     return summaries.get(call.tool_name.value, "Tool completed")
 
 
-def _serialize_answer(
-    answer, *, conversation_id: int | None, include_trace_details: bool
-):
+def _serialize_answer(answer, *, conversation_id: int | None, include_trace_details: bool):
     response = asdict(answer)
     response["conversation_id"] = conversation_id
     response["trace_visibility"] = "full" if include_trace_details else "evidence"
@@ -160,19 +158,11 @@ def agent_query():
         return error_response
     question = payload["question"]
 
-    if (
-        not _is_admin(g.clerk_user_id)
-        and persistence.count_runs_today(g.clerk_user_id)
-        >= settings.agent_free_daily_limit
-    ):
-        log.info(
-            "agent.limit_hit",
-            user=g.clerk_user_id,
-            limit=settings.agent_free_daily_limit,
-        )
-        return jsonify(
-            {"error": "Daily question limit reached. Try again tomorrow."}
-        ), 429
+    if not _is_admin(g.clerk_user_id):
+        limit_response = rate_limit.limit_response(g.clerk_user_id)
+        if limit_response is not None:
+            log.info("agent.limit_hit", user=g.clerk_user_id)
+            return limit_response
 
     conv_id, context, error_response = _prepare_conversation(payload, question)
     if error_response:
@@ -200,19 +190,11 @@ def agent_query_stream():
         return error_response
     question = payload["question"]
 
-    if (
-        not _is_admin(g.clerk_user_id)
-        and persistence.count_runs_today(g.clerk_user_id)
-        >= settings.agent_free_daily_limit
-    ):
-        log.info(
-            "agent.limit_hit",
-            user=g.clerk_user_id,
-            limit=settings.agent_free_daily_limit,
-        )
-        return jsonify(
-            {"error": "Daily question limit reached. Try again tomorrow."}
-        ), 429
+    if not _is_admin(g.clerk_user_id):
+        limit_response = rate_limit.limit_response(g.clerk_user_id)
+        if limit_response is not None:
+            log.info("agent.limit_hit", user=g.clerk_user_id)
+            return limit_response
 
     conv_id, context, error_response = _prepare_conversation(payload, question)
     if error_response:

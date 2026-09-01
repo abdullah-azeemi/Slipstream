@@ -147,12 +147,37 @@ def count_runs_today(clerk_user_id: str) -> int:
             {"clerk_user_id": clerk_user_id},
         ).scalar_one()
 
+def sum_cost_today(clerk_user_id: str) -> float:
+    """ The users total agent spent cost recorded since local midnight."""
+    with extensions.engine.connect() as conn:
+        return float(
+            conn.execute(
+                text(
+                    """ 
+                        SELECT COALESCE(SUM(cost_estimate_usd), 0)
+                        FROM agent_runs r
+                        JOIN users u ON u.id = r.user_id
+                        WHERE u.clerk_user_id = :clerk_user_id
+                        AND r.started_at >= date_trunc('day', NOW())
+                    """
+                ), {"clerk_user_id": clerk_user_id}
+            ).scalar_one() or 0.0
+        )
+
 
 def get_usage_summary(clerk_user_id: str) -> dict:
     """Return { used, limit, remaining } for the current day."""
     used = count_runs_today(clerk_user_id)
     limit = settings.agent_free_daily_limit
-    return {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+    cost = sum_cost_today(clerk_user_id)
+    return {
+        "used": used,
+        "limit": limit,
+        "remaining": max(0, limit - used),
+        "cost_usd_today": round(cost, 4),
+        "cost_limit_usd": settings.agent_free_daily_cost_usd,
+        "remaining_cost_usd": round(max(0.0, settings.agent_free_daily_cost_usd - cost), 4),
+    }
 
 
 def get_admin_stats() -> dict:

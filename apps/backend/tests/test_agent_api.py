@@ -233,6 +233,19 @@ def _fake_auth(monkeypatch, clerk_user_id="demo-user"):
         auth_module, "verify_session_token", lambda token: clerk_user_id
     )
 
+def test_agent_query_limit_returns_retry_after(client, monkeypatch):
+    from backend.agent import persistence
+    _fake_auth(monkeypatch)
+    monkeypatch.setattr(persistence, "count_runs_today", lambda uid: 99)
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 10)
+
+    resp = client.post(
+        "/api/v1/agent/query", headers=AUTH_HEADER, json={"question": "Who won?"}
+    )
+    assert resp.status_code == 429
+    assert "Retry-After" in resp.headers
+    assert resp.headers["Retry-After"].isdigit()
+
 
 def _fake_bad_auth(monkeypatch):
     def boom(token):
