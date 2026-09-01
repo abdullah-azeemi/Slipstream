@@ -43,6 +43,8 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
+MAX_DAG_NODES = 8
+
 
 _BINDERS: dict[types.ToolName, Callable[[dict, dict], Any]] = {}
 
@@ -479,6 +481,9 @@ def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
         )
         nodes.append(_verify_node(depends_on=("session", "driver", "driver_cmp")))
 
+    if len(nodes) > MAX_DAG_NODES:
+        raise types.DataError(f"plan exceeds MAX_DAG_NODES={MAX_DAG_NODES}: got {len(nodes)} nodes")
+
     edges = tuple(
         types.DAGEdge(source=dep, target=node.id)
         for node in nodes
@@ -847,19 +852,15 @@ def _clarify(
     )
 
 
-def run(
-    question: str,
-    progress: ProgressCallback | None = None,
-    context: dict[str, Any] | None = None,
-) -> types.AgentAnswer:
+def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None ) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     _emit(
         progress,
         type="stage",
         stage="route",
         status="running",
-        label="Routing question and extracting race entities",
-    )
+        label="Routing question and extracting race entities")
+    
     try:
         routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:
@@ -927,8 +928,14 @@ def run(
                 text="Which second driver should I compare against?",
                 refusal="missing_compare_driver",
             )
-
-    dag = build_dag(routed)
+        
+    try:
+        dag = build_dag(routed)
+    except types.DataError:
+        return _clarify(
+            question, routed, missing="race", text="That question needs too many steps. Ask me something more focused.",
+            refusal="plan_too_large")
+    
     _emit(
         progress,
         type="dag_init",

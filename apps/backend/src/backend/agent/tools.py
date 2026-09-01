@@ -1065,9 +1065,7 @@ def _read_artifact_full_channels(artifact: types.TelemetryArtifact) -> list[dict
         )
         return _parquet_rows(pq.read_table(io.BytesIO(obj["Body"].read())))
 
-    raise types.DataError(
-        f"unsupported artifact: {artifact.storage_backend}/{artifact.format}"
-    )
+    raise types.DataError(f"unsupported artifact: {artifact.storage_backend}/{artifact.format}")
 
 
 def _to_sample_point(raw: dict) -> types.TelemetrySamplePoint:
@@ -1153,9 +1151,10 @@ def _compute_trace_stats(
     return full_throttle_pct, braking
 
 
-def telemetry_inspector(
-    inp: types.TelemetryInspectorInput,
-) -> types.TelemetryInspectorResult:
+MAX_LAPS_PER_CALL = 12
+
+
+def telemetry_inspector(inp: types.TelemetryInspectorInput) -> types.TelemetryInspectorResult:
     """Load the full telemetry for (driver, laps)
     Flow: find artifact metadata in Postgres -> read channels from storage -> resample -> compute stats.
     """
@@ -1165,11 +1164,13 @@ def telemetry_inspector(
     driver_laps: dict[int, list[int]] = {inp.driver_number: list(inp.lap_numbers)}
 
     if inp.compare_driver_number is not None:
-        driver_laps.setdefault(inp.compare_driver_number, []).extend(
-            inp.compare_lap_numbers
-        )
+        driver_laps.setdefault(inp.compare_driver_number, []).extend(inp.compare_lap_numbers)
 
     artifacts_by_key: dict[tuple[int, int], types.TelemetryArtifact] = {}
+
+    if sum(len(laps) for laps in driver_laps.values()) > MAX_LAPS_PER_CALL:
+        raise types.DataError(f"telemetry_inspector rejects {sum(len(laps) for laps in driver_laps.values())} laps, cap is {MAX_LAPS_PER_CALL}")
+
     for drv_num, laps in driver_laps.items():
         if not laps:
             continue
