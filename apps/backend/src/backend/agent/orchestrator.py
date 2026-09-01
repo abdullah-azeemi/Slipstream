@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable
 
 from backend.agent import context as agent_context
-from backend.agent import llm, tools, types
+from backend.agent import circuit_breaker, llm, tools, types
 
 ProgressCallback = Callable[[dict], None]
 
@@ -860,7 +860,22 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
         stage="route",
         status="running",
         label="Routing question and extracting race entities")
-    
+
+    if circuit_breaker.breaker.is_open():
+        _emit(
+            progress,
+            type="stage",
+            stage="route",
+            status="error",
+            label="LLM provider unavailable (circuit open)",
+        )
+        return types.AgentAnswer(
+            question=question,
+            intent=types.Intent.UNSUPPORTED,
+            answer="The AI service is temporarily unavailable. Try again in a few minutes.",
+            refusals=("llm_provider_unavailable",),
+        )
+
     try:
         routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:

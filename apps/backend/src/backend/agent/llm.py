@@ -10,6 +10,7 @@ import urllib.request
 
 from backend.agent import types
 from backend.config import settings
+from backend.agent import circuit_breaker
 
 log = structlog.get_logger()
 
@@ -89,17 +90,24 @@ def _post(messages: list[dict], model: str, temperature: float) -> dict:
             "X-Title": "Slipstream Agent",
         },
     )
+    if not circuit_breaker.breaker.allow_request():
+        raise types.LLMError("LLM provider temporarily unavailable (circuit open)")
 
     try:
         with urllib.request.urlopen(
             request, timeout=settings.openrouter_timeout_seconds
         ) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        circuit_breaker.breaker.record_failure()
         detail = exc.read().decode("utf-8", errors="replace")
         raise types.LLMError(f"OpenRouter HTTP {exc.code}: {detail[:300]}") from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        circuit_breaker.breaker.record_failure()
         raise types.LLMError(f"OpenRouter call failed: {exc}") from exc
+
+    circuit_breaker.breaker.record_success()
+    return payload
 
 
 def _chat(
