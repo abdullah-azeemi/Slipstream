@@ -14,7 +14,10 @@ export const DAG_GAP_X = 60
 export const DAG_GAP_Y = 28
 export const DAG_PAD = 16
 
-export function layeredLayout(nodes: DagLayoutNodeSpec[]): Record<string, DagLayoutPosition> {
+export function layeredLayout(
+  nodes: DagLayoutNodeSpec[],
+  scale = 1
+): Record<string, DagLayoutPosition> {
   if (nodes.length === 0) return {}
 
   const byId = new Map(nodes.map((n) => [n.id, n]))
@@ -55,8 +58,8 @@ export function layeredLayout(nodes: DagLayoutNodeSpec[]): Record<string, DagLay
     const columnCenterY = ((ids.length - 1) * strideY) / 2
     ids.forEach((id, index) => {
       result[id] = {
-        x: DAG_PAD + layer * (DAG_NODE_W + DAG_GAP_X),
-        y: DAG_PAD + columnCenterY - index * strideY,
+        x: (DAG_PAD + layer * (DAG_NODE_W + DAG_GAP_X)) * scale,
+        y: (DAG_PAD + columnCenterY - index * strideY) * scale,
       }
     })
   }

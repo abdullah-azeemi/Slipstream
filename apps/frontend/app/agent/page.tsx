@@ -552,14 +552,41 @@ export default function AgentPage() {
             </div>
           )}
 
-          {/* FULL CANVAS — running/completing/expanded phases */}
-          {latestDagTurn && canvasVisible && (
+          {/* DAG CANVAS — single mounted instance, slides between full & 150px minimap */}
+          {latestDagTurn && (canvasPhase === 'minimap' || canvasVisible) && (
             <div
-              className={`relative flex-1 ${
+              className={`relative flex-1 overflow-hidden transition-[min-height] duration-300 ease-in-out ${
                 canvasPhase === 'completing' ? 'canvas-dissolving' : ''
               }`}
-              style={{ minHeight: canvasPhase === 'expanded' ? '80vh' : 'calc(100vh - 200px)' }}
+              style={{
+                minHeight:
+                  canvasPhase === 'minimap'
+                    ? '150px'
+                    : canvasPhase === 'expanded'
+                      ? '80vh'
+                      : 'calc(100vh - 200px)',
+              }}
             >
+              <ReasoningGraphCanvas
+                nodes={latestDagTurn.nodes}
+                edges={latestDagTurn.edges}
+                states={latestDagTurn.nodeStates}
+                onSelectNode={setSelectedNodeId}
+                selectedNodeId={selectedNodeId}
+                phase={
+                  canvasPhase === 'minimap'
+                    ? 'minimap'
+                    : canvasPhase === 'expanded'
+                      ? 'expanded'
+                      : 'running'
+                }
+                animationIndex={animationIndex}
+              />
+              <NodeInspectorDrawer
+                view={selectedNodeView}
+                onClose={() => setSelectedNodeId(null)}
+              />
+
               {canvasPhase === 'expanded' && (
                 <button
                   onClick={() => setCanvasPhase('minimap')}
@@ -569,42 +596,19 @@ export default function AgentPage() {
                   collapse
                 </button>
               )}
-              <ReasoningGraphCanvas
-                nodes={latestDagTurn.nodes}
-                edges={latestDagTurn.edges}
-                states={latestDagTurn.nodeStates}
-                onSelectNode={setSelectedNodeId}
-                phase={canvasPhase === 'expanded' ? 'expanded' : 'running'}
-                animationIndex={animationIndex}
-              />
-              <NodeInspectorDrawer
-                view={selectedNodeView}
-                onClose={() => setSelectedNodeId(null)}
-              />
-            </div>
-          )}
 
-          {/* MINIMAP STRIP — after canvas dissolves */}
-          {latestDagTurn && canvasPhase === 'minimap' && (
-            <div
-              className="relative cursor-pointer border-b border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100"
-              style={{ height: '150px' }}
-              onClick={() => setCanvasPhase('expanded')}
-              title="Click to re-expand reasoning graph"
-            >
-              <ReasoningGraphCanvas
-                nodes={latestDagTurn.nodes}
-                edges={latestDagTurn.edges}
-                states={latestDagTurn.nodeStates}
-                onSelectNode={() => {}}
-                phase="minimap"
-                animationIndex={animationIndex}
-              />
-              {/* Overlay label */}
-              <div className="absolute bottom-2 right-3 rounded border border-slate-200 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 shadow-sm">
-                {latestDagTurn.nodes.length} nodes · {latestDagTurn.edges.length} edges · Click to
-                expand
-              </div>
+              {canvasPhase === 'minimap' && (
+                <button
+                  onClick={() => setCanvasPhase('expanded')}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  title="Click to re-expand reasoning graph"
+                >
+                  <span className="absolute bottom-2 right-3 rounded border border-slate-200 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 shadow-sm">
+                    {latestDagTurn.nodes.length} nodes · {latestDagTurn.edges.length} edges · Click
+                    to expand
+                  </span>
+                </button>
+              )}
             </div>
           )}
 
