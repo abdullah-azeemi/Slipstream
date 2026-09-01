@@ -198,12 +198,18 @@ def extract_race_control(session: fastf1.core.Session, session_key: int) -> list
 
 def _lap_start_times(session, driver_number=None):
     """
-    Build a sorted list of (lap_number, LapStartDate) covering the session's
-    recorded laps (optionally one driver). Used to derive a lap_number from an
-    absolute timestamp (team radio, weather). Returns [] when lap data is absent.
+    Build a sorted list of (lap_number, start) covering the session's recorded
+    laps (optionally one driver). The `start` value is the absolute lock-step ON
+    LapStartDate when available, otherwise it falls back to the session-relative
+    LapStartTime clock. Used to derive a lap_number from a timestamp (team radio,
+    weather). Returns [] when lap data is absent.
     """
     laps = session.laps
-    if laps is None or laps.empty or "LapStartDate" not in laps:
+    if laps is None or laps.empty:
+        return []
+    has_date = "LapStartDate" in laps and laps["LapStartDate"].notna().any()
+    col = "LapStartDate" if has_date else "LapStartTime"
+    if col not in laps:
         return []
     rows = []
     for _, row in laps.iterrows():
@@ -214,7 +220,7 @@ def _lap_start_times(session, driver_number=None):
             continue
         if driver_number is not None and drv != driver_number:
             continue
-        start = row.get("LapStartDate")
+        start = row.get(col)
         lap = row.get("LapNumber")
         try:
             lap = int(lap)
@@ -241,17 +247,33 @@ def _lap_for_timestamp(lap_starts: list[tuple[int, object]], ts) -> int | None:
             ts = pd.Timestamp(ts)
     except (ValueError, TypeError):
         return None
+    if not lap_starts:
+        return None
+
+    # LapStartDate from FastF1 is usually tz-naive while our incoming timestamps
+    # (OpenF1 `date`, weather `t0_date + Time`) are tz-aware UTC. Normalise the
+    # incoming ts to the same timezone convention as the lap-start reference so
+    # the comparison doesn't throw a naive/aware mismatch.
+    ref = lap_starts[0][1]
+    if isinstance(ts, pd.Timestamp) and isinstance(ref, pd.Timestamp):
+        if ref.tzinfo is None and ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        elif ref.tzinfo is not None and ts.tzinfo is None:
+            ts = ts.tz_localize(ref.tzinfo)
+
     best_lap = None
     for lap, start in lap_starts:
         try:
             if pd.isna(start):
                 continue
-        except Exception:
-            pass
-        if start <= ts:
-            best_lap = lap
-        else:
-            break
+            if start <= ts:
+                best_lap = lap
+            else:
+                break
+        except (TypeError, ValueError):
+            # clock mismatch (absolute LapStartDate vs relative LapStartTime, or
+            # vice versa) — the two sources aren't on the same timebase
+            return None
     return best_lap
 
 
@@ -275,13 +297,34 @@ def extract_weather_events(
 
     results = []
     for _, row in wx.iterrows():
-        ts = row.get("Time") if "Time" in wx else row.name
+        # weather_data is indexed by a RangeIndex with a t0-relative `Time`
+        # column (timedelta since session start). Lap starts are absolute
+        # (`LapStartDate = LapStartTime + t0`) when telemetry was loaded, so we
+        # must convert weather Time to the same absolute clock via session.t0_date.
+        t_rel = row.get("Time")
+        ts: object | None = None
+        lap_number: int | None = None
+        if t_rel is not None:
+            relative_clock = (
+                not lap_starts
+                or not isinstance(lap_starts[0][1], pd.Timestamp)
+            )
+            if not relative_clock:
+                try:
+                    t0 = session.t0_date
+                    ts = pd.Timestamp(t0) + pd.Timedelta(t_rel)
+                    lap_number = _lap_for_timestamp(lap_starts, ts)
+                except Exception:
+                    relative_clock = True
+            if relative_clock:
+                ts = t_rel
+                lap_number = _lap_for_timestamp(lap_starts, ts)
         rainfall = row.get("RainFull", row.get("Rainfall", False))
         results.append(
             {
                 "session_key": session_key,
                 "timestamp": str(ts) if ts is not None else None,
-                "lap_number": _lap_for_timestamp(lap_starts, ts),
+                "lap_number": lap_number,
                 "track_temp_c": _to_float(row.get("TrackTemp")),
                 "air_temp_c": _to_float(row.get("AirTemp")),
                 "humidity_pct": _to_float(row.get("Humidity")),
