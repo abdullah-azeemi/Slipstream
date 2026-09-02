@@ -494,23 +494,25 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
 
 def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
-    """Dispatch between the deterministic template planner and the LLM planner, gated by settings.agent_planner_mode.
+    """Dispatch between the deterministic template planner and the LLM planner,
+    gated by settings.agent_planner_mode.
     The LLM path can never take the request down: anything that isn't a valid
-    completed plan degrades to the template DAG. 
+    completed plan degrades to the template DAG.
     """
     if settings.agent_planner_mode == "llm":
         try:
             return _build_llm_dag(routed)
-        except NotImplementedError:
-            pass 
+        except (NotImplementedError, types.LLMError):
+            pass
     return _build_template_dag(routed)
+
 
 def _build_llm_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     try:
         from backend.agent import planner
     except ImportError as exc:
         raise NotImplementedError("T1.1 planner not shipped yet") from exc
-    return planner.plan_dag(routed)
+    return planner.plan_dag(routed.question, routed)
 
 def topo_sort(dag: types.ExecutionDAG) -> tuple[str, ...]:
     """The node id's where the every node comes afterwards after its dependencies
