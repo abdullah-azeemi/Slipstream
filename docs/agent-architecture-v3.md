@@ -1,8 +1,8 @@
 # Pitwall Agent Architecture v3
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
-Status: **L1–L31 complete and shipped (deterministic pipeline). This doc supersedes `agent-architecture-v2.md`. Adds Tier 0 (production-hardening gate — MUST land before T1.1), clarifies implementation ownership, and adds an industry-patterns primer explaining where each idea comes from and who uses it in production.**
+Status: **L1–L31 complete and shipped (deterministic pipeline). Tier 0 (T0.1–T0.5) complete and shipped. T1.1 (dynamic tool planning) complete and shipped behind the `AGENT_PLANNER_MODE` feature flag. This doc supersedes `agent-architecture-v2.md`.**
 
 **Key change from v2:** the shadow-mode ("run old + new planner in parallel on live traffic") idea from v2's rollout plan is **REMOVED**. Running two systems in parallel live is real infra complexity (2x DB load, 2x LLM spend, a diffing service to build and maintain) for a solo project with no production traffic yet. Replaced with an **offline eval gate + feature flag**: build the new planner behind a flag, validate it against a fixed question set *before* any live traffic sees it, flip the flag only once it passes. Same safety property (don't ship a regression), much less to build and operate.
 
@@ -104,22 +104,22 @@ Deterministic 5-stage pipeline: `Route → Plan (hardcoded DAG) → Execute → 
 
 ## Tier 1 — True agentic behavior (T1.1–T1.3)
 
-**Unchanged from v2 in design** — see v2 for full detail on `plan_dag`, the iterative reasoning loop, and tool-output interpretation. The concrete implementation contracts live in the backend modules below. Restating only what changed:
+**T1.1 shipped (2026-09-03).** T1.2 and T1.3 unchanged from v2 in design — see v2 for full detail on the iterative reasoning loop and tool-output interpretation. The concrete implementation contracts live in the backend modules below. Restating only what changed:
 
 - **T1.1 ships behind the `AGENT_PLANNER_MODE` flag from T0.2**, gated by the T0.1 golden eval — not a direct cutover.
 - **T0.3's node cap and T0.5's circuit breaker must exist before T1.1 goes live**, since T1.1 is exactly the change that makes both risks real.
 - **Implementation owner: Claude.** Foundational, high blast radius if wrong — a subtly bad planner corrupts every answer downstream. Not a good first delegation target to a cheaper model.
 
-### T1.1 — Dynamic tool planning → `planner.py`
+### T1.1 — Dynamic tool planning → `planner.py` ✅ DONE
 
 **Safety invariants (do not change without going back to the architecture doc):**
 - The LLM never invents a tool name or SQL. Every plan is validated against `TOOL_REGISTRY` before anything is bound or executed.
 - A plan that fails validation ALWAYS raises `PlanValidationError`. The caller (`orchestrator.build_dag`) MUST catch it and fall back to the existing template DAG — never let it crash the request, never let it partially run.
 - Max `MAX_DAG_NODES` per plan (T0.3).
 
-`TOOL_REGISTRY` must be populated from the real 13 tools in `tools.py` (via `ToolSpec.from_dataclass()`), and `call_llm_json()` wired to the real LLM client in `llm.py`.
+`TOOL_REGISTRY` populated from the real 13 tools in `tools.py` via `ToolSpec.from_dataclass()`. `call_llm_json()` wired to the real LLM client in `llm.py`.
 
-**Destination in the real repo:** `apps/backend/src/backend/agent/planner.py` (new file)
+**Destination in the real repo:** `apps/backend/src/backend/agent/planner.py` (new file — **shipped**)
 
 **Implementation contract (full code):**
 
@@ -957,10 +957,10 @@ Knowing the name and origin of a pattern is also directly useful in interviews: 
 
 ## Suggested build order
 
-1. **T0.1** (golden eval set) — do this first, it's the prerequisite for trusting everything after it.
-2. **T0.3 + T0.4 + T0.5** (resource caps, rate limit, circuit breaker) — can be built in parallel with T0.1, independent of each other, all needed before T1.1 goes live.
-3. **T0.2** (feature flag) — small, wraps the above together.
-4. **T1.1** behind the flag, validated against T0.1, flip the flag only on a clean pass.
+1. ~~**T0.1** (golden eval set)~~ — done.
+2. ~~**T0.3 + T0.4 + T0.5** (resource caps, rate limit, circuit breaker)~~ — done.
+3. ~~**T0.2** (feature flag)~~ — done.
+4. ~~**T1.1** behind the flag~~ — done, validated against T0.1, flag defaults to "template".
 5. **T1.2, T1.3** — same pattern, same gate.
 6. **T2.1** (with T0.6's retention policy) — then T2.2/T2.3.
 7. **T3.1/T3.2/T3.3** — lowest risk, best delegation candidates, do these whenever, in any order.

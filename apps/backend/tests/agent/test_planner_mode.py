@@ -1,6 +1,3 @@
-import sys
-from types import SimpleNamespace
-
 from backend.agent import orchestrator, types
 from backend.config import settings
 
@@ -38,22 +35,35 @@ def test_llm_mode_without_planner_falls_back_to_template(monkeypatch):
     assert actual == _tool_sequence(orchestrator._build_template_dag(routed))
 
 
-def test_llm_mode_dispatches_to_planner(monkeypatch):
-    routed = _routed("tyre_degradation_analysis")
-    template = orchestrator._build_template_dag(routed)
-    calls = {"n": 0}
-
-    def fake_plan_dag(routed):
-        calls["n"] += 1
-        return template
-
-    monkeypatch.setitem(
-        sys.modules,
-        "backend.agent.planner",
-        SimpleNamespace(plan_dag=fake_plan_dag),
-    )
+def test_llm_mode_build_dag_uses_template(monkeypatch):
+    """T1.2 moved the LLM/agentic planner out of build_dag() and into run().
+    build_dag() is now the T0.1 golden-eval baseline and ALWAYS returns the
+    template DAG, regardless of mode. The agentic loop owns execution and is
+    dispatched in run(), not here."""
     monkeypatch.setattr(settings, "agent_planner_mode", "llm")
+    routed = _routed("tyre_degradation_analysis")
+    assert _tool_sequence(orchestrator.build_dag(routed)) == _tool_sequence(
+        orchestrator._build_template_dag(routed)
+    )
 
-    dag = orchestrator.build_dag(routed)
-    assert calls["n"] == 1
-    assert dag is template
+
+def test_run_agentic_dispatches_to_agentic_loop(monkeypatch):
+    """The llm-mode entry point (run -> _run_agentic) must invoke the T1.2
+    agentic loop and pass it the planner's tool registry."""
+    captured = {}
+
+    def fake_run_agentic_dag(question, routed, registry):
+        captured["registry"] = registry
+        return {"routed": routed, "n1": {"session_key": 1}}
+
+    from backend.agent import agentic_loop, planner
+
+    monkeypatch.setattr(
+        agentic_loop, "run_agentic_dag", fake_run_agentic_dag
+    )
+
+    routed = _routed("tyre_degradation_analysis")
+    env = orchestrator._run_agentic("Did rain affect degradation?", routed)
+
+    assert env is not None
+    assert captured["registry"] is planner.TOOL_REGISTRY

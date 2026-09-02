@@ -494,25 +494,15 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
 
 def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
-    """Dispatch between the deterministic template planner and the LLM planner,
-    gated by settings.agent_planner_mode.
-    The LLM path can never take the request down: anything that isn't a valid
-    completed plan degrades to the template DAG.
+    """Build the tool-plan DAG using the deterministic template planner.
+
+    T1.2's agentic loop does NOT live here -- it owns execution and lives in
+    run(), behind settings.agent_planner_mode == "llm". This function always
+    returns the hardcoded template DAG, which is the T0.1 golden-eval baseline
+    every future planner change is measured against.
     """
-    if settings.agent_planner_mode == "llm":
-        try:
-            return _build_llm_dag(routed)
-        except (NotImplementedError, types.LLMError):
-            pass
     return _build_template_dag(routed)
 
-
-def _build_llm_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
-    try:
-        from backend.agent import planner
-    except ImportError as exc:
-        raise NotImplementedError("T1.1 planner not shipped yet") from exc
-    return planner.plan_dag(routed.question, routed)
 
 def topo_sort(dag: types.ExecutionDAG) -> tuple[str, ...]:
     """The node id's where the every node comes afterwards after its dependencies
@@ -853,6 +843,90 @@ def _compose(
     _emit(progress, type="stage", stage="compose", status="ok", label="Answer composed")
     return answer
 
+def _run_agentic(
+    question: str,
+    routed: types.RoutedQuestion,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any] | None:
+    """Run the T1.2 agentic loop. Returns the evidence env, or None to
+    fall back to the deterministic template DAG."""
+    try:
+        from backend.agent import agentic_loop, planner
+    except ImportError:
+        return None
+
+    env = agentic_loop.run_agentic_dag(
+        question=question,
+        routed=routed,
+        registry=planner.TOOL_REGISTRY,
+    )
+    tool_results = {k: v for k, v in env.items() if k != "routed" and not (isinstance(v, dict) and v == {"error": v.get("error")})}
+    if not tool_results:
+        return None
+    return env
+
+def _compose_agentic(
+    question: str,
+    routed: types.RoutedQuestion,
+    env: dict[str, Any],
+    progress: ProgressCallback | None = None,
+) -> types.AgentAnswer:
+    """Build an AgentAnswer from an agentic-loop evidence env."""
+    from backend.agent import tools
+
+    _emit(progress, type="stage", stage="compose", status="running", label="Verifying agent-collected evidence")
+
+    refusals: list[str] = []
+    session = _first_result(env, "session_key", types.ResolvedSession)
+    driver = _first_result(env, "driver_number", types.ResolvedDriver)
+    if session is None or driver is None:
+        refusals.append("no session/driver evidence gathered; answer not trusted")
+
+    verify = None
+    if session is not None and driver is not None:
+        try:
+            verify = tools.verify_evidence(types.VerifyEvidenceInput(
+                session_key=session.session_key,
+                driver_number=driver.driver_number,
+                required_laps=(),
+            ))
+            if not verify.passed and verify.refusal_reason:
+                refusals.append(verify.refusal_reason)
+        except Exception as exc:  # verify itself failed -> refuse, don't crash
+            refusals.append(f"evidence verification failed: {exc}")
+
+    _emit(progress, type="stage", stage="compose", status="ok", label="Agentic answer prepared")
+
+    if refusals:
+        return types.AgentAnswer(
+            question=question, intent=routed.intent,
+            answer="I could not fully answer that question. " + " ".join(refusals)
+                    + " No numbers were invented from missing data.",
+            refusals=tuple(refusals), evidence=verify,
+        )
+
+    evidence_payload = {
+        nid: asdict(val) for nid, val in env.items()
+        if nid != "routed" and hasattr(val, "__dataclass_fields__")
+    }
+    answer_text = ""
+    cost = 0.0
+    try:
+        answer_text, cost = llm.compose_answer(question, evidence_payload)
+    except types.LLMError:
+        answer_text = "I have gathered evidence but could not compose a narrative answer."
+
+    return types.AgentAnswer(
+        question=question, intent=routed.intent, answer=answer_text,
+        session=session, driver=driver, evidence=verify, cost_usd=cost,
+    )
+
+def _first_result(env: dict[str, Any], attr: str, cls: type) -> Any:
+    """Return the first env value that is an instance of cls, else None."""
+    for val in env.values():
+        if isinstance(val, cls):
+            return val
+    return None
 
 def _clarify(
     question: str, routed: types.RoutedQuestion, missing: str, text: str, refusal: str
@@ -957,6 +1031,11 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
                 text="Which second driver should I compare against?",
                 refusal="missing_compare_driver",
             )
+        
+    if settings.agent_planner_mode == "llm":
+        env = _run_agentic(question, routed, progress)
+        if env is not None:
+            return _compose_agentic(question, routed, env, progress)
         
     try:
         dag = build_dag(routed)
