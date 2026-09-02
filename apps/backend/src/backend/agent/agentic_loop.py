@@ -53,36 +53,17 @@ def assess_evidence(question: str, evidence: dict[str, t.Any], registry: dict, r
     return planner.validate_plan(raw, registry, known_node_ids=evidence.keys())
 
 def execute_node(node: PlannerDAGNode, env: dict[str, t.Any], routed: types.RoutedQuestion) -> t.Any:
-   """Execute a single tool node """
-   from backend.agent.orchestrator import _TOOLS, _bind
+   """Execute a single tool node"""
+   from backend.agent.binding import bind_params
+   from backend.agent.orchestrator import _TOOLS
 
-   merged_params = dict(node.params)
-   for param_name, ref in node.input_param_refs.items():
-        try:
-            merged_params[param_name] = _resolve_ref(ref, env)
-        except KeyError:
-            pass 
    tool_name_enum = types.ToolName(node.tool)
+   typed_input = bind_params(node, env, tool_name_enum)
    tool_fn = _TOOLS[tool_name_enum]
-
-   typed_input = _bind(tool_name_enum, merged_params, env)
-
+   
    return tool_fn(typed_input)
 
-def _resolve_ref(ref: str, env: dict[str, t.Any]) -> t.Any:
-    """Resolve 'node_id.field' or 'node_id.field.nested' from the env.
-    """
-    parts = ref.split(".")
-    node_id = parts[0]
-    if node_id not in env:
-        raise KeyError(f"referenced node '{node_id}' has not executed yet")
-    value = env[node_id]
-    for part in parts[1:]:
-        if isinstance(value, dict):
-            value = value[part]
-        else:
-            value = getattr(value, part)
-    return value
+
 
 def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict) -> dict[str, t.Any]:
     """ Plan round 0, execute, assess and repeat upto MAX_ROUNDS 

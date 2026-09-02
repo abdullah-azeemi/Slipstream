@@ -1,6 +1,5 @@
 from __future__ import annotations
 import dataclasses 
-import inspect
 import json
 import typing as t 
 
@@ -359,7 +358,7 @@ def call_llm_json(prompt: str) -> dict:
     cleaned = text.strip()
     if cleaned.startswith("```"):
         lines = cleaned.split("\n")
-        lines = [l for l in lines[1:] if not l.strip().startswith("```")]
+        lines = [li for li in lines[1:] if not li.strip().startswith("```")]
         cleaned = "\n".join(lines)
 
     return json.loads(cleaned)

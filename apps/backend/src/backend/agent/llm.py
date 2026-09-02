@@ -214,6 +214,7 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     intent = types.Intent(intent_value)
     return types.RoutedQuestion(
         intent=intent,
+        question=question,
         driver_name=_clean_str(payload.get("driver")),
         compare_driver_name=_coerce_compare_driver(
             payload.get("compare_driver") or payload.get("compare_driver_name")

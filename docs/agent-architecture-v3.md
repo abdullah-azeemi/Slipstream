@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03
 
-Status: **L1–L31 complete and shipped (deterministic pipeline). Tier 0 (T0.1–T0.5) complete and shipped. T1.1 (dynamic tool planning) complete and shipped behind the `AGENT_PLANNER_MODE` feature flag. This doc supersedes `agent-architecture-v2.md`.**
+Status: **L1–L31 complete and shipped (deterministic pipeline). Tier 0 (T0.1–T0.5) complete and shipped. T1.1 (dynamic tool planning) and T1.2 (bounded iterative loop) complete and shipped behind the `AGENT_PLANNER_MODE` feature flag. This doc supersedes `agent-architecture-v2.md`.**
 
 **Key change from v2:** the shadow-mode ("run old + new planner in parallel on live traffic") idea from v2's rollout plan is **REMOVED**. Running two systems in parallel live is real infra complexity (2x DB load, 2x LLM spend, a diffing service to build and maintain) for a solo project with no production traffic yet. Replaced with an **offline eval gate + feature flag**: build the new planner behind a flag, validate it against a fixed question set *before* any live traffic sees it, flip the flag only once it passes. Same safety property (don't ship a regression), much less to build and operate.
 
@@ -104,7 +104,7 @@ Deterministic 5-stage pipeline: `Route → Plan (hardcoded DAG) → Execute → 
 
 ## Tier 1 — True agentic behavior (T1.1–T1.3)
 
-**T1.1 shipped (2026-09-03).** T1.2 and T1.3 unchanged from v2 in design — see v2 for full detail on the iterative reasoning loop and tool-output interpretation. The concrete implementation contracts live in the backend modules below. Restating only what changed:
+**T1.1 and T1.2 shipped (2026-09-03).** T1.3 unchanged from v2 in design — see v2 for full detail on the iterative reasoning loop and tool-output interpretation. The concrete implementation contracts live in the backend modules below. Restating only what changed:
 
 - **T1.1 ships behind the `AGENT_PLANNER_MODE` flag from T0.2**, gated by the T0.1 golden eval — not a direct cutover.
 - **T0.3's node cap and T0.5's circuit breaker must exist before T1.1 goes live**, since T1.1 is exactly the change that makes both risks real.
@@ -396,15 +396,19 @@ def plan_dag(question: str, routed: dict, registry: dict) -> ExecutionDAG:
     return validate_plan(raw, registry)
 ```
 
-### T1.2 — Iterative reasoning loop → `agentic_loop.py`
+### T1.2 — Iterative reasoning loop → `agentic_loop.py` ✅ DONE
+
+**Status (2026-09-03): shipped.** Iterative loop lives in `agentic_loop.py`, dispatched from `orchestrator.run()` under the `AGENT_PLANNER_MODE == "llm"` flag (`_run_agentic` → `run_agentic_dag` → `_compose_agentic`). On `PlanValidationError` or empty evidence it falls back to the template DAG. `build_dag()` now always returns the deterministic template baseline the golden eval measures; the agentic path executes only in `run()`.
 
 **Already decided:**
 - Bounded at `MAX_ROUNDS=3`. At the cap we STOP regardless of what `assess_evidence` wants — the existing `verify_evidence` tool decides whether what we have is enough to answer or should be refused. We never loop forever and we never silently answer on partial evidence without going through that gate.
 - Every round's tool calls go through the exact same `validate_plan()` from `planner.py` — a second round is not a lower-trust code path than the first.
 
-**Destination in the real repo:** `apps/backend/src/backend/agent/agentic_loop.py` (new file)
+**Destination in the real repo:** `apps/backend/src/backend/agent/agentic_loop.py` (new file — **shipped**)
 
 `execute_node()` must call the real tools via `bind_params()` from `binding.py`.
+
+> **Real-ship note:** `binding.py` (T1.3) does not exist yet, so the shipped T1.2 binds through the existing `orchestrator._bind_*` functions instead of `bind_params()`. That keeps parameter binding on the exact same path as the template DAG today. When T1.3 lands, `agentic_loop.py` switches to `bind_params()` with no behaviour change expected. Also: the real `planner.py` types are `PlannerDAGNode`/`PlannerExecutionDAG` (not `DAGNode`/`ExecutionDAG`), and `_compose_agentic` is wired into `run()`, not `build_dag()`.
 
 **Implementation contract (full code):**
 
@@ -961,9 +965,10 @@ Knowing the name and origin of a pattern is also directly useful in interviews: 
 2. ~~**T0.3 + T0.4 + T0.5** (resource caps, rate limit, circuit breaker)~~ — done.
 3. ~~**T0.2** (feature flag)~~ — done.
 4. ~~**T1.1** behind the flag~~ — done, validated against T0.1, flag defaults to "template".
-5. **T1.2, T1.3** — same pattern, same gate.
-6. **T2.1** (with T0.6's retention policy) — then T2.2/T2.3.
-7. **T3.1/T3.2/T3.3** — lowest risk, best delegation candidates, do these whenever, in any order.
+5. ~~**T1.2** (capped iterative loop, dispatched in `run()`)~~ — done; golden-eval / template baseline still green (256 tests pass). Next: eval the llm path against the golden set before relying on it.
+6. **T1.3** (parameter binding → `binding.py`) — same pattern, same gate; `agentic_loop.py` currently binds via `orchestrator._bind_*`, this extracts it to `bind_params()`.
+7. **T2.1** (with T0.6's retention policy) — then T2.2/T2.3.
+8. **T3.1/T3.2/T3.3** — lowest risk, best delegation candidates, do these whenever, in any order.
 
 ---
 

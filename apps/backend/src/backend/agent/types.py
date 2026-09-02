@@ -349,6 +349,7 @@ class RoutedQuestion:
     """Entities the LLM Router extracted form the raw question"""
 
     intent: Intent
+    question: str = ""
     driver_name: str | None = None
     compare_driver_name: str | None = None
     gp_name: str | None = None
