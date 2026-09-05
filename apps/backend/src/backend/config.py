@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     clerk_issuer: str = ""
     clerk_admin_user_ids: str = ""
 
+    race_vector_index_dir: str = "./lancedb"
+    race_vector_table: str = "race_intelligence_events"
+    memory_vector_table: str = "user_memory_snippets"  
+
     auto_ingest_enabled: bool = True
     auto_ingest_on_startup: bool = True
     auto_ingest_interval_minutes: int = 60

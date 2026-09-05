@@ -107,6 +107,69 @@ def rebuild_session_index(events: list[dict[str, Any]], session_key: int) -> int
 
     return len(records)
 
+def _memory_table():
+    """Open or create the per-user memory table.
+
+    Separate from race_intelligence_events on purpose: memory snippets are
+    per-user (need the user_id column for scoping) and have a different
+    lifetime (appended + deletable) than the deterministic rebuildable
+    race-event index."""
+    db = _connect()
+    table_name = settings.memory_vector_table
+
+    tables = db.list_tables()
+    existing = set(tables.tables if hasattr(tables, "tables") else tables)
+    if table_name in existing:
+        return db.open_table(table_name)
+
+    seed = {
+        "id": -1,
+        "user_id": -1,
+        "session_key": -1,
+        "text": "seed",
+        "vector": embed_text("seed"),
+    }
+    return db.create_table(table_name, data=[seed])
+
+
+def upsert_snippet(
+    snippet_id: int, user_id: int, session_key: int, summary: str
+) -> None:
+    """One vector row. id == the Postgres agent_memory_snippets.id."""
+    table = _memory_table()
+    table.add(
+        [
+            {
+                "id": snippet_id,
+                "user_id": user_id,
+                "session_key": session_key,
+                "text": summary,
+                "vector": embed_text(summary),
+            }
+        ]
+    )
+
+
+def search_user_memory(query: str, user_id: int, limit: int = 5) -> list[dict[str, Any]]:
+    """Top-k vector hits for THIS user only.
+
+    prefilter=True matters: the user_id filter is pushed INTO the ANN search
+    so a crowded shared index can't supply another user's rows as candidates."""
+    table = _memory_table()
+    return (
+        table.search(embed_text(query))
+        .where(f"user_id = {int(user_id)}", prefilter=True)
+        .limit(limit)
+        .to_list()
+    )
+
+
+def delete_user_memory(user_id: int) -> int:
+    """Remove every vector row owned by a user (T0.6 delete path)."""
+    table = _memory_table()
+    return table.delete(f"user_id = {int(user_id)}")
+
+
 def search_similar(query: str, limit: int = 8, event_type: str | None = None) -> list[dict[str, Any]]:
     table = _table()
     results = table.search(embed_text(query)).limit(limit).to_list()

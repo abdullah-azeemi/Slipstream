@@ -3,7 +3,7 @@ import dataclasses
 import json
 import typing as t 
 
-from backend.agent import llm, types
+from backend.agent import llm, memory, types
 
 MAX_DAG_NODES = 8
 
@@ -295,7 +295,7 @@ def _to_execution_dag(dag: PlannerExecutionDAG) -> types.ExecutionDAG:
 
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
 
-def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec]) -> str:
+def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec], memory_context: str = "") -> str:
     """ Build the system prompt that tells the LLM which tools are available and asks it to produce a plan as JSON."""
     tool_lines: list[str] = []
     for spec in registry.values():
@@ -325,6 +325,8 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
 
             Question: {question}
             Extracted entities so far: {json.dumps(entities)}
+
+            {memory_context}
 
             Available tools:
             {tools_block}
@@ -363,12 +365,13 @@ def call_llm_json(prompt: str) -> dict:
 
     return json.loads(cleaned)
 
-def plan_dag(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec] | None = None) -> types.ExecutionDAG:
+def plan_dag(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec] | None = None, memory_snippets: list[dict] | None = None) -> types.ExecutionDAG:
     """Ask the LLM to produce a plan for answering the question, then validate it and convert to ExecutionDAG."""
     if registry is None:
         registry = TOOL_REGISTRY
 
-    prompt = _build_planner_prompt(question, routed, registry)
+    memory_context = memory.format_memory_context(memory_snippets or [])
+    prompt = _build_planner_prompt(question, routed, registry, memory_context)
     raw_plan = call_llm_json(prompt)
     validated_dag = validate_plan(raw_plan, registry)
     execution_dag = _to_execution_dag(validated_dag)

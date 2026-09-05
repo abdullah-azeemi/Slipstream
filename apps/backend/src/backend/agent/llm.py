@@ -227,8 +227,15 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     ), cost
 
 
-def compose_answer(question: str, evidence: dict) -> tuple[str, float]:
+def compose_answer(question: str, evidence: dict, memory_context: str = "") -> tuple[str, float]:
     """Write the final human-readable answer from structured evidence."""
+    context_block = ""
+    if memory_context:
+        context_block = (
+            f"\n\nBackground context from this user's memory (usable for narrative "
+            f"flavour only, NOT evidence -- every number you write must come from "
+            f"the evidence JSON):\n{memory_context}"
+        )
     messages = [
         {"role": "system", "content": _COMPOSER_SYSTEM_PROMPT},
         {
@@ -236,6 +243,7 @@ def compose_answer(question: str, evidence: dict) -> tuple[str, float]:
             "content": (
                 f"Question: {question}\n\nEvidence (JSON):\n"
                 f"{json.dumps(evidence, indent=2, default=str)}"
+                f"{context_block}"
             ),
         },
     ]

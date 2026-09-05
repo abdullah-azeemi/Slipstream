@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 import time
 from typing import Any, Callable
 
-from backend.agent import circuit_breaker, context as agent_context
+from backend.agent import circuit_breaker, context as agent_context, memory
 from backend.agent import llm, tools, types
 from backend.config import settings
 
@@ -847,6 +847,7 @@ def _run_agentic(
     question: str,
     routed: types.RoutedQuestion,
     progress: ProgressCallback | None = None,
+    memory_snippets: list[dict] | None = None,
 ) -> dict[str, Any] | None:
     """Run the T1.2 agentic loop. Returns the evidence env, or None to
     fall back to the deterministic template DAG."""
@@ -859,6 +860,7 @@ def _run_agentic(
         question=question,
         routed=routed,
         registry=planner.TOOL_REGISTRY,
+        memory_snippets=memory_snippets,
     )
     tool_results = {k: v for k, v in env.items() if k != "routed" and not (isinstance(v, dict) and v == {"error": v.get("error")})}
     if not tool_results:
@@ -870,6 +872,7 @@ def _compose_agentic(
     routed: types.RoutedQuestion,
     env: dict[str, Any],
     progress: ProgressCallback | None = None,
+    memory_snippets: list[dict] | None = None,
 ) -> types.AgentAnswer:
     """Build an AgentAnswer from an agentic-loop evidence env."""
     from backend.agent import tools
@@ -912,7 +915,8 @@ def _compose_agentic(
     answer_text = ""
     cost = 0.0
     try:
-        answer_text, cost = llm.compose_answer(question, evidence_payload)
+        memory_context = memory.format_memory_context(memory_snippets or [])
+        answer_text, cost = llm.compose_answer(question, evidence_payload, memory_context=memory_context)
     except types.LLMError:
         answer_text = "I have gathered evidence but could not compose a narrative answer."
 
@@ -947,7 +951,7 @@ def _clarify(
     )
 
 
-def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None ) -> types.AgentAnswer:
+def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None, clerk_user_id: str | None = None) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     if circuit_breaker.breaker.is_open():
         _emit(
@@ -996,6 +1000,18 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
             routing_context=agent_context.routed_to_context(routed),
         )
 
+    memory_snippets: list[dict] = []
+    if clerk_user_id and not routed.driver_name:
+        fav = memory.get_preference(clerk_user_id, "favorite_driver")
+        if fav:
+            routed = replace(routed, driver_name=fav)
+            _emit(progress, type="stage", stage="route", status="ok",
+                  label=f"Resolved driver from memory: {fav}")
+
+    if clerk_user_id:
+        memory.maybe_store_preference(question, routed, clerk_user_id)
+        memory_snippets = memory.recall(clerk_user_id, question)
+
     if not routed.driver_name:
         return _clarify(
             question,
@@ -1033,9 +1049,9 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
             )
         
     if settings.agent_planner_mode == "llm":
-        env = _run_agentic(question, routed, progress)
+        env = _run_agentic(question, routed, progress, memory_snippets=memory_snippets)
         if env is not None:
-            return _compose_agentic(question, routed, env, progress)
+            return _compose_agentic(question, routed, env, progress, memory_snippets=memory_snippets)
         
     try:
         dag = build_dag(routed)

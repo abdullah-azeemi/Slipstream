@@ -203,6 +203,26 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    pref_key        TEXT NOT NULL,
+    pref_value      TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, pref_key)
+);
+
+CREATE TABLE IF NOT EXISTS agent_memory_snippets (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    snippet         TEXT NOT NULL,
+    run_id          INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_snippets_user_id
+    ON agent_memory_snippets (user_id);
+
 CREATE INDEX IF NOT EXISTS idx_lap_times_session_driver
     ON lap_times (session_key, driver_number);
 CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
@@ -285,6 +305,8 @@ def _create_tables(db_engine):
     # Tear down tables after the full test suite finishes.
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS agent_memory_snippets CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS user_preferences CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_runs CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_messages CASCADE;"))

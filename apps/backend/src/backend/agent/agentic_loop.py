@@ -65,7 +65,7 @@ def execute_node(node: PlannerDAGNode, env: dict[str, t.Any], routed: types.Rout
 
 
 
-def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict) -> dict[str, t.Any]:
+def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict, memory_snippets: list[dict] | None = None) -> dict[str, t.Any]:
     """ Plan round 0, execute, assess and repeat upto MAX_ROUNDS 
     
         Returns the accumulated evidence env, pass this to the existing verify_evidence tool exactly as if it were a single tool call.
@@ -76,7 +76,7 @@ def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict)
     env: dict[str, t.Any] = {"routed": routed}
 
     try:
-        dag = plan_dag(question, routed, registry)
+        dag = plan_dag(question, routed, registry, memory_snippets=memory_snippets)
 
     except planner.PlanValidationError:
         logger.warning("Round_0 plan validation failed", exc_info=True)

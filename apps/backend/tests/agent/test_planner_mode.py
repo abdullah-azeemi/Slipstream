@@ -52,8 +52,9 @@ def test_run_agentic_dispatches_to_agentic_loop(monkeypatch):
     agentic loop and pass it the planner's tool registry."""
     captured = {}
 
-    def fake_run_agentic_dag(question, routed, registry):
+    def fake_run_agentic_dag(question, routed, registry, memory_snippets=None):
         captured["registry"] = registry
+        captured["memory_snippets"] = memory_snippets
         return {"routed": routed, "n1": {"session_key": 1}}
 
     from backend.agent import agentic_loop, planner
