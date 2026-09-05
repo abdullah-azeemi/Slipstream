@@ -22,12 +22,10 @@ def _pruned(complexity: int):
     )
     return planner.prune_dag(_dst(complexity), routed)
 
-
 def test_simple_question_drops_heavy_leaf():
     dag = _pruned(1)
     names = {n.tool_name for n in dag.nodes}
     assert types.ToolName.TELEMETRY_INSPECTOR not in names
-
 
 def test_verify_always_survives():
     for complexity in (1, 5):

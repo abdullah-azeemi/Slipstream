@@ -1,8 +1,8 @@
 # Pitwall Agent Architecture v3
 
-Last updated: 2026-09-03
+Last updated: 2026-09-06
 
-Status: **L1–L31 complete and shipped (deterministic pipeline). Tier 0 (T0.1–T0.5) complete and shipped. T1.1 (dynamic tool planning) and T1.2 (bounded iterative loop) complete and shipped behind the `AGENT_PLANNER_MODE` feature flag. This doc supersedes `agent-architecture-v2.md`.**
+Status: **L1–L31 complete and shipped (deterministic pipeline). Tier 0 (T0.1–T0.5) complete and shipped. T1.1 (dynamic tool planning), T1.2 (bounded iterative loop) complete and shipped behind the `AGENT_PLANNER_MODE` feature flag. Tier 2 (T2.1 long-term memory + RAG, T2.2 retry with backoff, T2.3 adaptive complexity) complete and shipped. This doc supersedes `agent-architecture-v2.md`.**
 
 **Key change from v2:** the shadow-mode ("run old + new planner in parallel on live traffic") idea from v2's rollout plan is **REMOVED**. Running two systems in parallel live is real infra complexity (2x DB load, 2x LLM spend, a diffing service to build and maintain) for a solo project with no production traffic yet. Replaced with an **offline eval gate + feature flag**: build the new planner behind a flag, validate it against a fixed question set *before* any live traffic sees it, flip the flag only once it passes. Same safety property (don't ship a regression), much less to build and operate.
 
@@ -884,13 +884,13 @@ def test_round_bounding_stops_at_max_rounds(monkeypatch):
 
 ## Tier 2 — Memory & robustness (T2.1–T2.3)
 
-Unchanged from v2. T2.1 (memory/RAG) additionally requires T0.6's retention policy before shipping. **Implementation owner: Claude for T2.1** (privacy/grounding correctness matters); **T2.2 (retry/backoff) is a safe delegation candidate** — see below.
+**T2.1, T2.2, and T2.3 shipped (2026-09-06).** Full feedback landed in the retry + complexity work: `RetryableError` (distinct from `NotFoundError`/`DataError`) with a capped 3-attempt / 200·400·800ms backoff that never retries permanent data errors and stays SSE-transparent (one trace record per node); and a router-computed `complexity` score (1–5) carried on `RoutedQuestion` that steers the planner's node budget and prunes un-consumed heavy-telemetry leaves on simple questions while `verify_evidence` always survives. Backend test suite at **285 passing**.
 
-- **T2.1 — Long-term memory + RAG:** wire the unused `race_vector_index_dir`/`race_vector_table` config; durable per-user memory; memory is grounding, not authority; recalled facts must still pass `verify_evidence`.
-- **T2.2 — Retry with backoff:** add `RetryableError` distinct from `NotFoundError`/`DataError`; retry transients (max 3, 200/400/800ms), never `NotFoundError`/`DataError`; transparent to SSE.
-- **T2.3 — Adaptive complexity:** match DAG depth to question difficulty; complexity is a steered *cap*, not a hard rule; `verify_evidence` always remains.
+- **T2.1 — Long-term memory + RAG:** wiring the unused `race_vector_index_dir`/`race_vector_table` config; durable per-user memory; memory is grounding, not authority; recalled facts must still pass `verify_evidence`. Ships the `DELETE /api/v1/agent/memory` endpoint required by T0.6.
+- **T2.2 — Retry with backoff:** `RetryableError` distinct from `NotFoundError`/`DataError`; retries transients (max 3, 200/400/800ms), never `NotFoundError`/`DataError`; transparent to SSE.
+- **T2.3 — Adaptive complexity:** DAG depth matched to question difficulty via router-scored complexity; complexity is a steered *cap*, not a hard rule; `verify_evidence` always remains.
 
-Full specs (Goal / Files to change / Key design decisions / Acceptance criteria) are in **v2** — T2.1, T2.2, T2.3 sections are unchanged from that doc.
+**Note on the implementation ownership split from v2:** T2.1 was intentionally built as a *teaching exercise* — the human wrote each function with Claude providing the exact file/line/code, and both T2.2 and T2.3 were implemented by the human from line-precise lessons and cold-fixed when tests surfaced off-by-one / missing-import bugs (retry's 4-attempt vs 3-attempt threshold; `dataclasses.replace` not imported in the router). This satisfies v2's ownership guidance in practice: T2.1/T2.3 (grounding + pruning judgment) were Claude-verified, and T2.2's mechanical retry logic was effectively delegated.
 
 ---
 
@@ -912,9 +912,9 @@ Full specs are in **v2** — T3.1, T3.2, T3.3 sections are unchanged from that d
 |---|---|---|
 | T0.1–T0.5 | Claude | Foundational safety infra; a subtle bug here undermines every tier above it |
 | T1.1, T1.2, T1.3 | Claude | Judgment-heavy, high blast radius, hard to unit-test correctness of "is this a good plan" |
-| T2.1 (memory/RAG) | Claude | Privacy + grounding correctness; recalled facts must still pass the evidence gate |
-| T2.2 (retry/backoff) | Delegatable | Narrow, mechanical, clear acceptance criteria (3 attempts, capped backoff) |
-| T2.3 (adaptive complexity) | Claude reviews, cheaper model can draft | Pruning logic risks silently dropping needed evidence |
+| T2.1 (memory/RAG) | Claude (shipped 2026-09-06) | Privacy + grounding correctness; recalled facts must still pass the evidence gate |
+| T2.2 (retry/backoff) | Delegatable (shipped 2026-09-06) | Narrow, mechanical, clear acceptance criteria (3 attempts, capped backoff) |
+| T2.3 (adaptive complexity) | Claude reviews, cheaper model can draft (shipped 2026-09-06) | Pruning logic risks silently dropping needed evidence |
 | T3.1 (feedback loop) | Delegatable | Standard CRUD + a UI control, low blast radius |
 | T3.2 (cost routing) | Claude reviews routing table | Easy to get subtly wrong (wrong model on wrong intent) without it being an obvious bug |
 | T3.3 (structured-output validation) | Delegatable | Mechanical schema-validation wrapper, testable in isolation |
@@ -967,7 +967,7 @@ Knowing the name and origin of a pattern is also directly useful in interviews: 
 4. ~~**T1.1** behind the flag~~ — done, validated against T0.1, flag defaults to "template".
 5. ~~**T1.2** (capped iterative loop, dispatched in `run()`)~~ — done; golden-eval / template baseline still green (256 tests pass). Next: eval the llm path against the golden set before relying on it.
 6. **T1.3** (parameter binding → `binding.py`) — same pattern, same gate; `agentic_loop.py` currently binds via `orchestrator._bind_*`, this extracts it to `bind_params()`.
-7. **T2.1** (with T0.6's retention policy) — then T2.2/T2.3.
+7. ~~**T2.1** / **T2.2** / **T2.3**~~ — done (2026-09-06), with T0.6's retention/delete path (`DELETE /api/v1/agent/memory`). Full backend suite at 285 passing.
 8. **T3.1/T3.2/T3.3** — lowest risk, best delegation candidates, do these whenever, in any order.
 
 ---
