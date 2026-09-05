@@ -365,6 +365,8 @@ class RoutedQuestion:
     laps_window: int = 3
     target_lap: int | None = None
     session_type: SessionType | None = None
+    complexity: int = 1 # router-scored question complexity, 1 (trivial) to 5 (compound). Steers the planner's node budget and the orchestrator's pruning step
+    
 
 
 @dataclass(frozen=True)

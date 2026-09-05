@@ -1077,6 +1077,9 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
         return _clarify(
             question, routed, missing="race", text="That question needs too many steps. Ask me something more focused.",
             refusal="plan_too_large")
+
+    from backend.agent.planner import prune_dag
+    dag = prune_dag(dag, routed)
     
     _emit(
         progress,

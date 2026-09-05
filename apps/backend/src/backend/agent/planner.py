@@ -6,6 +6,7 @@ import typing as t
 from backend.agent import llm, memory, types
 
 MAX_DAG_NODES = 8
+MIN_NODE_BUDGET = 3
 
 @dataclasses.dataclass(frozen=True)
 class ToolSpec:
@@ -295,6 +296,49 @@ def _to_execution_dag(dag: PlannerExecutionDAG) -> types.ExecutionDAG:
 
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
 
+_HEAVY_TELEMETRY_TOOLS = frozenset(
+    {
+        types.ToolName.TELEMETRY_INSPECTOR,
+        types.ToolName.STINT_DEGRADATION_SCANNER,
+        types.ToolName.GET_LAP_TELEMETRY_ARTIFACTS,
+    }
+)
+
+def prune_dag(dag: types.ExecutionDAG, routed: types.RoutedQuestion) -> types.ExecutionDAG:
+    """orchestrator post-step. For SIMPLE questions (complexity <= 2) drop heavy-telemetry nodes that are pure leaves: nothing downstream
+    consumes them, so the evidence gate never needs them."""
+    if routed.complexity > 2:
+        return dag
+
+    consumers: dict[str, set[str]] = {}
+    for node in dag.nodes:
+        for dep in node.depends_on:
+            consumers.setdefault(dep, set()).add(node.id)
+
+    kept: list[types.DAGNode] = []
+    for node in dag.nodes:
+        is_heavy_leaf = (
+            node.tool_name in _HEAVY_TELEMETRY_TOOLS
+            and not consumers.get(node.id)
+        )
+        if is_heavy_leaf:
+            continue
+        kept.append(node)
+
+    if len(kept) == len(dag.nodes):
+        return dag
+
+    kept_ids = {n.id for n in kept}
+    edges = tuple(
+        types.DAGEdge(source=e.source, target=e.target)
+        for e in dag.edges
+        if e.source in kept_ids and e.target in kept_ids
+    )
+    return types.ExecutionDAG(nodes=tuple(kept), edges=edges)
+
+def _node_budget(complexity: int) -> int:
+    return max(MIN_NODE_BUDGET, min(MAX_DAG_NODES, 1 + complexity * 2))
+
 def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec], memory_context: str = "") -> str:
     """ Build the system prompt that tells the LLM which tools are available and asks it to produce a plan as JSON."""
     tool_lines: list[str] = []
@@ -326,6 +370,12 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
             Question: {question}
             Extracted entities so far: {json.dumps(entities)}
 
+            Injected complexity hint (1=simple, 5=complex compound analysis):
+            {routed.complexity}
+            Use at most {_node_budget(routed.complexity)} nodes. Prefer the
+            FEWEST nodes that still fully answer the question -- do not pad
+            the plan with speculative telemetry branches.
+
             {memory_context}
 
             Available tools:
@@ -342,7 +392,7 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
             - Use ONLY tool names from the list above. Never invent a tool.
             - Every param key must be one listed for that tool.
             - "depends_on" lists node ids (from this same plan) that must run first.
-            - Do not exceed {MAX_DAG_NODES} nodes.
+            - Do not exceed {_node_budget(routed.complexity)} nodes
             - If a required param's value depends on another node's output (not known yet), omit it
             from "params" and add it instead to a sibling key "input_param_refs":
             {{"param_name": "node_id.field"}}.
@@ -375,4 +425,4 @@ def plan_dag(question: str, routed: types.RoutedQuestion, registry: dict[str, To
     raw_plan = call_llm_json(prompt)
     validated_dag = validate_plan(raw_plan, registry)
     execution_dag = _to_execution_dag(validated_dag)
-    return execution_dag
+    return prune_dag(execution_dag, routed)

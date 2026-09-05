@@ -6,6 +6,7 @@ import logging
 import typing as t
 
 from backend.agent import planner, types
+from backend.agent.planner import prune_dag, plan_dag
 
 if t.TYPE_CHECKING:
     from backend.agent.planner import PlannerDAGNode
@@ -76,7 +77,7 @@ def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict,
     env: dict[str, t.Any] = {"routed": routed}
 
     try:
-        dag = plan_dag(question, routed, registry, memory_snippets=memory_snippets)
+        dag = prune_dag(plan_dag(question, routed, registry, memory_snippets=memory_snippets), routed)
 
     except planner.PlanValidationError:
         logger.warning("Round_0 plan validation failed", exc_info=True)

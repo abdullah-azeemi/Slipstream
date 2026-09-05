@@ -3,6 +3,7 @@ Openrouter adapter
 """
 
 from __future__ import annotations
+import dataclasses
 import json
 import structlog
 import urllib.error
@@ -189,6 +190,30 @@ def _coerce_compare_driver(value) -> str | None:
     """The second driver is just a name like the primary one"""
     return _clean_str(value)
 
+_COMPLEXITY_VERBS = ("compare", "differs", "why", "how", "affect", "impact", "correlat", "worsen", "improve", "explain")
+
+_COMPLEXITY_CONJUNCTIONS = (" and ", " vs ", " versus ", " over ", " then ")
+
+def _score_complexity(question: str, routed: types.RoutedQuestion) -> int:
+    score = 1
+    entities = sum(
+        1
+        for v in (
+            routed.compare_driver_name,
+            routed.gp_name,
+            routed.year,
+            routed.target_lap,
+            routed.session_type,
+        )
+        if v is not None
+    )
+    score += min(entities, 3)
+
+    lowered = question.lower()
+    score += sum(2 for verb in _COMPLEXITY_VERBS if verb in lowered)
+    score += sum(1 for conj in _COMPLEXITY_CONJUNCTIONS if conj in lowered)
+
+    return max(1, min(score, 5))
 
 def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     """Classify a question and extract its entities with the cheap routing model"""
@@ -212,7 +237,7 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
 
     cost = usage.get("cost_estimate_usd", 0.0)
     intent = types.Intent(intent_value)
-    return types.RoutedQuestion(
+    routed = types.RoutedQuestion(
         intent=intent,
         question=question,
         driver_name=_clean_str(payload.get("driver")),
@@ -224,7 +249,9 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         laps_window=_coerce_window(payload.get("laps_window")),
         target_lap=_coerce_target_lap(payload.get("target_lap")),
         session_type=_coerce_session_type(payload.get("session_type")),
-    ), cost
+    )
+    routed = dataclasses.replace(routed, complexity=_score_complexity(question, routed))
+    return routed, cost
 
 
 def compose_answer(question: str, evidence: dict, memory_context: str = "") -> tuple[str, float]:
