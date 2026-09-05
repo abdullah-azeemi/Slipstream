@@ -529,6 +529,24 @@ def topo_sort(dag: types.ExecutionDAG) -> tuple[str, ...]:
 
     return tuple(order)
 
+_RETRYABLE_DELAYS_MS: tuple[int, int, int] = (200, 400, 800)
+
+def _retry_transient(fn: Callable[[], Any]) -> Any:
+    """Run fn, retrying ONLY on types.RetryableError with capped backoff.
+
+    NotFoundError / DataError / everything else propagates immediately so
+    the fail-closed semantics of run_node are unchanged. Hard-bounded at
+    3 attempts -- the loop can never run away."""
+    attempt = 0
+    while True:
+        try:
+            return fn()
+        except types.RetryableError:
+            attempt += 1
+            if attempt >= len(_RETRYABLE_DELAYS_MS):
+                raise
+            time.sleep(_RETRYABLE_DELAYS_MS[attempt - 1] / 1000)
+
 
 def _execute_dag(
     dag: types.ExecutionDAG,
@@ -559,7 +577,7 @@ def _execute_dag(
         start = time.perf_counter()
         try:
             inp = _bind(node.tool_name, node.input_params, env)
-            result = _TOOLS[node.tool_name](inp)
+            result = _retry_transient(lambda: _TOOLS[node.tool_name](inp))
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
             call = types.ToolCallRecord(
                 tool_name=node.tool_name,

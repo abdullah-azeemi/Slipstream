@@ -93,6 +93,14 @@ class NotFoundError(AgentError):
 class DataError(AgentError):
     """Raised when data exists but is unusable (e.g. missing columns)."""
 
+class RetryableError(AgentError):
+    """Raised when a tool call fails from a TRANSIENT condition (connection blip, timeout, throttling).
+
+    Unlike NotFoundError (data the system never had) and DataError
+    (data that exists but is unusable), a retry CAN succeed -- the
+    orchestrator's _retry_transient() backoff loop is the only place
+    this exception is allowed to be caught and retried."""
+
 
 class LLMError(AgentError):
     """Raised when the OpenRouter/LLM adapter cannot produce output."""

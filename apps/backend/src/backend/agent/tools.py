@@ -13,7 +13,9 @@ import io
 import json
 from pathlib import Path
 import re
+import socket
 
+import botocore
 from sqlalchemy import text
 
 from backend import extensions
@@ -552,10 +554,15 @@ def _read_artifact_speed_samples(artifact: types.TelemetryArtifact) -> list[floa
             aws_secret_access_key=settings.r2_secret_access_key,
             region_name="auto",
         )
-        obj = client.get_object(
-            Bucket=settings.telemetry_artifact_bucket,
-            Key=artifact.storage_key,
-        )
+        try:
+            obj = client.get_object(
+                Bucket=settings.telemetry_artifact_bucket,
+                Key=artifact.storage_key,
+            )
+        except client.exceptions.NoSuchKey as exc:
+            raise types.DataError(f"artifact missing in R2: {artifact.storage_key}") from exc
+        except (botocore.exceptions.BotoCoreError, TimeoutError, socket.timeout) as exc:
+            raise types.RetryableError(f"R2 fetch failed (transient): {exc}") from exc
         table = pq.read_table(io.BytesIO(obj["Body"].read()))
         speeds = [
             float(v) for v in table.column("speed_kmh").to_pylist() if v is not None
@@ -623,10 +630,15 @@ def _read_artifact_speed_and_distance(
             aws_secret_access_key=settings.r2_secret_access_key,
             region_name="auto",
         )
-        obj = client.get_object(
-            Bucket=settings.telemetry_artifact_bucket,
-            Key=artifact.storage_key,
-        )
+        try:
+            obj = client.get_object(
+                Bucket=settings.telemetry_artifact_bucket,
+                Key=artifact.storage_key,
+            )
+        except client.exceptions.NoSuchKey as exc:
+            raise types.DataError(f"artifact missing in R2: {artifact.storage_key}") from exc
+        except (botocore.exceptions.BotoCoreError, TimeoutError, socket.timeout) as exc:
+            raise types.RetryableError(f"R2 fetch failed (transient): {exc}") from exc
         table = pq.read_table(io.BytesIO(obj["Body"].read()))
         speed_col = table.column("speed_kmh").to_pylist()
         dist_col = (
