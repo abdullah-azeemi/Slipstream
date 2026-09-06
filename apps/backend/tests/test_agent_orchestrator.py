@@ -157,7 +157,9 @@ def _fake_route(monkeypatch, intent, driver="Sainz", year=2026, gp="Monaco"):
 
 
 def _fake_compose(monkeypatch, text):
-    monkeypatch.setattr(orchestrator.llm, "compose_answer", lambda q, e: (text, 0.0))
+    monkeypatch.setattr(
+        orchestrator.llm, "compose_answer", lambda q, e, **kwargs: (text, 0.0)
+    )
 
 
 def test_run_pit_stop_question(app, db_engine, monkeypatch, tmp_path):

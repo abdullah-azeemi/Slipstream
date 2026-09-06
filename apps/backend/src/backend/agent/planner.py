@@ -400,12 +400,12 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
             - Always include a "verify_evidence" node as the last step, depending on all other nodes.
 """
 
-def call_llm_json(prompt: str) -> dict:
+def call_llm_json(prompt: str, model: str | None = None) -> dict:
     """Call the LLM and parse its response as JSON.
 
     We are setting the temperature to 0.0 for the planner beacuse we want a deterministic and reproducible plan. 
     """
-    text, _usage = llm._chat([{"role": "user", "content": prompt}], temperature=0.0)
+    text, _usage = llm._chat([{"role": "user", "content": prompt}], temperature=0.0, model=model)
 
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -422,7 +422,8 @@ def plan_dag(question: str, routed: types.RoutedQuestion, registry: dict[str, To
 
     memory_context = memory.format_memory_context(memory_snippets or [])
     prompt = _build_planner_prompt(question, routed, registry, memory_context)
-    raw_plan = call_llm_json(prompt)
+    model = llm.select_model(routed.intent, routed.complexity)
+    raw_plan = call_llm_json(prompt, model=model)
     validated_dag = validate_plan(raw_plan, registry)
     execution_dag = _to_execution_dag(validated_dag)
     return prune_dag(execution_dag, routed)

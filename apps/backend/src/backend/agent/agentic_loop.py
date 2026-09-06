@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import typing as t
 
-from backend.agent import planner, types
+from backend.agent import llm, planner, types
 from backend.agent.planner import prune_dag, plan_dag
 
 if t.TYPE_CHECKING:
@@ -43,11 +43,11 @@ def _build_assess_prompt(question: str, evidence: dict[str, t.Any], tool_names: 
         Do not repeat a tool call that already produced evidence you already have.
         """
 
-def assess_evidence(question: str, evidence: dict[str, t.Any], registry: dict, round_num: int) -> t.Optional[planner.PlannerExecutionDAG]:
+def assess_evidence(question: str, evidence: dict[str, t.Any], registry: dict, round_num: int, model: str | None = None) -> t.Optional[planner.PlannerExecutionDAG]:
     """Ask the LLM whether the gathered evidence is sufficient to answer the question or not"""
     tool_names = list(registry.keys())
     prompt = _build_assess_prompt(question, evidence, tool_names, round_num)
-    raw = planner.call_llm_json(prompt)
+    raw = planner.call_llm_json(prompt, model=model)
 
     if raw.get("satisfied") is True:
         return None
@@ -72,9 +72,8 @@ def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict,
         Returns the accumulated evidence env, pass this to the existing verify_evidence tool exactly as if it were a single tool call.
     """
 
-    from backend.agent.planner import plan_dag
-
     env: dict[str, t.Any] = {"routed": routed}
+    model = llm.select_model(routed.intent, routed.complexity)
 
     try:
         dag = prune_dag(plan_dag(question, routed, registry, memory_snippets=memory_snippets), routed)
@@ -107,7 +106,7 @@ def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict,
             return env
 
         try:
-            next_dag = assess_evidence(question, env, registry, round_num)
+            next_dag = assess_evidence(question, env, registry, round_num, model=model)
         except planner.PlanValidationError:
             logger.warning("Round_%d plan validation failed", round_num, exc_info=True)
             return env

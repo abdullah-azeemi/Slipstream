@@ -88,7 +88,9 @@ def _fake_route(monkeypatch, routed):
 
 
 def _fake_compose(monkeypatch, text):
-    monkeypatch.setattr(orchestrator.llm, "compose_answer", lambda q, e: (text, 0.0))
+    monkeypatch.setattr(
+        orchestrator.llm, "compose_answer", lambda q, e, **kwargs: (text, 0.0)
+    )
 
 
 def test_build_dag_pit_stop_shape():

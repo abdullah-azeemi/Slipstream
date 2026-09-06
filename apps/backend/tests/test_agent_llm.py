@@ -124,6 +124,63 @@ def test_compose_answer_uses_final_model(monkeypatch):
     assert seen["model"] == settings.openrouter_final_model
 
 
+def test_compose_answer_stays_cheap_for_factual_intent(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(settings, "openrouter_capable_model", "openai/gpt-4o")
+    seen = {}
+
+    def fake_post(messages, model, temperature):
+        seen["model"] = model
+        return _fake_payload("ok")
+
+    monkeypatch.setattr(llm, "_post", fake_post)
+    llm.compose_answer(
+        "when did he pit?",
+        {},
+        intent=types.Intent.PIT_STOP_SPEED_DELTA,
+        complexity=5,
+    )
+    assert seen["model"] == settings.openrouter_final_model
+
+
+def test_compose_answer_escalates_complex_analytical_intent(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(settings, "openrouter_capable_model", "openai/gpt-4o")
+    seen = {}
+
+    def fake_post(messages, model, temperature):
+        seen["model"] = model
+        return _fake_payload("ok")
+
+    monkeypatch.setattr(llm, "_post", fake_post)
+    llm.compose_answer(
+        "did the heat hurt his tyres?",
+        {},
+        intent=types.Intent.TYRE_DEGRADATION_ANALYSIS,
+        complexity=4,
+    )
+    assert seen["model"] == "openai/gpt-4o"
+
+
+def test_compose_answer_simple_analytical_stays_cheap(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(settings, "openrouter_capable_model", "openai/gpt-4o")
+    seen = {}
+
+    def fake_post(messages, model, temperature):
+        seen["model"] = model
+        return _fake_payload("ok")
+
+    monkeypatch.setattr(llm, "_post", fake_post)
+    llm.compose_answer(
+        "telemetry pls",
+        {},
+        intent=types.Intent.TELEMETRY_COMPARISON,
+        complexity=2,
+    )
+    assert seen["model"] == settings.openrouter_final_model
+
+
 def test_route_question_coerces_string_year(monkeypatch):
     _set_key(monkeypatch)
     monkeypatch.setattr(

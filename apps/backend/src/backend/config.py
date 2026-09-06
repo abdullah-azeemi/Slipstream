@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_routing_model: str = "openai/gpt-4o-mini"
     openrouter_final_model: str = "openai/gpt-4o-mini"
+    openrouter_capable_model: str = "openai/gpt-4o-mini"
     openrouter_timeout_seconds: int = 30
     agent_free_daily_limit: int = 10
     agent_free_daily_cost_usd: float = 0.30

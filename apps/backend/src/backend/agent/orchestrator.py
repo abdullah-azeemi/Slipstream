@@ -836,7 +836,12 @@ def _compose(
     }
     compose_cost = 0.0
     try:
-        answer_text, compose_cost = llm.compose_answer(question, evidence_payload)
+        answer_text, compose_cost = llm.compose_answer(
+            question,
+            evidence_payload,
+            intent=routed.intent,
+            complexity=routed.complexity,
+        )
     except types.LLMError:
         answer_text = fallback_text
 
@@ -934,7 +939,13 @@ def _compose_agentic(
     cost = 0.0
     try:
         memory_context = memory.format_memory_context(memory_snippets or [])
-        answer_text, cost = llm.compose_answer(question, evidence_payload, memory_context=memory_context)
+        answer_text, cost = llm.compose_answer(
+            question,
+            evidence_payload,
+            memory_context=memory_context,
+            intent=routed.intent,
+            complexity=routed.complexity,
+        )
     except types.LLMError:
         answer_text = "I have gathered evidence but could not compose a narrative answer."
 

@@ -223,7 +223,7 @@ def _fake_llm(monkeypatch, intent):
     monkeypatch.setattr(
         orchestrator.llm,
         "compose_answer",
-        lambda q, e: ("Sainz pitted across laps 5 and 6.", 0.0),
+        lambda q, e, **kwargs: ("Sainz pitted across laps 5 and 6.", 0.0),
     )
 
 

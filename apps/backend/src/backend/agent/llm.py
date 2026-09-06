@@ -254,7 +254,39 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     return routed, cost
 
 
-def compose_answer(question: str, evidence: dict, memory_context: str = "") -> tuple[str, float]:
+_CAPABLE_INTENTS = frozenset({
+    types.Intent.TELEMETRY_COMPARISON,
+    types.Intent.WEATHER_CORRELATION,
+    types.Intent.TYRE_DEGRADATION_ANALYSIS,
+})
+
+_ANALYTICAL_COMPLEXITY_FLOOR = 3
+
+
+def select_model(intent: types.Intent | None, complexity: int) -> str:
+    """T3.2 -- pick the composer/planner model for an intent+complexity pair.
+
+    Rule (kept explicit so it is cheap to review): analytical intents are
+    sent to the capable model only when the question is actually compound
+    (complexity >= 3). Everything else stays on the cheap everyday model.
+    Start narrow -- over-routing to the expensive model defeats the point.
+    """
+    if (
+        intent is not None
+        and intent in _CAPABLE_INTENTS
+        and complexity >= _ANALYTICAL_COMPLEXITY_FLOOR
+    ):
+        return settings.openrouter_capable_model
+    return settings.openrouter_final_model
+
+
+def compose_answer(
+    question: str,
+    evidence: dict,
+    memory_context: str = "",
+    intent: types.Intent | None = None,
+    complexity: int = 1,
+) -> tuple[str, float]:
     """Write the final human-readable answer from structured evidence."""
     context_block = ""
     if memory_context:
@@ -275,7 +307,7 @@ def compose_answer(question: str, evidence: dict, memory_context: str = "") -> t
         },
     ]
     text, usage = _chat(
-        messages, model=settings.openrouter_final_model, temperature=0.2
+        messages, model=select_model(intent, complexity), temperature=0.2
     )
     cost = usage.get("cost_estimate_usd", 0.0)
     return text.strip(), cost
