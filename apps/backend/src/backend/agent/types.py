@@ -93,6 +93,7 @@ class NotFoundError(AgentError):
 class DataError(AgentError):
     """Raised when data exists but is unusable (e.g. missing columns)."""
 
+
 class RetryableError(AgentError):
     """Raised when a tool call fails from a TRANSIENT condition (connection blip, timeout, throttling).
 
@@ -104,6 +105,10 @@ class RetryableError(AgentError):
 
 class LLMError(AgentError):
     """Raised when the OpenRouter/LLM adapter cannot produce output."""
+
+    def __init__(self, message: str, code: str = "llm_error"):
+        super().__init__(message)
+        self.code = code
 
 
 # Tool Inputs ---------------------
@@ -365,8 +370,7 @@ class RoutedQuestion:
     laps_window: int = 3
     target_lap: int | None = None
     session_type: SessionType | None = None
-    complexity: int = 1 # router-scored question complexity, 1 (trivial) to 5 (compound). Steers the planner's node budget and the orchestrator's pruning step
-    
+    complexity: int = 1  # router-scored question complexity, 1 (trivial) to 5 (compound). Steers the planner's node budget and the orchestrator's pruning step
 
 
 @dataclass(frozen=True)

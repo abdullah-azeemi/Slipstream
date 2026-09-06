@@ -148,9 +148,13 @@ def _coerce_year(value) -> int | None:
     try:
         year = int(value)
     except (TypeError, ValueError) as exc:
-        raise types.LLMError(f"router returned bad year: {value!r}") from exc
+        raise types.LLMError(
+            f"router returned bad year: {value!r}", code="router_bad_year"
+        ) from exc
     if year < 1950:
-        raise types.LLMError(f"router returned impossible year: {year}")
+        raise types.LLMError(
+            f"router returned impossible year: {year}", code="router_bad_year"
+        )
     return year
 
 
@@ -160,8 +164,10 @@ def _coerce_window(value) -> int:
         return 3
     try:
         window = int(value)
-    except (TypeError, ValueError):
-        return 3
+    except (TypeError, ValueError) as exc:
+        raise types.LLMError(
+            f"router returned bad laps_window: {value!r}", code="router_bad_window"
+        ) from exc
     return max(1, min(window, 10))
 
 
@@ -190,9 +196,22 @@ def _coerce_compare_driver(value) -> str | None:
     """The second driver is just a name like the primary one"""
     return _clean_str(value)
 
-_COMPLEXITY_VERBS = ("compare", "differs", "why", "how", "affect", "impact", "correlat", "worsen", "improve", "explain")
+
+_COMPLEXITY_VERBS = (
+    "compare",
+    "differs",
+    "why",
+    "how",
+    "affect",
+    "impact",
+    "correlat",
+    "worsen",
+    "improve",
+    "explain",
+)
 
 _COMPLEXITY_CONJUNCTIONS = (" and ", " vs ", " versus ", " over ", " then ")
+
 
 def _score_complexity(question: str, routed: types.RoutedQuestion) -> int:
     score = 1
@@ -215,30 +234,24 @@ def _score_complexity(question: str, routed: types.RoutedQuestion) -> int:
 
     return max(1, min(score, 5))
 
-def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
-    """Classify a question and extract its entities with the cheap routing model"""
-    messages = [
-        {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
-        {"role": "user", "content": question},
-    ]
-    text, usage = _chat(
-        messages, model=settings.openrouter_routing_model, temperature=0.0
-    )
-    try:
-        payload = json.loads(text)
-        intent_value = payload["intent"]
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise types.LLMError(
-            f"router returned unparseable response: {text[:200]}"
-        ) from exc
 
+def parse_routed_question(payload: dict, question: str) -> types.RoutedQuestion:
+    """Validate a router JSON payload into a RoutedQuestion (T3.3).
+
+    Formal per-call validator: every field the router emits is coerced
+    through the typed helpers above, and anything non-recoverable raises
+    a typed LLMError with a ``code`` -- never a raw crash, never garbage.
+    """
+
+    intent_value = payload.get("intent")
     if intent_value not in {member.value for member in types.Intent}:
-        raise types.LLMError(f"router returned unknown intent: {intent_value}")
+        raise types.LLMError(
+            f"router returned unknown intent: {intent_value}",
+            code="router_unknown_intent",
+        )
 
-    cost = usage.get("cost_estimate_usd", 0.0)
-    intent = types.Intent(intent_value)
     routed = types.RoutedQuestion(
-        intent=intent,
+        intent=types.Intent(intent_value),
         question=question,
         driver_name=_clean_str(payload.get("driver")),
         compare_driver_name=_coerce_compare_driver(
@@ -250,15 +263,41 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
         target_lap=_coerce_target_lap(payload.get("target_lap")),
         session_type=_coerce_session_type(payload.get("session_type")),
     )
-    routed = dataclasses.replace(routed, complexity=_score_complexity(question, routed))
-    return routed, cost
+    return dataclasses.replace(routed, complexity=_score_complexity(question, routed))
 
 
-_CAPABLE_INTENTS = frozenset({
-    types.Intent.TELEMETRY_COMPARISON,
-    types.Intent.WEATHER_CORRELATION,
-    types.Intent.TYRE_DEGRADATION_ANALYSIS,
-})
+def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
+    """Classify a question and extract its entities with the cheap routing model"""
+    messages = [
+        {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
+        {"role": "user", "content": question},
+    ]
+    text, usage = _chat(
+        messages, model=settings.openrouter_routing_model, temperature=0.0
+    )
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise types.LLMError(
+            f"router returned unparseable response: {text[:200]}",
+            code="router_unparseable",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise types.LLMError(
+            f"router returned non-object JSON: {text[:200]}", code="router_unparseable"
+        )
+
+    cost = usage.get("cost_estimate_usd", 0.0)
+    return parse_routed_question(payload, question), cost
+
+
+_CAPABLE_INTENTS = frozenset(
+    {
+        types.Intent.TELEMETRY_COMPARISON,
+        types.Intent.WEATHER_CORRELATION,
+        types.Intent.TYRE_DEGRADATION_ANALYSIS,
+    }
+)
 
 _ANALYTICAL_COMPLEXITY_FLOOR = 3
 
@@ -310,4 +349,31 @@ def compose_answer(
         messages, model=select_model(intent, complexity), temperature=0.2
     )
     cost = usage.get("cost_estimate_usd", 0.0)
-    return text.strip(), cost
+    return validate_composition(text), cost
+
+
+_MAX_COMPOSITION_CHARS = 4000
+
+
+def validate_composition(text: str) -> str:
+    """Post-LLM validation of the composer's answer (T3.3).
+
+    The system prompt forbids raw dumps and invented numbers, which we
+    cannot check mechanically -- hallucination needs ground truth. What
+    we CAN reject is structurally broken output, so the caller hits the
+    typed-LLMError fallback instead of rendering a blank or an absurd
+    wall of text.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        raise types.LLMError("composer returned an empty answer", code="composer_empty")
+    if len(cleaned) > _MAX_COMPOSITION_CHARS:
+        raise types.LLMError(
+            f"composer answer exceeds {_MAX_COMPOSITION_CHARS} chars",
+            code="composer_too_long",
+        )
+    if "```" in cleaned:
+        raise types.LLMError(
+            "composer returned a code block, not prose", code="composer_code_block"
+        )
+    return cleaned

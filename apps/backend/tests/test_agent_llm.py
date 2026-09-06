@@ -218,3 +218,49 @@ def test_route_question_clamps_window(monkeypatch):
     )
     routed, _ = llm.route_question("q?")
     assert routed.laps_window == 10
+
+
+def test_compose_answer_empty_raises(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm, "_post", lambda messages, model, temperature: _fake_payload("   ")
+    )
+    with pytest.raises(types.LLMError) as exc:
+        llm.compose_answer("when?", {})
+    assert exc.value.code == "composer_empty"
+
+
+def test_compose_answer_code_block_raises(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload("```json\n{}\n```"),
+    )
+    with pytest.raises(types.LLMError) as exc:
+        llm.compose_answer("when?", {})
+    assert exc.value.code == "composer_code_block"
+
+
+def test_route_question_non_object_json_raises(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm, "_post", lambda messages, model, temperature: _fake_payload("[1, 2, 3]")
+    )
+    with pytest.raises(types.LLMError) as exc:
+        llm.route_question("when did he pit?")
+    assert exc.value.code == "router_unparseable"
+
+
+def test_route_question_bad_window_raises(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "laps_window": "fast"}'
+        ),
+    )
+    with pytest.raises(types.LLMError) as exc:
+        llm.route_question("q?")
+    assert exc.value.code == "router_bad_window"
