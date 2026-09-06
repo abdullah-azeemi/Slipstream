@@ -19,7 +19,9 @@ import {
   Sparkles,
   Terminal,
   Zap,
-  CircleHelp
+  CircleHelp,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type React from 'react'
@@ -49,6 +51,7 @@ import {
   AgentProgressEvent,
   AdminStats,
   ConversationSummary,
+  FeedbackStats,
   UsageInfo,
 } from '@/types/agent'
 
@@ -69,6 +72,7 @@ type ChatTurn = {
   nodes: AgentDAGNode[]
   edges: AgentDAGEdge[]
   nodeStates: Record<string, AgentNodeRunInfo>
+  rating: number | null
 }
 
 const SYSTEM_MODULES: Array<[string, LucideIcon, boolean]> = [
@@ -160,6 +164,7 @@ export default function AgentPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [usage, setUsage] = useState<UsageInfo | null>(null)
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
+  const [feedbackStats, setFeedbackStats] = useState<FeedbackStats | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [canvasPhase, setCanvasPhase] = useState<CanvasPhase>('idle')
   const [animationIndex, setAnimationIndex] = useState<Record<string, number>>({})
@@ -213,6 +218,10 @@ export default function AgentPage() {
   }, [getToken])
 
   useEffect(() => {
+    agentApi.getFeedbackStats(getToken).then(setFeedbackStats).catch(() => {})
+  }, [getToken])
+
+  useEffect(() => {
     return () => {
       if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
     }
@@ -240,6 +249,7 @@ export default function AgentPage() {
             nodes: [],
             edges: [],
             nodeStates: {},
+            rating: null,
           })
         }
       }
@@ -271,7 +281,7 @@ export default function AgentPage() {
     const id = Date.now()
     setLoadingQuestion(trimmed)
     setQuestion('')
-    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [], nodes: [], edges: [], nodeStates: {} }])
+    setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [], nodes: [], edges: [], nodeStates: {}, rating: null }])
     setCanvasPhase('running')
 
     try {
@@ -381,6 +391,7 @@ export default function AgentPage() {
       }
       agentApi.getUsage(getToken).then(setUsage).catch(() => {})
       agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
+      agentApi.getFeedbackStats(getToken).then(setFeedbackStats).catch(() => {})
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong'
       setTurns((current) =>
@@ -394,6 +405,30 @@ export default function AgentPage() {
 
   function fillSuggestion(q: string) {
     setQuestion(q)
+  }
+
+  async function rateAnswer(turnId: number, rating: number) {
+    const turn = turns.find((t) => t.id === turnId)
+    const runId = turn?.reply?.run_id
+    if (!runId) return
+
+    try {
+      if (turn.rating === rating) {
+        // Tapping the same button again clears the vote.
+        await agentApi.clearFeedback(runId, getToken)
+        setTurns((current) =>
+          current.map((t) => (t.id === turnId ? { ...t, rating: null } : t))
+        )
+      } else {
+        await agentApi.rateRun(runId, rating as 1 | -1, getToken)
+        setTurns((current) =>
+          current.map((t) => (t.id === turnId ? { ...t, rating } : t))
+        )
+      }
+      agentApi.getFeedbackStats(getToken).then(setFeedbackStats).catch(() => {})
+    } catch {
+      // Silent — a failed vote shouldn't nuke the chat UI.
+    }
   }
 
   return (
@@ -669,8 +704,44 @@ export default function AgentPage() {
                           processed
                         </span>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-400">
-                        intent: {turn.reply.intent}
+                      <span className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          intent: {turn.reply.intent}
+                        </span>
+                        {turn.reply.run_id ? (
+                          <span className="flex items-center gap-0.5 border border-slate-200 bg-white px-1 py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => rateAnswer(turn.id, 1)}
+                              className="p-0.5 transition-colors"
+                              title="Good answer"
+                              aria-label="Good answer"
+                            >
+                              <ThumbsUp
+                                className={`h-3.5 w-3.5 ${
+                                  turn.rating === 1
+                                    ? 'text-emerald-500'
+                                    : 'text-slate-300 hover:text-slate-500'
+                                }`}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => rateAnswer(turn.id, -1)}
+                              className="p-0.5 transition-colors"
+                              title="Bad answer"
+                              aria-label="Bad answer"
+                            >
+                              <ThumbsDown
+                                className={`h-3.5 w-3.5 ${
+                                  turn.rating === -1
+                                    ? 'text-rose-500'
+                                    : 'text-slate-300 hover:text-slate-500'
+                                }`}
+                              />
+                            </button>
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                     <div className="pitwall-prose px-4 py-3">
@@ -878,6 +949,18 @@ export default function AgentPage() {
                     />
                     <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
                     <MiniMetric label="refused" value={String(adminStats.refused)} tone="amber" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MiniMetric
+                      label="feedback up"
+                      value={String(feedbackStats?.up ?? 0)}
+                      tone="green"
+                    />
+                    <MiniMetric
+                      label="feedback down"
+                      value={String(feedbackStats?.down ?? 0)}
+                      tone="red"
+                    />
                   </div>
                 </div>
               </section>

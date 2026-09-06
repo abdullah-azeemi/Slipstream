@@ -163,4 +163,50 @@ export const agentApi = {
     if (!res.ok) throw new Error(`Failed to fetch admin stats (${res.status})`)
     return res.json() as Promise<import('@/types/agent').AdminStats>
   },
+
+  rateRun: async (
+    runId: number,
+    rating: 1 | -1,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/runs/${runId}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ rating }),
+    })
+    if (!res.ok) throw new Error(`Failed to rate run (${res.status})`)
+    return res.json() as Promise<{ run_id: number; rating: 1 | -1 | null }>
+  },
+
+  clearFeedback: async (
+    runId: number,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/runs/${runId}/feedback`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to clear feedback (${res.status})`)
+    return res.json() as Promise<{ run_id: number; rating: null }>
+  },
+
+  getFeedbackStats: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/feedback`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch feedback stats (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').FeedbackStats>
+  },
 }

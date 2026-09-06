@@ -72,6 +72,7 @@ export interface AgentAnswer {
   team_radio?: RadioWindowResult | null
   weather?: WeatherWindowResult | null
   trace: ToolCallRecord[]
+  run_id?: number | null
   conversation_id?: number | null
   trace_visibility?: 'full' | 'evidence' | string
   cost_usd?: number
@@ -271,4 +272,9 @@ export interface WeatherWindowResult {
   total_laps: number
   rain_share_pct: number
   track_temp_delta_c: number | null
+}
+
+export interface FeedbackStats {
+  up: number
+  down: number
 }

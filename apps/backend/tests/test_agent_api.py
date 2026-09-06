@@ -233,8 +233,10 @@ def _fake_auth(monkeypatch, clerk_user_id="demo-user"):
         auth_module, "verify_session_token", lambda token: clerk_user_id
     )
 
+
 def test_agent_query_limit_returns_retry_after(client, monkeypatch):
     from backend.agent import persistence
+
     _fake_auth(monkeypatch)
     monkeypatch.setattr(persistence, "count_runs_today", lambda uid: 99)
     monkeypatch.setattr(settings, "agent_free_daily_limit", 10)
@@ -274,6 +276,7 @@ def test_agent_query_happy_path(app, client, db_engine, monkeypatch, tmp_path):
         body = resp.get_json()
         assert body["intent"] == "pit_stop_speed_delta"
         assert body["refusals"] == []
+        assert isinstance(body.get("run_id"), int)
         assert body["pit_stop"]["pit_in_lap"] == 5
         assert body["pit_stop"]["pit_out_lap"] == 6
         assert body["speed_window"]["before_avg_speed_kmh"] == 215.0
@@ -340,6 +343,7 @@ def test_agent_query_stream_emits_progress_and_final(
         assert "event: final" in body
         assert "resolve_session" in body
         assert '"trace_visibility": "evidence"' in body
+        assert '"run_id":' in body
     finally:
         _cleanup(db_engine)
 

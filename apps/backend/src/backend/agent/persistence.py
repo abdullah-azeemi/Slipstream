@@ -147,8 +147,9 @@ def count_runs_today(clerk_user_id: str) -> int:
             {"clerk_user_id": clerk_user_id},
         ).scalar_one()
 
+
 def sum_cost_today(clerk_user_id: str) -> float:
-    """ The users total agent spent cost recorded since local midnight."""
+    """The users total agent spent cost recorded since local midnight."""
     with extensions.engine.connect() as conn:
         return float(
             conn.execute(
@@ -160,8 +161,10 @@ def sum_cost_today(clerk_user_id: str) -> float:
                         WHERE u.clerk_user_id = :clerk_user_id
                         AND r.started_at >= date_trunc('day', NOW())
                     """
-                ), {"clerk_user_id": clerk_user_id}
-            ).scalar_one() or 0.0
+                ),
+                {"clerk_user_id": clerk_user_id},
+            ).scalar_one()
+            or 0.0
         )
 
 
@@ -176,7 +179,9 @@ def get_usage_summary(clerk_user_id: str) -> dict:
         "remaining": max(0, limit - used),
         "cost_usd_today": round(cost, 4),
         "cost_limit_usd": settings.agent_free_daily_cost_usd,
-        "remaining_cost_usd": round(max(0.0, settings.agent_free_daily_cost_usd - cost), 4),
+        "remaining_cost_usd": round(
+            max(0.0, settings.agent_free_daily_cost_usd - cost), 4
+        ),
     }
 
 
@@ -330,3 +335,82 @@ def get_conversation_messages(conversation_id: int, clerk_user_id: str) -> dict 
                 for m in messages
             ],
         }
+
+
+# ── Run feedback (T3.1) ─────────────────────────────────────────────────────
+
+
+def upsert_run_feedback(
+    run_id: int, clerk_user_id: str, rating: int, comment: str | None = None
+) -> bool:
+    """Rate a run (upsert — one vote per user per run). Returns False when the
+    run does not exist or is not owned by this user, so the caller can 404."""
+    with extensions.engine.begin() as conn:
+        owner = conn.execute(
+            text(
+                """
+                SELECT ar.id, u.id AS user_id
+                FROM agent_runs ar
+                JOIN users u ON u.id = ar.user_id
+                WHERE ar.id = :run_id AND u.clerk_user_id = :clerk_user_id
+                """
+            ),
+            {"run_id": run_id, "clerk_user_id": clerk_user_id},
+        ).first()
+        if owner is None:
+            return False
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO agent_run_feedback (run_id, user_id, rating, comment)
+                VALUES (:run_id, :user_id, :rating, :comment)
+                ON CONFLICT (run_id, user_id) DO UPDATE SET
+                    rating = EXCLUDED.rating,
+                    comment = EXCLUDED.comment,
+                    updated_at = NOW()
+                """
+            ),
+            {
+                "run_id": run_id,
+                "user_id": owner.user_id,
+                "rating": rating,
+                "comment": comment,
+            },
+        )
+        return True
+
+
+def delete_run_feedback(run_id: int, clerk_user_id: str) -> bool:
+    """Clear this user's vote on a run. Returns False when nothing was deleted."""
+    with extensions.engine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                DELETE FROM agent_run_feedback f
+                USING agent_runs ar, users u
+                WHERE f.run_id = ar.id
+                  AND ar.user_id = u.id
+                  AND ar.id = :run_id
+                  AND u.clerk_user_id = :clerk_user_id
+                """
+            ),
+            {"run_id": run_id, "clerk_user_id": clerk_user_id},
+        )
+        return result.rowcount > 0
+
+
+def get_feedback_stats() -> dict:
+    """Admin aggregate: total up and down votes across all users."""
+    with extensions.engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE rating = 1)  AS up_votes,
+                    COUNT(*) FILTER (WHERE rating = -1) AS down_votes
+                FROM agent_run_feedback
+                """
+            )
+        ).first()
+        return {"up": row.up_votes, "down": row.down_votes}

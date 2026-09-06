@@ -223,6 +223,19 @@ CREATE TABLE IF NOT EXISTS agent_memory_snippets (
 CREATE INDEX IF NOT EXISTS idx_agent_memory_snippets_user_id
     ON agent_memory_snippets (user_id);
 
+CREATE TABLE IF NOT EXISTS agent_run_feedback (
+    id              SERIAL PRIMARY KEY,
+    run_id          INTEGER NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating          SMALLINT NOT NULL CHECK (rating IN (-1, 1)),
+    comment         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (run_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_run_feedback_run_id
+    ON agent_run_feedback (run_id);
+
 CREATE INDEX IF NOT EXISTS idx_lap_times_session_driver
     ON lap_times (session_key, driver_number);
 CREATE INDEX IF NOT EXISTS idx_lap_times_driver_lap
@@ -307,6 +320,7 @@ def _create_tables(db_engine):
     with db_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS agent_memory_snippets CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS user_preferences CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS agent_run_feedback CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_runs CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_messages CASCADE;"))

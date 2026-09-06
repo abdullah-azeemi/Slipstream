@@ -38,9 +38,16 @@ def _public_tool_summary(call) -> str:
     return summaries.get(call.tool_name.value, "Tool completed")
 
 
-def _serialize_answer(answer, *, conversation_id: int | None, include_trace_details: bool):
+def _serialize_answer(
+    answer,
+    *,
+    conversation_id: int | None,
+    run_id: int | None,
+    include_trace_details: bool,
+):
     response = asdict(answer)
     response["conversation_id"] = conversation_id
+    response["run_id"] = run_id
     response["trace_visibility"] = "full" if include_trace_details else "evidence"
     if not include_trace_details:
         response["trace"] = [
@@ -208,6 +215,7 @@ def agent_query():
     response = _serialize_answer(
         answer,
         conversation_id=conv_id,
+        run_id=run_id,
         include_trace_details=_is_admin(g.clerk_user_id),
     )
     return jsonify(response)
@@ -251,6 +259,7 @@ def agent_query_stream():
                     _serialize_answer(
                         answer,
                         conversation_id=conv_id,
+                        run_id=run_id,
                         include_trace_details=include_trace_details,
                     ),
                 )
@@ -322,3 +331,42 @@ def admin_stats():
         return jsonify({"error": "Admin access required"}), 403
     stats = persistence.get_admin_stats()
     return jsonify(stats)
+
+
+@agent_bp.post("/agent/runs/<int:run_id>/feedback")
+def rate_run(run_id: int):
+    """Set the authenticated user's vote on one of their runs."""
+    payload = request.get_json(silent=True) or {}
+    rating = payload.get("rating")
+    if rating not in (1, -1):
+        return jsonify({"error": "rating must be 1 (up) or -1 (down)"}), 400
+
+    comment = payload.get("comment")
+    if comment is not None and not isinstance(comment, str):
+        return jsonify({"error": "comment must be a string or null"}), 400
+
+    wrote = persistence.upsert_run_feedback(run_id, g.clerk_user_id, rating, comment)
+    if not wrote:
+        return jsonify({"error": "Run not found"}), 404
+
+    log.info("agent.rated", run_id=run_id, rating=rating)
+    return jsonify({"run_id": run_id, "rating": rating})
+
+
+@agent_bp.delete("/agent/runs/<int:run_id>/feedback")
+def clear_run_feedback(run_id: int):
+    """Remove the authenticated user's vote on one of their runs."""
+    deleted = persistence.delete_run_feedback(run_id, g.clerk_user_id)
+    if not deleted:
+        return jsonify({"error": "Feedback not found or not yours"}), 404
+
+    log.info("agent.rating_cleared", run_id=run_id)
+    return jsonify({"run_id": run_id, "rating": None})
+
+
+@agent_bp.get("/agent/admin/feedback")
+def admin_feedback():
+    """Aggregate up/down votes. Admin only."""
+    if not _is_admin(g.clerk_user_id):
+        return jsonify({"error": "Admin access required"}), 403
+    return jsonify(persistence.get_feedback_stats())
