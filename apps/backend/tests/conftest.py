@@ -320,7 +320,6 @@ def _create_tables(db_engine):
     with db_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS agent_memory_snippets CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS user_preferences CASCADE;"))
-        conn.execute(text("DROP TABLE IF EXISTS agent_run_feedback CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_runs CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_messages CASCADE;"))

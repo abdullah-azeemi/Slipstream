@@ -44,7 +44,6 @@ class Settings(BaseSettings):
     openrouter_timeout_seconds: int = 30
     agent_free_daily_limit: int = 10
     agent_free_daily_cost_usd: float = 0.30
-    agent_free_daily_cost_usd: float = 0.30
     llm_breaker_failure_threshold: int = 3
     llm_breaker_open_timeout_seconds: int = 60
 

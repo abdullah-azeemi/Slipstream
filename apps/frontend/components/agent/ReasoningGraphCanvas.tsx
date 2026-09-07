@@ -21,9 +21,13 @@ import {
   AgentNodeRunInfo,
 } from '@/types/agent'
 import AgentDAGNode, { type AgentDAGNodeData } from './nodes/AgentDAGNode'
+import QueryRootNode from './nodes/QueryRootNode'
 import AnimatedLaserEdge, { type EdgeTone } from './edges/AnimatedLaserEdge'
 
-const nodeTypes: NodeTypes = { agent: AgentDAGNode }
+const nodeTypes: NodeTypes = {
+  agent: AgentDAGNode,
+  query: QueryRootNode,
+}
 const edgeTypes: EdgeTypes = { laser: AnimatedLaserEdge }
 
 interface Props {
@@ -33,8 +37,9 @@ interface Props {
   onSelectNode?: (nodeId: string) => void
   selectedNodeId?: string | null
   phase: 'running' | 'completing' | 'minimap' | 'expanded'
-  // animationIndex: map of nodeId → topo rank (0-based), used to stagger ghost entrance
   animationIndex: Record<string, number>
+  question?: string
+  intent?: string
 }
 
 export default function ReasoningGraphCanvas({
@@ -45,17 +50,50 @@ export default function ReasoningGraphCanvas({
   selectedNodeId,
   phase,
   animationIndex,
+  question,
+  intent,
 }: Props) {
   const isMinimap = phase === 'minimap'
 
+  const allDone = useMemo(() => {
+    if (!nodes.length) return false
+    return nodes.every((n) => states[n.id]?.state === 'done' || states[n.id]?.state === 'error')
+  }, [nodes, states])
+
   const rfNodes = useMemo<FlowNode[]>(() => {
-    const position = layeredLayout(nodes, isMinimap ? 1.35 : 1)
-    return nodes.map((node) => {
+    const positions = layeredLayout(nodes, isMinimap ? 1.35 : 1)
+
+    // Calculate vertical midpoint for query root node
+    let avgY = 0
+    if (nodes.length > 0) {
+      const ySum = nodes.reduce((sum, n) => sum + (positions[n.id]?.y ?? 0), 0)
+      avgY = ySum / nodes.length
+    }
+
+    const flowNodes: FlowNode[] = []
+
+    // Inject synthetic root query node if we have a question
+    if (question || nodes.length > 0) {
+      flowNodes.push({
+        id: 'query_root',
+        type: 'query',
+        position: { x: isMinimap ? -360 : -420, y: avgY },
+        data: {
+          question: question || 'Processing query...',
+          intent: intent || 'race_analysis',
+          thinking: phase === 'running',
+          allDone,
+        },
+      })
+    }
+
+    // Map regular tool nodes
+    nodes.forEach((node) => {
       const info: AgentNodeRunInfo = states[node.id] ?? { state: 'idle' }
-      return {
+      flowNodes.push({
         id: node.id,
         type: 'agent',
-        position: position[node.id],
+        position: positions[node.id],
         data: {
           label: node.label,
           tool_name: node.tool_name,
@@ -63,15 +101,41 @@ export default function ReasoningGraphCanvas({
           duration_ms: info.duration_ms ?? null,
           summary: info.summary ?? null,
           query_preview: info.query_preview ?? null,
-          animationDelay: (animationIndex[node.id] ?? 0) * 60,
+          animationDelay: (animationIndex[node.id] ?? 0) * 100, // 100ms stagger per rank
         } satisfies AgentDAGNodeData,
-      }
+      })
     })
-  }, [nodes, states, animationIndex, isMinimap])
+
+    return flowNodes
+  }, [nodes, states, animationIndex, isMinimap, question, intent, phase, allDone])
 
   const rfEdges = useMemo<FlowEdge[]>(() => {
     const rank = topoRankMap(nodes)
-    return edges.map((edge) => {
+    const flowEdges: FlowEdge[] = []
+
+    // Identify root DAG nodes (nodes that are not targets of any internal edge)
+    const targetSet = new Set(edges.map((e) => e.target))
+    const rootNodeIds = nodes.filter((n) => !targetSet.has(n.id)).map((n) => n.id)
+
+    // Add synthetic laser edges from query_root -> root DAG nodes
+    rootNodeIds.forEach((rootId) => {
+      const targetState = states[rootId]?.state
+      let tone: EdgeTone = 'idle'
+      if (targetState === 'running') tone = 'running'
+      else if (targetState === 'done') tone = 'done'
+      else if (phase === 'running') tone = 'running'
+
+      flowEdges.push({
+        id: `query_root->${rootId}`,
+        source: 'query_root',
+        target: rootId,
+        type: 'laser',
+        data: { tone, latency_ms: null, span: 1, compact: isMinimap },
+      })
+    })
+
+    // Map internal tool edges
+    edges.forEach((edge) => {
       const sourceInfo: AgentNodeRunInfo | undefined = states[edge.source]
       const targetInfo: AgentNodeRunInfo | undefined = states[edge.target]
       let tone: EdgeTone = 'idle'
@@ -80,15 +144,18 @@ export default function ReasoningGraphCanvas({
       else if (sourceInfo?.state === 'done' || sourceInfo?.state === 'error') tone = 'done'
       const latency = sourceInfo?.duration_ms ?? null
       const span = (rank[edge.target] ?? 0) - (rank[edge.source] ?? 0)
-      return {
+
+      flowEdges.push({
         id: `${edge.source}->${edge.target}`,
         source: edge.source,
         target: edge.target,
         type: 'laser',
         data: { tone, latency_ms: latency, span, compact: isMinimap },
-      }
+      })
     })
-  }, [edges, states, isMinimap, nodes])
+
+    return flowEdges
+  }, [edges, states, isMinimap, nodes, phase])
 
   return (
     <div className={`h-full w-full ${isMinimap ? 'pointer-events-none' : ''}`}>
@@ -98,11 +165,11 @@ export default function ReasoningGraphCanvas({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: isMinimap ? 0.6 : 1 }}
+        fitViewOptions={{ padding: 0.25, maxZoom: isMinimap ? 0.6 : 1 }}
         minZoom={0.2}
         nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
-        onNodeClick={(_, node) => !isMinimap && onSelectNode?.(node.id)}
+        onNodeClick={(_, node) => !isMinimap && node.id !== 'query_root' && onSelectNode?.(node.id)}
       >
         {!isMinimap && (
           <Background
@@ -120,8 +187,6 @@ export default function ReasoningGraphCanvas({
   )
 }
 
-// Centers the viewport on the selected node once the inspector opens, offset to
-// the left so the node lands next to the 300px drawer instead of under it.
 function NodeZoomAnimator({
   nodeId,
   drawerWidth = 300,
@@ -147,8 +212,6 @@ function NodeZoomAnimator({
   return null
 }
 
-// Re-fits the viewport after the container height transitions (collapse /
-// expand) so the layout stays fully visible once the slide finishes.
 function FitController({ trigger }: { trigger: string }) {
   const { fitView } = useReactFlow()
 
@@ -156,11 +219,10 @@ function FitController({ trigger }: { trigger: string }) {
     const t = setTimeout(
       () =>
         fitView({
-          padding: 0.2,
+          padding: 0.25,
           maxZoom: trigger === 'minimap' ? 0.6 : 1,
           duration: 300,
         }),
-      // Wait for the height transition (300ms) to settle before re-fitting.
       320
     )
     return () => clearTimeout(t)

@@ -304,9 +304,22 @@ _HEAVY_TELEMETRY_TOOLS = frozenset(
     }
 )
 
+# Heavy tools whose output _compose consumes directly for a given intent. A leaf
+# check alone is not enough -- these nodes may have no DAG consumer (the verify
+# node is deliberately decoupled from them) yet still be the answer's core
+# evidence, so pruning them crashes compose with a missing key.
+_COMPOSE_REQUIRED_TOOLS: dict[types.ToolName, frozenset[types.Intent]] = {
+    types.ToolName.TELEMETRY_INSPECTOR: frozenset({types.Intent.TELEMETRY_COMPARISON}),
+    types.ToolName.STINT_DEGRADATION_SCANNER: frozenset({types.Intent.TYRE_DEGRADATION_ANALYSIS}),
+}
+
 def prune_dag(dag: types.ExecutionDAG, routed: types.RoutedQuestion) -> types.ExecutionDAG:
     """orchestrator post-step. For SIMPLE questions (complexity <= 2) drop heavy-telemetry nodes that are pure leaves: nothing downstream
-    consumes them, so the evidence gate never needs them."""
+    consumes them, so the evidence gate never needs them.
+
+    Exception: never drop a heavy leaf whose output _compose() requires for this
+    intent (e.g. telemetry_inspector on a telemetry-comparison question) -- the
+    leaf check is about DAG edges, but compose is a consumer too."""
     if routed.complexity > 2:
         return dag
 
@@ -317,9 +330,11 @@ def prune_dag(dag: types.ExecutionDAG, routed: types.RoutedQuestion) -> types.Ex
 
     kept: list[types.DAGNode] = []
     for node in dag.nodes:
+        required_intents = _COMPOSE_REQUIRED_TOOLS.get(node.tool_name, frozenset())
         is_heavy_leaf = (
             node.tool_name in _HEAVY_TELEMETRY_TOOLS
             and not consumers.get(node.id)
+            and routed.intent not in required_intents
         )
         if is_heavy_leaf:
             continue

@@ -147,9 +147,8 @@ def count_runs_today(clerk_user_id: str) -> int:
             {"clerk_user_id": clerk_user_id},
         ).scalar_one()
 
-
 def sum_cost_today(clerk_user_id: str) -> float:
-    """The users total agent spent cost recorded since local midnight."""
+    """ The users total agent spent cost recorded since local midnight."""
     with extensions.engine.connect() as conn:
         return float(
             conn.execute(
@@ -161,10 +160,8 @@ def sum_cost_today(clerk_user_id: str) -> float:
                         WHERE u.clerk_user_id = :clerk_user_id
                         AND r.started_at >= date_trunc('day', NOW())
                     """
-                ),
-                {"clerk_user_id": clerk_user_id},
-            ).scalar_one()
-            or 0.0
+                ), {"clerk_user_id": clerk_user_id}
+            ).scalar_one() or 0.0
         )
 
 
@@ -179,9 +176,7 @@ def get_usage_summary(clerk_user_id: str) -> dict:
         "remaining": max(0, limit - used),
         "cost_usd_today": round(cost, 4),
         "cost_limit_usd": settings.agent_free_daily_cost_usd,
-        "remaining_cost_usd": round(
-            max(0.0, settings.agent_free_daily_cost_usd - cost), 4
-        ),
+        "remaining_cost_usd": round(max(0.0, settings.agent_free_daily_cost_usd - cost), 4),
     }
 
 
@@ -336,13 +331,7 @@ def get_conversation_messages(conversation_id: int, clerk_user_id: str) -> dict 
             ],
         }
 
-
-# ── Run feedback (T3.1) ─────────────────────────────────────────────────────
-
-
-def upsert_run_feedback(
-    run_id: int, clerk_user_id: str, rating: int, comment: str | None = None
-) -> bool:
+def upsert_run_feedback(run_id: int, clerk_user_id: str, rating: int, comment: str | None = None) -> bool:
     """Rate a run (upsert — one vote per user per run). Returns False when the
     run does not exist or is not owned by this user, so the caller can 404."""
     with extensions.engine.begin() as conn:

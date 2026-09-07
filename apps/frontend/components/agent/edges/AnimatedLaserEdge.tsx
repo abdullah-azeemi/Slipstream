@@ -50,6 +50,17 @@ export default function AnimatedLaserEdge({
     <>
       <BaseEdge path={path} className={`edge-laser edge-${tone}`} />
 
+      {/* Animated photon/particle moving along running edge */}
+      {tone === 'running' && !compact && (
+        <circle r="3.5" fill="#f59e0b" style={{ filter: 'drop-shadow(0 0 4px rgba(245, 158, 11, 0.9))' }}>
+          <animateMotion
+            dur="1.2s"
+            repeatCount="indefinite"
+            path={path}
+          />
+        </circle>
+      )}
+
       {/* Latency label — only shown when done, latency is known, and not in minimap */}
       {tone === 'done' && latency !== null && !compact && (
         <EdgeLabelRenderer>
@@ -59,7 +70,7 @@ export default function AnimatedLaserEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'none',
             }}
-            className="font-mono text-[8px] font-semibold uppercase tracking-[0.06em] text-slate-400"
+            className="font-mono text-[8px] font-semibold uppercase tracking-[0.06em] text-slate-400 bg-white/80 px-1 rounded shadow-sm border border-slate-100"
           >
             LATENCY: {latency}ms
           </div>

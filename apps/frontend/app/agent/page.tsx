@@ -8,16 +8,16 @@ import {
   CircuitBoard,
   Clock3,
   Database,
-  Flag,
   Gauge,
   History,
   Loader2,
+  Menu,
   Plus,
   Radio,
   Send,
   ShieldCheck,
   Sparkles,
-  Terminal,
+  X,
   Zap,
   CircleHelp,
   ThumbsUp,
@@ -168,7 +168,9 @@ export default function AgentPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [canvasPhase, setCanvasPhase] = useState<CanvasPhase>('idle')
   const [animationIndex, setAnimationIndex] = useState<Record<string, number>>({})
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const dissolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   const latestReply = useMemo(
     () => [...turns].reverse().find((turn) => turn.reply)?.reply ?? null,
@@ -189,10 +191,6 @@ export default function AgentPage() {
     }
     return null
   }, [turns, selectedNodeId])
-  const latestError = useMemo(
-    () => [...turns].reverse().find((turn) => turn.error)?.error ?? null,
-    [turns]
-  )
   const successfulRuns = turns.filter((turn) => turn.reply && !turn.reply.refusals.length).length
   const refusedRuns = turns.filter((turn) => turn.reply?.refusals.length).length
   const traceCount = latestReply?.trace.length ?? 0
@@ -204,7 +202,17 @@ export default function AgentPage() {
   const canvasVisible =
     canvasPhase === 'running' || canvasPhase === 'completing' || canvasPhase === 'expanded'
 
-  // Load conversation list on mount.
+  // The active question/intent for passing to the canvas root node
+  const activeQuestion = loadingQuestion ?? latestDagTurn?.question ?? ''
+  const activeIntent = latestDagTurn?.reply?.intent ?? ''
+
+  // Auto-scroll chat to bottom when new content arrives
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [turns, loadingQuestion])
+
   useEffect(() => {
     agentApi.listConversations(getToken).then(setConversations).catch(() => {})
   }, [getToken])
@@ -227,12 +235,11 @@ export default function AgentPage() {
     }
   }, [])
 
-  // Load a past conversation's messages into the turn view.
   async function loadConversation(convId: number) {
     setLoadingHistory(true)
+    setSidebarOpen(false)
     try {
       const detail = await agentApi.getConversation(convId, getToken)
-      // Convert messages into ChatTurn objects.
       const loaded: ChatTurn[] = []
       for (let i = 0; i < detail.messages.length; i += 2) {
         const userMsg = detail.messages[i]
@@ -258,18 +265,18 @@ export default function AgentPage() {
       setCanvasPhase('idle')
       if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
     } catch {
-      // Silently fail — conversation list stays visible.
+      // Silently fail
     } finally {
       setLoadingHistory(false)
     }
   }
 
-  // Start a new conversation (clear turns and conversationId).
   function newConversation() {
     setTurns([])
     setConversationId(null)
     setCanvasPhase('idle')
     setSelectedNodeId(null)
+    setSidebarOpen(false)
     if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
   }
 
@@ -305,9 +312,7 @@ export default function AgentPage() {
         throw new Error(body?.error ?? `Request failed (${resp.status})`)
       }
 
-      if (!resp.body) {
-        throw new Error('Streaming response was empty')
-      }
+      if (!resp.body) throw new Error('Streaming response was empty')
 
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
@@ -363,9 +368,7 @@ export default function AgentPage() {
           if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
           dissolveTimer.current = setTimeout(() => setCanvasPhase('minimap'), 700)
         }
-        if (event === 'error') {
-          throw new Error(payload?.error ?? 'Agent stream failed')
-        }
+        if (event === 'error') throw new Error(payload?.error ?? 'Agent stream failed')
       }
 
       while (true) {
@@ -381,9 +384,7 @@ export default function AgentPage() {
       if (buffer.trim()) handleFrame(buffer)
 
       const reply = streamResult.reply
-      if (!reply) {
-        throw new Error('Agent stream ended without a final answer')
-      }
+      if (!reply) throw new Error('Agent stream ended without a final answer')
 
       if (reply.conversation_id) {
         setConversationId(reply.conversation_id)
@@ -414,7 +415,6 @@ export default function AgentPage() {
 
     try {
       if (turn.rating === rating) {
-        // Tapping the same button again clears the vote.
         await agentApi.clearFeedback(runId, getToken)
         setTurns((current) =>
           current.map((t) => (t.id === turnId ? { ...t, rating: null } : t))
@@ -427,136 +427,226 @@ export default function AgentPage() {
       }
       agentApi.getFeedbackStats(getToken).then(setFeedbackStats).catch(() => {})
     } catch {
-      // Silent — a failed vote shouldn't nuke the chat UI.
+      // Silent
     }
   }
 
+  // ── Sidebar content (shared between desktop and mobile drawer) ──────────────
+  const SidebarContent = (
+    <div className="flex h-full flex-col overflow-y-auto">
+      {/* Agent core card */}
+      <div className="p-4">
+        <div className="border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-slate-300 bg-white">
+              <Bot className="h-5 w-5 text-rose-500" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-extrabold uppercase tracking-[0.08em] text-slate-700">
+                Agent Core
+              </div>
+              <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600">
+                v1.0.14 stable
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => { fillSuggestion(SUGGESTED_QUESTIONS[2]); setSidebarOpen(false) }}
+            className="mt-4 flex w-full items-center justify-center gap-2 bg-rose-600 px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-white transition hover:bg-rose-500"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Prime Query
+          </button>
+        </div>
+
+        {/* Session stats */}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <MiniMetric label="runs" value={String(turns.length)} />
+          <MiniMetric label="ok" value={String(successfulRuns)} tone="green" />
+          <MiniMetric label="refused" value={String(refusedRuns)} tone="amber" />
+          <MiniMetric label="tools" value={String(traceCount)} tone="red" />
+        </div>
+
+        {/* Usage + feedback compact row */}
+        {(usage || feedbackStats) && (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {usage && (
+              <MiniMetric
+                label="remaining"
+                value={`${usage.remaining}/${usage.limit}`}
+                tone={usage.remaining <= 2 ? 'red' : 'green'}
+              />
+            )}
+            {feedbackStats && (
+              <MiniMetric
+                label="runtime"
+                value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
+                tone={totalTraceMs ? 'green' : 'slate'}
+              />
+            )}
+          </div>
+        )}
+
+        {/* System modules */}
+        <div className="mt-5 space-y-2">
+          {SYSTEM_MODULES.map(([label, Icon, hot]) => (
+            <div
+              key={label}
+              className="flex items-center justify-between border border-slate-200 bg-white px-3 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <Icon className={`h-3.5 w-3.5 ${hot ? 'text-rose-500' : 'text-slate-400'}`} />
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-slate-500">
+                  {label}
+                </span>
+              </div>
+              <span className={`h-1.5 w-1.5 rounded-full ${hot ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            </div>
+          ))}
+        </div>
+
+        {/* Admin stats (compact) */}
+        {adminStats && (
+          <div className="mt-4 grid grid-cols-2 gap-3 border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 col-span-2 mb-1">
+              Admin · Today
+            </div>
+            <MiniMetric label="cost" value={`$${adminStats.total_cost_usd.toFixed(4)}`} tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'} />
+            <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
+          </div>
+        )}
+
+        {/* Conversation history */}
+        <div className="mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-slate-500">
+              <History className="h-3 w-3 text-rose-500" />
+              History
+            </div>
+            <button
+              onClick={newConversation}
+              className="flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-500 hover:border-rose-300 hover:text-rose-600 transition-colors"
+              title="New conversation"
+            >
+              <Plus className="h-3 w-3" />
+              New
+            </button>
+          </div>
+
+          {loadingHistory && (
+            <div className="flex items-center gap-2 p-2 text-[10px] text-slate-400">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading...
+            </div>
+          )}
+
+          {!loadingHistory && conversations.length === 0 && (
+            <div className="p-2 text-[10px] text-slate-400">No conversations yet</div>
+          )}
+
+          <div className="space-y-1 max-h-52 overflow-y-auto">
+            {conversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => loadConversation(conv.id)}
+                className={`w-full text-left border px-2.5 py-2 transition-colors ${
+                  conversationId === conv.id
+                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <div className="text-[11px] font-semibold truncate">
+                  {conv.title || 'Untitled'}
+                </div>
+                <div className="mt-0.5 text-[9px] text-slate-400">
+                  {conv.message_count} messages
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Next build targets */}
+        <div className="mt-5 border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+            <Clock3 className="h-3.5 w-3.5 text-rose-500" />
+            Next targets
+          </div>
+          <div className="mt-3 space-y-2">
+            {['Open research intent', 'Streaming telemetry'].map((item) => (
+              <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="min-h-[calc(100vh-140px)] bg-[#f7f8fb] bg-[linear-gradient(#e7eaf0_1px,transparent_1px),linear-gradient(90deg,#e7eaf0_1px,transparent_1px)] bg-[size:18px_18px] px-3 py-4 text-slate-900 sm:px-5 lg:px-8">
-      <div
-        className={`mx-auto grid max-w-[100%] gap-0 transition-all duration-500 ${
-          canvasVisible
-            ? 'grid-cols-[280px_1fr]'
-            : 'lg:grid-cols-[280px_minmax(0,1fr)_300px]'
+    <div className="agent-page-root bg-[#f7f8fb] bg-[linear-gradient(#e7eaf0_1px,transparent_1px),linear-gradient(90deg,#e7eaf0_1px,transparent_1px)] bg-[size:18px_18px] text-slate-900">
+
+      {/* ── Mobile sidebar drawer overlay ──────────── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm sm:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-300 sm:hidden ${
+          sidebarOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
         }`}
       >
-        <section className="border border-slate-200 bg-white/82 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="flex min-h-9 items-center justify-between border-b border-slate-200 bg-slate-100/80 px-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-rose-500">Orchestrator_v1</div>
+            <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500">Analysis</div>
+          </div>
+          <button onClick={() => setSidebarOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {SidebarContent}
+      </aside>
+
+      {/* ── Main 2-col grid ────────────────────────── */}
+      <div className="agent-grid mx-auto">
+
+        {/* ── Left sidebar (desktop only) ───────────── */}
+        <aside className="agent-sidebar hidden sm:flex flex-col border-r border-slate-200 bg-white/90 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur overflow-hidden">
           <PanelHeader
             eyebrow="Orchestrator_v1"
             title="Analysis"
             action={<UserButton appearance={{ elements: { avatarBox: 'h-7 w-7' } }} />}
           />
+          {SidebarContent}
+        </aside>
 
-          <div className="p-4">
-            <div className="border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center border border-slate-300 bg-white">
-                  <Bot className="h-5 w-5 text-rose-500" />
-                </div>
-                <div>
-                  <div className="text-xs font-extrabold uppercase tracking-[0.08em] text-slate-700">
-                    Agent Core
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600">
-                    v1.0.14 stable
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => fillSuggestion(SUGGESTED_QUESTIONS[2])}
-                className="mt-4 flex w-full items-center justify-center gap-2 bg-rose-600 px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-white transition hover:bg-rose-500"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Prime Query
-              </button>
+        {/* ── Center panel (chat + canvas) ──────────── */}
+        <section className="agent-center flex flex-col overflow-hidden border-x border-slate-200 bg-white/82 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+
+          {/* Mobile topbar */}
+          <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-100/80 px-3 py-2 sm:hidden">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="flex h-7 w-7 items-center justify-center border border-slate-200 bg-white text-slate-500"
+              aria-label="Open menu"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <div className="flex-1">
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-rose-500">Pitwall</div>
+              <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500">AI Agent</div>
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniMetric label="runs" value={String(turns.length)} />
-              <MiniMetric label="ok" value={String(successfulRuns)} tone="green" />
-              <MiniMetric label="refused" value={String(refusedRuns)} tone="amber" />
-              <MiniMetric label="tools" value={String(traceCount)} tone="red" />
-            </div>
-
-            <div className="mt-5 space-y-2">
-              {SYSTEM_MODULES.map(([label, Icon, hot]) => (
-                <div
-                  key={label}
-                  className="flex items-center justify-between border border-slate-200 bg-white px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-3.5 w-3.5 ${hot ? 'text-rose-500' : 'text-slate-400'}`} />
-                    <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-slate-500">
-                      {label}
-                    </span>
-                  </div>
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      hot ? 'bg-emerald-500' : 'bg-slate-300'
-                    }`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* ── Conversation History ──────────────────── */}
-            <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-slate-500">
-                  <History className="h-3 w-3 text-rose-500" />
-                  History
-                </div>
-                <button
-                  onClick={newConversation}
-                  className="flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-500 hover:border-rose-300 hover:text-rose-600 transition-colors"
-                  title="New conversation"
-                >
-                  <Plus className="h-3 w-3" />
-                  New
-                </button>
-              </div>
-
-              {loadingHistory && (
-                <div className="flex items-center gap-2 p-2 text-[10px] text-slate-400">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Loading...
-                </div>
-              )}
-
-              {!loadingHistory && conversations.length === 0 && (
-                <div className="p-2 text-[10px] text-slate-400">
-                  No conversations yet
-                </div>
-              )}
-
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {conversations.map((conv) => (
-                  <button
-                    key={conv.id}
-                    onClick={() => loadConversation(conv.id)}
-                    className={`w-full text-left border px-2.5 py-2 transition-colors ${
-                      conversationId === conv.id
-                        ? 'border-rose-300 bg-rose-50 text-rose-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="text-[11px] font-semibold truncate">
-                      {conv.title || 'Untitled'}
-                    </div>
-                    <div className="mt-0.5 text-[9px] text-slate-400">
-                      {conv.message_count} messages
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <UserButton appearance={{ elements: { avatarBox: 'h-7 w-7' } }} />
           </div>
-        </section>
 
-        <section className="min-w-0 flex flex-col" style={{ minHeight: 'calc(100vh - 140px)' }}>
-          {/* Center panel header — shown on idle */}
+          {/* Center panel header (desktop, idle only) */}
           {canvasPhase === 'idle' && (
-            <>
+            <div className="hidden sm:block">
               <PanelHeader
                 eyebrow="Dag_visualizer"
                 title="Race question pipeline"
@@ -573,7 +663,7 @@ export default function AgentPage() {
                   ? `${latestDagTurn.nodes.length} nodes / ${latestDagTurn.edges.length} edges`
                   : ' identify driver --&gt; verify evidence'}
               </div>
-            </>
+            </div>
           )}
 
           {/* Breadcrumb trail — shown during running */}
@@ -587,19 +677,19 @@ export default function AgentPage() {
             </div>
           )}
 
-          {/* DAG CANVAS — single mounted instance, slides between full & 150px minimap */}
+          {/* DAG CANVAS — minimap always at top, full canvas during running */}
           {latestDagTurn && (canvasPhase === 'minimap' || canvasVisible) && (
             <div
-              className={`relative flex-1 overflow-hidden transition-[min-height] duration-300 ease-in-out ${
+              className={`relative overflow-hidden transition-[height] duration-300 ease-in-out flex-shrink-0 ${
                 canvasPhase === 'completing' ? 'canvas-dissolving' : ''
               }`}
               style={{
-                minHeight:
+                height:
                   canvasPhase === 'minimap'
-                    ? '150px'
+                    ? '120px'
                     : canvasPhase === 'expanded'
-                      ? '80vh'
-                      : 'calc(100vh - 200px)',
+                      ? '60vh'
+                      : 'calc(100vh - 260px)',
               }}
             >
               <ReasoningGraphCanvas
@@ -616,6 +706,8 @@ export default function AgentPage() {
                       : 'running'
                 }
                 animationIndex={animationIndex}
+                question={activeQuestion}
+                intent={activeIntent}
               />
               <NodeInspectorDrawer
                 view={selectedNodeView}
@@ -626,7 +718,6 @@ export default function AgentPage() {
                 <button
                   onClick={() => setCanvasPhase('minimap')}
                   className="absolute right-3 top-3 z-10 flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
-                  title="Collapse reasoning graph"
                 >
                   collapse
                 </button>
@@ -639,20 +730,21 @@ export default function AgentPage() {
                   title="Click to re-expand reasoning graph"
                 >
                   <span className="absolute bottom-2 right-3 rounded border border-slate-200 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 shadow-sm">
-                    {latestDagTurn.nodes.length} nodes · {latestDagTurn.edges.length} edges · Click
-                    to expand
+                    {latestDagTurn.nodes.length} nodes · Click to expand
                   </span>
                 </button>
               )}
             </div>
           )}
 
-          {/* CONVERSATION TURNS — shown in idle and minimap phases */}
+          {/* ── Scrollable turns area ─────────────────── */}
           <div
-            className={`flex-1 space-y-5 overflow-y-auto p-4 sm:p-6 ${
+            ref={chatScrollRef}
+            className={`flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-5 ${
               (canvasPhase === 'running' || canvasPhase === 'completing') ? 'hidden' : 'block'
             }`}
           >
+            {/* Empty state */}
             {turns.length === 0 && !loadingQuestion && canvasPhase === 'idle' && (
               <div className="grid h-full place-items-center">
                 <div className="w-full max-w-xl border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -664,12 +756,13 @@ export default function AgentPage() {
                     Ask for a race, driver, pit stop, and speed comparison. The agent will keep
                     the math in deterministic tools and only use the model to route and explain.
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  {/* Suggested questions — horizontal scroll on mobile */}
+                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap">
                     {SUGGESTED_QUESTIONS.map((q) => (
                       <button
                         key={q}
                         onClick={() => fillSuggestion(q)}
-                        className="border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+                        className="shrink-0 border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
                       >
                         {q}
                       </button>
@@ -679,19 +772,20 @@ export default function AgentPage() {
               </div>
             )}
 
+            {/* Chat turns */}
             {turns.map((turn) => (
               <div key={turn.id} className="space-y-3">
+                {/* User bubble */}
                 <div className="flex justify-end">
                   <div className="max-w-[92%] border border-slate-300 bg-white px-4 py-3 shadow-sm sm:max-w-[78%]">
                     <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
                       User input
                     </div>
-                    <p className="text-sm font-semibold leading-6 text-slate-800">
-                      {turn.question}
-                    </p>
+                    <p className="text-sm font-semibold leading-6 text-slate-800">{turn.question}</p>
                   </div>
                 </div>
 
+                {/* Answer */}
                 {turn.reply && (
                   <div className="answer-reveal border-l-2 border-rose-500 bg-white/90 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
@@ -745,9 +839,7 @@ export default function AgentPage() {
                       </span>
                     </div>
                     <div className="pitwall-prose px-4 py-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {turn.reply.answer}
-                      </ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.reply.answer}</ReactMarkdown>
                     </div>
                     {turn.reply.clarification && (
                       <div className="mx-4 mb-4 flex items-start gap-3 border border-sky-200 bg-sky-50 px-3 py-2.5">
@@ -785,6 +877,7 @@ export default function AgentPage() {
                   </div>
                 )}
 
+                {/* Running progress (fallback when no DAG yet) */}
                 {!turn.reply && !turn.error && turn.progress.length > 0 && (
                   <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
                     <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
@@ -795,6 +888,7 @@ export default function AgentPage() {
                   </div>
                 )}
 
+                {/* Error */}
                 {turn.error && (
                   <div className="border-l-2 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                     {turn.error}
@@ -803,18 +897,17 @@ export default function AgentPage() {
               </div>
             ))}
 
+            {/* Pre-DAG loading skeleton */}
             {loadingQuestion && !activeTurnHasProgress && !latestDagTurn && (
               <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
                 <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                  Synthesizing weather delta with lap history
+                  Synthesizing with lap history
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   {['Resolve session', 'Read telemetry', 'Verify result'].map((step) => (
                     <div key={step} className="h-16 animate-pulse border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                        {step}
-                      </div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{step}</div>
                       <div className="mt-3 h-1.5 w-2/3 bg-rose-200" />
                     </div>
                   ))}
@@ -823,8 +916,11 @@ export default function AgentPage() {
             )}
           </div>
 
-          {/* Input form */}
-          <form onSubmit={ask} className="border-t border-slate-200 bg-white/94 p-3">
+          {/* ── Sticky input bar ──────────────────────── */}
+          <form
+            onSubmit={ask}
+            className="agent-input-bar border-t border-slate-200 bg-white/94 p-3"
+          >
             <div className="mb-2 flex items-center gap-2">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
               <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-rose-500">
@@ -844,7 +940,6 @@ export default function AgentPage() {
                 disabled={Boolean(loadingQuestion) || !question.trim()}
                 className="flex h-12 w-12 shrink-0 items-center justify-center bg-rose-600 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-slate-300"
                 aria-label="Send question"
-                title="Send question"
               >
                 {loadingQuestion ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -855,133 +950,6 @@ export default function AgentPage() {
             </div>
           </form>
         </section>
-
-        {(canvasPhase === 'idle' || canvasPhase === 'minimap') && (
-          <aside className="space-y-4">
-            <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-              <PanelHeader eyebrow="Sys_status" title="Agent telemetry" />
-              <div className="space-y-3 p-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <MiniMetric
-                    label="runtime"
-                    value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
-                    tone={totalTraceMs ? 'green' : 'slate'}
-                  />
-                  <MiniMetric
-                    label="remaining"
-                    value={usage ? `${usage.remaining} / ${usage.limit}` : '...'}
-                    tone={usage && usage.remaining <= 2 ? 'red' : 'green'}
-                  />
-                </div>
-                <div className="border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                    <Flag className="h-3.5 w-3.5 text-rose-500" />
-                    Target Context
-                  </div>
-                  <div className="space-y-2 text-xs text-slate-600">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Session</span>
-                      <strong className="text-right text-slate-800">
-                        {latestReply?.session
-                          ? `${latestReply.session.year} ${latestReply.session.gp_name}`
-                          : 'Awaiting query'}
-                      </strong>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Driver</span>
-                      <strong className="text-right text-slate-800">
-                        {latestReply?.driver
-                          ? `${latestReply.driver.full_name} #${latestReply.driver.driver_number}`
-                          : 'Unresolved'}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-              <PanelHeader eyebrow="Runtime_logs" title="Latest signals" />
-              <div className="divide-y divide-slate-200 text-[11px]">
-                {latestReply?.trace.length ? (
-                  latestReply.trace.slice(0, 5).map((call, index) => (
-                    <div key={`${call.tool_name}-${index}`} className="p-3">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="font-extrabold uppercase tracking-[0.06em] text-rose-500">
-                          [{call.tool_name}]
-                        </span>
-                        <span className="font-mono text-[10px] font-bold text-slate-400">
-                          {call.duration_ms ?? 0}ms
-                        </span>
-                      </div>
-                      <p className="line-clamp-2 leading-5 text-slate-500">{call.output_summary ?? call.input_summary}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-4 text-slate-500">
-                    <div className="mb-2 flex items-center gap-2 font-black uppercase text-slate-400">
-                      <Terminal className="h-3.5 w-3.5" />
-                      Waiting for first run
-                    </div>
-                    <p className="leading-5">
-                      Tool call summaries will appear here after the agent resolves a race question.
-                    </p>
-                  </div>
-                )}
-                {latestError && (
-                  <div className="bg-rose-50 p-3 font-bold text-rose-600">
-                    [ERROR] {latestError}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {adminStats && (
-              <section className="border border-slate-200 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-                <PanelHeader eyebrow="Admin" title="Daily stats" />
-                <div className="space-y-3 p-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <MiniMetric label="runs today" value={String(adminStats.total_runs)} />
-                    <MiniMetric
-                      label="cost today"
-                      value={`$${adminStats.total_cost_usd.toFixed(4)}`}
-                      tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'}
-                    />
-                    <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
-                    <MiniMetric label="refused" value={String(adminStats.refused)} tone="amber" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <MiniMetric
-                      label="feedback up"
-                      value={String(feedbackStats?.up ?? 0)}
-                      tone="green"
-                    />
-                    <MiniMetric
-                      label="feedback down"
-                      value={String(feedbackStats?.down ?? 0)}
-                      tone="red"
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
-
-            <section className="border border-slate-200 bg-white/86 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                <Clock3 className="h-3.5 w-3.5 text-rose-500" />
-                Next build targets
-              </div>
-              <div className="mt-3 space-y-2">
-                {['Streaming progress', 'Telemetry charts'].map((item) => (
-                  <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                    <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </section>
-          </aside>
-        )}
       </div>
     </div>
   )

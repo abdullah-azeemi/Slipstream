@@ -522,3 +522,37 @@ main.landing {
   color: #64748b;
   background: #fff5f5;
 }
+
+/* ── Agent 2-Column Layout ── */
+.agent-page-root {
+  min-height: calc(100vh - 120px);
+  padding: 12px;
+}
+
+@media (min-width: 640px) {
+  .agent-page-root {
+    padding: 16px 24px;
+  }
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  max-width: 100%;
+  height: calc(100vh - 150px);
+  min-height: 550px;
+}
+
+@media (min-width: 640px) {
+  .agent-grid {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+
+.agent-sidebar {
+  height: 100%;
+}
+
+.agent-center {
+  height: 100%;
+}
