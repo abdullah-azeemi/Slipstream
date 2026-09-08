@@ -3,8 +3,16 @@
 import pytest
 
 from backend.agent import llm, types
+from backend.agent.semantic_cache import SemanticCache
 from backend.config import settings
 
+
+@pytest.fixture(autouse=True)
+def _isolate_cache(monkeypatch):
+    """The semantic cache is a module-level singleton shared across tests;
+    one test storing a query silently contaminates the next. Give each test
+    a fresh cache so order can never decide outcomes."""
+    monkeypatch.setattr(llm, "semantic_cache", SemanticCache())
 
 def _fake_payload(content, usage=None):
     return {
@@ -264,3 +272,40 @@ def test_route_question_bad_window_raises(monkeypatch):
     with pytest.raises(types.LLMError) as exc:
         llm.route_question("q?")
     assert exc.value.code == "router_bad_window"
+
+def test_route_question_sets_compute_flag(monkeypatch):
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm,
+        "_post",
+        lambda messages, model, temperature: _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "driver": "Verstappen", '
+            '"year": 2026, "gp_name": "Monaco", "laps_window": 3}'
+        ),
+    )
+    routed, _ = llm.route_question(
+        "What was the average speed after his stop in Monaco 2026?"
+    )
+    assert routed.requires_compute is True
+    assert routed.intent_category == "descriptive"
+
+
+def test_route_question_cache_hit_keeps_local_flags(monkeypatch):
+    """BUG 2: entity parse is cached, but the local flags must survive."""
+    _set_key(monkeypatch)
+    monkeypatch.setattr(
+        llm.semantic_cache,
+        "get",
+        lambda q: {
+            "intent": "pit_stop_speed_delta",
+            "driver": "Verstappen",
+            "year": 2026,
+            "gp_name": "Monaco",
+            "laps_window": 3,
+        },
+    )
+    routed, cost = llm.route_question(
+        "What was the average speed after his stop in Monaco 2026?"
+    )
+    assert routed.requires_compute is True
+    assert cost == 0.0

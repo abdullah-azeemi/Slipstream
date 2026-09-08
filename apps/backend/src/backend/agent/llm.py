@@ -13,6 +13,8 @@ from backend.agent import types
 from backend.config import settings
 from backend.agent import circuit_breaker
 from backend.agent import semantic_cache
+from backend.agent import intent_classifier
+from backend.agent.semantic_cache import cache as semantic_cache
 
 log = structlog.get_logger()
 
@@ -33,6 +35,7 @@ Allowed Intents:
     - "qualifying_lap_analysis" : the question asks about qualifying, a Q1/Q2/Q3 time, qualifying sector speed, or grid position. Sets session_type to "Q".
     - "team_radio" : the question asks what a driver's engineer/team said on the radio, or wants a radio clip / message inside the car.
     - "weather_correlation" : the question asks about rain, wet/dry conditions, track or air temperature, humidity, or wind during a session.
+    - "driver_style_comparison" : the question compares two drivers' driving styles, braking, aggression, or top-speed traits across a season. Sets "compare_driver" for the second driver.
     - "unsupported" : everything else (other sports, live timing etc)
 
 Field Rules:
@@ -259,12 +262,18 @@ def parse_routed_question(payload: dict, question: str) -> types.RoutedQuestion:
     return dataclasses.replace(routed, complexity=_score_complexity(question, routed))
 
 def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
-    """Classify a question and extract its entities with the cheap routing model"""
+    """Classify a question and extract its entities with the cheap routing model
+    
+    Two classifiers run here, deliberately:
+      1. intent_classifier.classify_intent -- deterministic, free, runs on EVERY question INCLUDING cache hits
+      2. The LLM router -- precise entity extraction, only on a cache miss.
+    """
 
+    local = intent_classifier.classify_intent(question)
     cached = semantic_cache.get(question)
 
     if cached is not None:
-        return parse_routed_question(cached, question), 0.0
+        return _apply_local_flags(parse_routed_question(cached, question), local), 0.0
 
     messages = [
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
@@ -280,33 +289,57 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     if not isinstance(payload, dict):
         raise types.LLMError(f"router returned non-object JSON: {text[:200]}", code="router_unparseable")
 
+    text, usage = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
+
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise types.LLMError(f"router returned unparseable response: {text[:200]}", code="router_unparseable") from exc
+    if not isinstance(payload, dict):
+        raise types.LLMError(f"router returned non-object JSON: {text[:200]}", code="router_unparseable")
+
     semantic_cache.set(question, payload)
     cost = usage.get("cost_estimate_usd", 0.0)
-    return parse_routed_question(payload, question), cost
+    routed = parse_routed_question(payload, question)
+    return _apply_local_flags(routed, local), cost
 
+def _apply_local_flags(routed: types.RoutedQuestion, local: intent_classifier.IntentClassification) -> types.RoutedQuestion:
+    """Overlay the deterministic local signals on the LLM's entity parse
+
+    The LLM router owns ENTITY fields (driver, lap, gp, year). The local
+    classifier owns STYLE fields (compute/prediction/category). They never
+    overwrite each other; local flags always win because they are
+    deterministic and run on every question, cache hits included.
+    """
+    return dataclasses.replace(
+        routed,
+        requires_compute=local.requires_compute,
+        requires_prediction=local.requires_prediction,
+        intent_category=local.intent_category,
+        suggested_tools=local.suggested_tools,
+    )
 
 _CAPABLE_INTENTS = frozenset({
     types.Intent.TELEMETRY_COMPARISON,
     types.Intent.WEATHER_CORRELATION,
     types.Intent.TYRE_DEGRADATION_ANALYSIS,
+    types.Intent.DRIVER_STYLE_COMPARISON,
 })
 
 _ANALYTICAL_COMPLEXITY_FLOOR = 3
 
 
-def select_model(intent: types.Intent | None, complexity: int) -> str:
-    """T3.2 -- pick the composer/planner model for an intent+complexity pair.
+def select_model(intent: types.Intent | None, complexity: int, requires_compute: bool = False) -> str:
+    """Pick the model for an intent+complexity+compute_need triple
 
-    Rule (kept explicit so it is cheap to review): analytical intents are
-    sent to the capable model only when the question is actually compound
-    (complexity >= 3). Everything else stays on the cheap everyday model.
-    Start narrow -- over-routing to the expensive model defeats the point.
+    Priority order:
+        1. requires_compute _> flagship model
+        2. analytical intent + complexity >= 3 -> capable model
+        3. everything else -> cheap fast model
     """
-    if (
-        intent is not None
-        and intent in _CAPABLE_INTENTS
-        and complexity >= _ANALYTICAL_COMPLEXITY_FLOOR
-    ):
+    if requires_compute:
+        return settings.openrouter_capable_model
+    if intent is not None and intent in _CAPABLE_INTENTS and complexity >= _ANALYTICAL_COMPLEXITY_FLOOR:
         return settings.openrouter_capable_model
     return settings.openrouter_final_model
 
@@ -317,6 +350,8 @@ def compose_answer(
     memory_context: str = "",
     intent: types.Intent | None = None,
     complexity: int = 1,
+    requires_compute: bool = False,
+    intent_category: str = "descriptive",
 ) -> tuple[str, float]:
     """Write the final human-readable answer from structured evidence."""
     context_block = ""
@@ -326,17 +361,24 @@ def compose_answer(
             f"flavour only, NOT evidence -- every number you write must come from "
             f"the evidence JSON):\n{memory_context}"
         )
+
+    category_guide = {
+        "chitchat": "Answer briefly and warmly; you do not need the evidence.",
+        "predictive": "Frame the answer as a reasoned estimate with uncertainty; never overclaim certainty.",
+        "comparative": "Structure the answer as A vs B, using the numbers in the evidence for both sides.",
+        "descriptive": "Answer directly from the evidence JSON.",
+    }.get(intent_category, "")
     messages = [
         {"role": "system", "content": _COMPOSER_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"Question: {question}\n\nEvidence (JSON):\n"
-                f"{json.dumps(evidence, indent=2, default=str)}"
+                f"Question: {question}\n\nQuestion category: {category_guide}\n\n"
+                f"Evidence (JSON):\n{json.dumps(evidence, indent=2, default=str)}"
                 f"{context_block}"
             ),
         },
     ]
-    text, usage = _chat(messages, model=select_model(intent, complexity), temperature=0.2)
+    text, usage = _chat(messages, model=select_model(intent, complexity, requires_compute), temperature=0.2)
     cost = usage.get("cost_estimate_usd", 0.0)
     return validate_composition(text), cost

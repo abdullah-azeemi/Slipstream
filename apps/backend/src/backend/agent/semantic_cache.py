@@ -70,7 +70,7 @@ class SemanticCache:
         best_entry = None
 
         for entry in self._entries:
-            score = self.cosine_similarity(query_vector, entry.ngram_vector)
+            score = self._cosine_similarity(query_vector, entry.ngram_vector)
 
             if score > best_score:
                 best_score = score

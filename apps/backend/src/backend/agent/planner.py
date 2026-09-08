@@ -145,6 +145,12 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         types.WeatherWindowInput,
         "Returns weather samples with rain stats and temp deltas.",
     ),
+    "driver_style_compare": ToolSpec.from_dataclass(
+        "driver_style_compare",
+        "Compare two drivers' PCA/K-Means driving-style archetypes and trait percentiles for a season.",
+        types.DriverStyleCompareInput,
+        "Returns archetypes and field-size percentile traits for the primary and secondary driver.",
+    ),
     "verify_evidence": ToolSpec.from_dataclass(
         "verify_evidence",
         "Terminal node: verify all required evidence exists before answering.",

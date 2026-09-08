@@ -41,6 +41,7 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.FETCH_RACE_CONTROL_WINDOW: tools.fetch_race_control_window,
     types.ToolName.FETCH_RADIO_MESSAGES: tools.fetch_radio_messages,
     types.ToolName.FETCH_WEATHER_WINDOW: tools.fetch_weather_window,
+    types.ToolName.DRIVER_STYLE_COMPARE: tools.driver_style_compare,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -163,6 +164,13 @@ def _bind_telemetry(params, env):
         compare_lap_numbers=params.get("compare_lap_numbers") or (),
     )
 
+@_register(types.ToolName.DRIVER_STYLE_COMPARE)
+def _bind_driver_style(params, env):
+    return types.DriverStyleCompareInput(
+        driver_name=params.get("driver_name") or "",
+        compare_driver_name=params.get("compare_driver_name"),
+        year=int(params.get("year") or 0),
+    )
 
 def _bind_gap(params, env):
     target_lap = params.get("target_lap") or env["routed"].target_lap
@@ -269,6 +277,25 @@ def _verify_node(depends_on: tuple[str, ...]) -> types.DAGNode:
 
 def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     """Turn a routed question into a concrete execution graph"""
+
+    if routed.intent is types.Intent.DRIVER_STYLE_COMPARISON:
+        if not routed.driver_name:
+            raise types.PlanValidationError("driver_style_comparison requires a driver_name")
+        nodes = [
+            types.DAGNode(
+                id="style",
+                tool_name=types.ToolName.DRIVER_STYLE_COMPARE,
+                label="Compare Driving Styles",
+                description="PCA/K-Means archetypes + trait percentiles vs the field",
+                depends_on=(),
+                input_params={
+                    "driver_name": routed.driver_name,
+                    "compare_driver_name": routed.compare_driver_name,
+                    "year": routed.year or 0,
+                },
+            )
+        ]
+        return types.ExecutionDAG(nodes=tuple(nodes), edges=tuple())
 
     nodes: list[types.DAGNode] = [_session_node(routed), _driver_node(routed)]
 
@@ -821,6 +848,10 @@ def _compose(
             f"{driver.full_name} had {laps.anomaly_count} off-pace qualifying lap(s); median clean pace was {laps.median_pace_ms} ms."
         )
 
+    elif routed.intent is types.Intent.DRIVER_STYLE_COMPARISON:
+        style = outputs["style"]
+        fallback_lines.append(style.summary)
+        
     else:
         telemetry = outputs["telemetry"]
         fallback_lines.append(
@@ -841,6 +872,8 @@ def _compose(
             evidence_payload,
             intent=routed.intent,
             complexity=routed.complexity,
+            requires_compute=routed.requires_compute,
+            intent_category=routed.intent_category,
         )
     except types.LLMError:
         answer_text = fallback_text

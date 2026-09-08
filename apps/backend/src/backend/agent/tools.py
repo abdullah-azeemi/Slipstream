@@ -1325,3 +1325,142 @@ def verify_evidence(inp: types.VerifyEvidenceInput) -> types.VerifyEvidenceResul
         )
 
     return _assess(checks)
+
+_TRAIT_FEATURES = (
+    "braking_aggression",
+    "drs_usage_pct",
+    "max_speed_capability",
+    "avg_speed_trap",
+    "lap_time_consistency",
+)
+_TRAIT_LABELS = {
+    "braking_aggression": "Brake aggression",
+    "drs_usage_pct": "DRS usage",
+    "max_speed_capability": "Top speed",
+    "avg_speed_trap": "Trap speed",
+    "lap_time_consistency": "Consistency",
+}
+
+_STYLE_ROWS_SQL = text("""
+        SELECT e.driver_number, e.season, e.abbreviation,
+            COALESCE(f.full_name, e.abbreviation) AS full_name,
+            e.archetype,
+            f.braking_aggression, f.drs_usage_pct, f.max_speed_capability,
+            f.avg_speed_trap, f.lap_time_consistency
+        FROM driver_embeddings e
+        LEFT JOIN driver_features f
+        ON f.driver_number = e.driver_number AND f.season = e.season
+        WHERE e.season = :season
+        ORDER BY e.driver_number
+""")
+
+
+def _percentile_rank(value: float | None, values: list[float | None]) -> float | None:
+    """Percentile rank (0-100) of value within values; None if value is None."""
+    if value is None:
+        return None
+    present = sorted(v for v in values if v is not None)
+    if not present:
+        return None
+    return (sum(1 for v in present if v <= value) / len(present)) * 100.0
+
+
+def _match_driver(rows, name: str):
+    """Match a user's name against full_name / abbreviation / driver number."""
+    target = (name or "").strip().lower()
+    if not target:
+        return None
+    for row in rows:
+        if (
+            target == str(row["abbreviation"]).lower()
+            or target == str(row["full_name"]).lower()
+            or target == str(row["driver_number"])
+        ):
+            return row
+    for row in rows:
+        if target in str(row["full_name"]).lower() or target in str(row["abbreviation"]).lower():
+            return row
+    return None
+
+def _build_style_summary(primary: types.DriverStyleProfile | None, compare: types.DriverStyleProfile | None) -> str:
+    if primary is None:
+        return "Could not find the requested driver in the style model."
+    if compare is None:
+        top = primary.traits[0] if primary.traits else None
+        base = f"{primary.full_name} is classified as a {primary.archetype}."
+        if top is not None:
+            base += (
+                f" Their most distinct trait is {top.label} "
+                f"({top.percentile:.0f}th percentile of the field)."
+            )
+        return base
+    largest = None
+    for p in primary.traits:
+        c = next((t for t in compare.traits if t.feature == p.feature), None)
+        if c is not None and (largest is None or abs(p.percentile - c.percentile) > abs(largest[0] - largest[1])):
+            largest = (p.percentile, c.percentile, p.label)
+    text = (
+        f"{primary.full_name} is a {primary.archetype}; "
+        f"{compare.full_name} is a {compare.archetype}."
+    )
+    if largest is not None:
+        text += (
+            f" The largest style gap is in {largest[2]} "
+            f"({largest[0]:.0f}th vs {largest[1]:.0f}nd percentile)."
+        )
+    return text
+
+def driver_style_compare(inp: types.DriverStyleCompareInput) -> types.DriverStyleResult:
+    """Compare two drivers' PCA/K-Means archetypes + trait percentiles."""
+    with extensions.engine.connect() as conn:
+        if not inp.year:
+            row = conn.execute(
+                text("SELECT COALESCE(MAX(season), 0) AS s FROM driver_embeddings")
+            ).mappings().all()
+            season = int(row[0]["s"]) if row else 0
+        else:
+            season = inp.year
+        rows = conn.execute(_STYLE_ROWS_SQL, {"season": season}).mappings().all()
+
+    if season == 0 or not rows:
+        return types.DriverStyleResult(
+            season=season,
+            field_size=0,
+            driver=None,
+            summary="No driver style data is available yet. Run the clustering job first.",
+        )
+
+    def _profile(name: str) -> types.DriverStyleProfile | None:
+        row = _match_driver(rows, name)
+        if row is None:
+            return None
+        traits = []
+        for feature in _TRAIT_FEATURES:
+            value = row[feature]
+            if value is None:
+                continue
+            traits.append(
+                types.DriverStyleTrait(
+                    feature=feature,
+                    label=_TRAIT_LABELS[feature],
+                    percentile=_percentile_rank(value, [r[feature] for r in rows]) or 0.0,
+                    value=float(value),
+                )
+            )
+        return types.DriverStyleProfile(
+            driver_number=int(row["driver_number"]),
+            full_name=row["full_name"],
+            abbreviation=row["abbreviation"],
+            archetype=row["archetype"],
+            traits=tuple(traits),
+        )
+
+    primary = _profile(inp.driver_name)
+    compare = _profile(inp.compare_driver_name) if inp.compare_driver_name else None
+    return types.DriverStyleResult(
+        season=season,
+        field_size=len(rows),
+        driver=primary,
+        compare=compare,
+        summary=_build_style_summary(primary, compare),
+    )

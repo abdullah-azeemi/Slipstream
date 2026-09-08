@@ -23,6 +23,7 @@ class Intent(str, Enum):
     QUALIFYING_LAP_ANALYSIS = "qualifying_lap_analysis"
     TEAM_RADIO = "team_radio"
     WEATHER_CORRELATION = "weather_correlation"
+    DRIVER_STYLE_COMPARISON = "driver_style_comparison"
     UNSUPPORTED = "unsupported"
 
 
@@ -50,6 +51,7 @@ class ToolName(str, Enum):
     GAP_POSITION_SNAPSHOT = "gap_position_snapshot"
     FETCH_RADIO_MESSAGES = "fetch_radio_messages"
     FETCH_WEATHER_WINDOW = "fetch_weather_window"
+    DRIVER_STYLE_COMPARE = "driver_style_compare"
 
 
 @dataclass(frozen=True)
@@ -356,6 +358,38 @@ class WeatherWindowResult:
     rain_share_pct: float = 0.0
     track_temp_delta_c: float | None = None
 
+@dataclass(frozen=True)
+class DriverStyleCompareInput:
+    driver_name: str
+    compare_driver_name: str | None = None
+    year: int = 0  
+    
+@dataclass(frozen=True)
+class DriverStyleTrait:
+    feature: str
+    label: str
+    percentile: float  
+    value: float
+
+
+@dataclass(frozen=True)
+class DriverStyleProfile:
+    driver_number: int
+    full_name: str
+    abbreviation: str
+    archetype: str
+    traits: tuple[DriverStyleTrait, ...]
+
+
+@dataclass(frozen=True)
+class DriverStyleResult:
+    season: int
+    field_size: int
+    driver: DriverStyleProfile | None
+    compare: DriverStyleProfile | None = None
+    summary: str = ""
+    driver_style: DriverStyleResult | None = None
+
 
 @dataclass(frozen=True)
 class RoutedQuestion:
@@ -371,6 +405,10 @@ class RoutedQuestion:
     target_lap: int | None = None
     session_type: SessionType | None = None
     complexity: int = 1  # router-scored question complexity, 1 (trivial) to 5 (compound). Steers the planner's node budget and the orchestrator's pruning step
+    requires_compute: bool = False
+    requires_prediction: bool = False
+    intent_category: str = "descriptive"
+    suggested_tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
