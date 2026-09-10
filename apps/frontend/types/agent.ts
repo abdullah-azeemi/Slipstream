@@ -158,7 +158,7 @@ export interface AgentDAGEdge {
   label?: string | null
 }
 
-export type AgentNodeState = 'idle' | 'running' | 'done' | 'error'
+export type AgentNodeState = 'idle' | 'running' | 'done' | 'error' | 'self_correcting'
 
 export interface AgentNodeRunInfo {
   state: AgentNodeState

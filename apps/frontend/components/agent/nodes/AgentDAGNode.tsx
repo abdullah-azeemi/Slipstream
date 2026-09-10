@@ -3,17 +3,8 @@
 import { memo } from 'react'
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import {
-  Activity,
-  Database,
-  Flag,
-  Gauge,
-  Loader2,
-  Search,
-  ShieldCheck,
-  TrendingDown,
-  User,
-  Wrench,
-  XCircle,
+  Activity, Brain, Database, Flag, Gauge, Loader2, RefreshCw,
+  Search, ShieldAlert, ShieldCheck, TrendingDown, User, Wrench, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import type { AgentNodeState } from '@/types/agent'
@@ -32,16 +23,13 @@ export interface AgentDAGNodeData {
 type AgentNode = Node<AgentDAGNodeData, 'agent'>
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
-  resolve_session: Flag,
-  resolve_driver: User,
-  find_pit_stops: Wrench,
-  get_lap_telemetry_artifacts: Database,
-  compute_speed_window: Gauge,
-  inspect_lap_events: Search,
-  stint_degradation_scanner: TrendingDown,
-  telemetry_inspector: Activity,
-  verify_evidence: ShieldCheck,
+  resolve_session: Flag, resolve_driver: User, find_pit_stops: Wrench,
+  get_lap_telemetry_artifacts: Database, compute_speed_window: Gauge,
+  inspect_lap_events: Search, stint_degradation_scanner: TrendingDown,
+  telemetry_inspector: Activity, verify_evidence: ShieldCheck,
   synthesizer: Loader2,
+  compute_node: Brain,
+  critic_node: ShieldAlert,
 }
 
 // Sequential IDs for display (matches topo order in practice)
@@ -63,6 +51,7 @@ const BORDER_CLASS: Record<AgentNodeState, string> = {
   running: 'border-amber-400 agent-node-running',
   done: 'border-emerald-400',
   error: 'border-red-500',
+  self_correcting: 'border-purple-400 agent-node-running',
 }
 
 function StateBadge({ state, durationMs }: { state: AgentNodeState; durationMs?: number | null }) {
@@ -74,6 +63,14 @@ function StateBadge({ state, durationMs }: { state: AgentNodeState; durationMs?:
   }
   if (state === 'error') {
     return <XCircle className="h-3.5 w-3.5 text-red-500" />
+  }
+  if (state === 'self_correcting') {
+    return (
+      <span className="flex items-center gap-1 font-mono text-[10px] font-bold text-purple-500">
+        <RefreshCw className="h-3 w-3 animate-spin" />
+        Retrying
+      </span>
+    )
   }
   return <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
 }

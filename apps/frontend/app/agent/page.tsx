@@ -150,6 +150,12 @@ function applyNodeEvent(
       [nodeId]: { state: 'error', duration_ms: event.duration_ms, error: event.error },
     }
   }
+  if (event.type === 'self_correcting') {
+    return {
+      ...states,
+      [nodeId]: { state: 'self_correcting' },
+    }
+  }
   return states
 }
 

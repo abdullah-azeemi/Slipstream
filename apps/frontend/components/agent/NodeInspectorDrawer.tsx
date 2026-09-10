@@ -10,6 +10,7 @@ const STATE_META: Record<AgentNodeState, { label: string; className: string }> =
   running: { label: 'RUNNING', className: 'border-[#FFD700]/60 text-[#FFD700]' },
   done: { label: 'DONE', className: 'border-[#2CF4C5]/60 text-[#2CF4C5]' },
   error: { label: 'ERROR', className: 'border-[#E8002D]/60 text-[#E8002D]' },
+  self_correcting: { label: 'RETRYING', className: 'border-[#A855F7]/60 text-[#A855F7]' },
 }
 
 interface Props {

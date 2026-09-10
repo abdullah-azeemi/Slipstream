@@ -8,6 +8,7 @@ import json
 import structlog
 import urllib.error
 import urllib.request
+from collections.abc import Generator
 
 from backend.agent import types
 from backend.config import settings
@@ -87,23 +88,28 @@ def _estimate_cost(model: str, usage: dict) -> float:
     ) * output_price
 
 
-def _post(messages: list[dict], model: str, temperature: float) -> dict:
+def _post(
+    messages: list[dict],
+    model: str,
+    temperature: float,
+    response_format: str | None = None,
+) -> dict:
     """Low-level POST to OpenRouter. Returns the parsed JSON body."""
     api_key = settings.openrouter_api_key
     if not api_key:
         raise types.LLMError("OPENROUTER_API_KEY is not set")
 
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-    ).encode("utf-8")
+    body: dict = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if response_format == "json":
+        body["response_format"] = {"type": "json_object"}
 
     request = urllib.request.Request(
         f"{settings.openrouter_base_url}/chat/completions",
-        data=body,
+        data=json.dumps(body).encode("utf-8"),
         method="POST",
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -133,11 +139,17 @@ def _post(messages: list[dict], model: str, temperature: float) -> dict:
 
 
 def _chat(
-    messages: list[dict], model: str | None = None, temperature: float = 0.0
+    messages: list[dict],
+    model: str | None = None,
+    temperature: float = 0.0,
+    response_format: str | None = None,
 ) -> tuple[str, dict]:
     """One chat completion. Returns (text, usage_summary) and logs tokens/cost."""
     model = model or settings.openrouter_routing_model
-    payload = _post(messages, model, temperature)
+    if response_format:
+        payload = _post(messages, model, temperature, response_format)
+    else:
+        payload = _post(messages, model, temperature)
     try:
         text = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
@@ -382,3 +394,108 @@ def compose_answer(
     text, usage = _chat(messages, model=select_model(intent, complexity, requires_compute), temperature=0.2)
     cost = usage.get("cost_estimate_usd", 0.0)
     return validate_composition(text), cost
+
+
+def complete(
+    prompt: str,
+    system: str | None = None,
+    response_format: str | None = None,
+    model: str | None = None,
+    temperature: float = 0.0,
+) -> str:
+    """Single-shot completion used by the compute/critic nodes.
+
+    With ``response_format="json"`` the provider is asked to return a JSON
+    object (the caller still parses/validates it).
+    """
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    text, _ = _chat(
+        messages, model=model, temperature=temperature, response_format=response_format
+    )
+    return text.strip()
+
+
+def _stream_chunks(
+    messages: list[dict], model: str | None = None, temperature: float = 0.0
+) -> Generator[str, None, None]:
+    """Stream a chat completion over SSE, yielding incremental text deltas."""
+    model = model or settings.openrouter_routing_model
+    api_key = settings.openrouter_api_key
+    if not api_key:
+        raise types.LLMError("OPENROUTER_API_KEY is not set")
+
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+    ).encode("utf-8")
+
+    request = urllib.request.Request(
+        f"{settings.openrouter_base_url}/chat/completions",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://slipstream.local",
+            "X-Title": "Slipstream Agent",
+        },
+    )
+    if not circuit_breaker.breaker.allow_request():
+        raise types.LLMError("LLM provider temporarily unavailable (circuit open)")
+
+    usage: dict = {}
+    try:
+        with urllib.request.urlopen(
+            request, timeout=settings.openrouter_timeout_seconds
+        ) as response:
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[len("data:"):].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    obj = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("usage"):
+                    usage = obj["usage"]
+                try:
+                    delta = obj["choices"][0]["delta"].get("content")
+                except (KeyError, IndexError, TypeError):
+                    delta = None
+                if delta:
+                    yield delta
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+        circuit_breaker.breaker.record_failure()
+        raise types.LLMError(f"OpenRouter streaming call failed: {exc}") from exc
+
+    circuit_breaker.breaker.record_success()
+    log.info(
+        "agent.llm.stream",
+        model=model,
+        prompt_tokens=usage.get("prompt_tokens"),
+        completion_tokens=usage.get("completion_tokens"),
+    )
+
+
+def stream(
+    prompt: str,
+    system: str | None = None,
+    model: str | None = None,
+    temperature: float = 0.0,
+) -> Generator[str, None, None]:
+    """Stream a chat completion, yielding text deltas as they arrive."""
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    yield from _stream_chunks(messages, model=model, temperature=temperature)

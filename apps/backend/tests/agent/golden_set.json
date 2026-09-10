@@ -281,6 +281,24 @@
       "multi_intent": true,
       "expected_tools": ["resolve_session", "resolve_driver", "stint_degradation_scanner", "verify_evidence"],
       "min_evidence_fields": ["session_key", "driver_number", "stint_degradation"]
+    },
+    {
+      "question": "How does Hamilton's driving style compare to Verstappen's across the 2026 season?",
+      "expected_intent": "driver_style_comparison",
+      "expected_tools": ["driver_style_compare"],
+      "min_evidence_fields": ["driver_style"]
+    },
+    {
+      "question": "Which driver is more aggressive on the brakes, Hamilton or Leclerc?",
+      "expected_intent": "driver_style_comparison",
+      "expected_tools": ["driver_style_compare"],
+      "min_evidence_fields": ["driver_style"]
+    },
+    {
+      "question": "Compare the qualifying pace traits of Norris and Verstappen.",
+      "expected_intent": "driver_style_comparison",
+      "expected_tools": ["driver_style_compare"],
+      "min_evidence_fields": ["driver_style"]
     }
   ]
 }
