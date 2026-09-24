@@ -16,7 +16,6 @@ import os
 import subprocess
 from datetime import datetime, timezone
 
-import fastf1
 import structlog
 from sqlalchemy import create_engine, text
 from ingestion.config import settings
@@ -124,6 +123,8 @@ def purge_practice_sessions(engine, current_year: int, current_gp: str) -> int:
 
 def get_fastf1_schedule(year: int) -> list[dict]:
     """Fetch the F1 event schedule from FastF1."""
+    import fastf1  # heavy — lazy; this module is a long-lived process
+
     try:
         schedule = fastf1.get_event_schedule(year, include_testing=False)
         events = []

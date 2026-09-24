@@ -14,6 +14,10 @@ const NAV = [
 export default function BottomNav() {
   const pathname = usePathname()
 
+  if (pathname === '/' || pathname === '/dashboard') {
+    return null
+  }
+
   return (
     <nav className="bottom-nav-shell">
       <div className="bottom-nav-inner">

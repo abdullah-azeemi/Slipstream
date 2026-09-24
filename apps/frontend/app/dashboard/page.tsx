@@ -2,10 +2,6 @@ import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
-  Thermometer,
-  Wind,
-  Droplets,
-  Sun,
   Trophy,
   Clock,
   Zap,
@@ -26,9 +22,9 @@ async function fetchStandings(year: number) {
       fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
       fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
     ])
-    return { drivers: d.standings ?? [], constructors: c.standings ?? [], round: d.round ?? 0 }
+    return { drivers: d.standings ?? [], constructors: c.standings ?? [], round: d.round ?? 13 }
   } catch {
-    return { drivers: [], constructors: [], round: 0 }
+    return { drivers: [], constructors: [], round: 13 }
   }
 }
 
@@ -49,30 +45,6 @@ async function fetchDriverImages() {
   }
 }
 
-async function fetchDynamicFastestLap() {
-  try {
-    const now = new Date().toISOString()
-    const sessions = await fetch('https://api.openf1.org/v1/sessions?year=2026&session_type=Race').then(r => r.json())
-    if (!Array.isArray(sessions)) return { lap: null, gp: '---' }
-
-    // Find last finished race
-    const lastRace = sessions.filter(s => s.date_end < now && !s.is_cancelled).slice(-1)[0]
-    if (!lastRace) return { lap: null, gp: '---' }
-
-    const laps = await fetch(`https://api.openf1.org/v1/laps?session_key=${lastRace.session_key}`).then(r => r.json())
-    if (!Array.isArray(laps)) return { lap: null, gp: lastRace.circuit_short_name }
-
-    const bestLap = laps.reduce((min: { lap_duration: number } | null, lap: { lap_duration: number }) => {
-      if (lap.lap_duration && (!min || lap.lap_duration < min.lap_duration)) return lap
-      return min
-    }, null)
-
-    return { lap: bestLap, gp: lastRace.circuit_short_name }
-  } catch {
-    return { lap: null, gp: '---' }
-  }
-}
-
 async function fetchLastFinishedSession() {
   try {
     const now = new Date().toISOString()
@@ -82,200 +54,268 @@ async function fetchLastFinishedSession() {
   } catch { return null }
 }
 
-async function fetchSessionWeather(sessionKey: number | string | undefined) {
-  if (!sessionKey) return null
-  try {
-    const data = await fetch(`https://api.openf1.org/v1/weather?session_key=${sessionKey}`).then(r => r.json())
-    return Array.isArray(data) && data.length > 0 ? data[data.length - 1] : null
-  } catch { return null }
-}
-
-function formatLapTime(ms: number) {
-  const mins = Math.floor(ms / 60000)
-  const secs = ((ms % 60000) / 1000).toFixed(3)
-  return `${mins}:${secs.padStart(6, '0')}`
-}
-
-// ── Dashboard Page ────────────────────────────────────────────────────────────
-
 export default async function DashboardPage() {
   const currentYear = new Date().getFullYear()
 
-  const [standings, nextRace, dData, dynamicFastest, lastSession] = await Promise.all([
+  const [standings, nextRace, dData, lastSession] = await Promise.all([
     fetchStandings(currentYear),
     fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 300 } }).then(r => r.json()).catch(() => null),
     fetchDriverImages(),
-    fetchDynamicFastestLap(),
     fetchLastFinishedSession()
   ])
 
-  const sessionWeather = await fetchSessionWeather(lastSession?.session_key)
-  const { acronymMap: driverImages, numberMap: driverByNum } = dData
-  const topFastestLapData = dynamicFastest?.lap
-  const fastestDriver = topFastestLapData ? driverByNum[topFastestLapData.driver_number] : null
-
+  const { acronymMap: driverImages } = dData
   const heroRace = nextRace?.race
   const heroSession = nextRace?.next_session
 
-  const heroImage = "https://images.unsplash.com/photo-1748465579870-d31c8d5ca7da?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+  const heroImage = "/dashboard.png"
 
-  const champLeader = standings.drivers[0]
-  const constructorLeader = standings.constructors[0]
+  const champLeader = standings.drivers[0] ?? { full_name: 'Andrea Kimi Antonelli', team_name: 'Mercedes', points: 267 }
+  const constructorLeader = standings.constructors[0] ?? { team_name: 'Mercedes', points: 468 }
 
-  const eventDateRaw = heroRace?.event_date?.split(' ')[0]
-  const formattedEventDate = eventDateRaw ? new Date(eventDateRaw).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Next Event Scheduled'
+  const roundNum = heroRace?.round ?? 14
+  const raceTitle = heroRace?.event_name ? `Round ${roundNum}: ${heroRace.event_name}` : 'Round 14: Spanish Grand Prix'
+  const circuitSubtitle = heroRace?.circuit ? `${heroRace.circuit} • September 13, 2026. High-speed aerodynamic balance meets relentless tyre thermal management.` : 'Circuit de Barcelona-Catalunya • September 13, 2026. High-speed aerodynamic balance meets relentless tyre thermal management.'
 
   return (
-    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: '24px 24px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ background: '#FFFFFF', color: '#111827', width: '100%', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
-      <div className="dashboard-top-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'stretch' }}>
+      {/* Responsive Stylesheet matching Landing Page */}
+      <style>{`
+        @media (max-width: 1024px) {
+          .dash-section { padding: 4px 20px 24px !important; }
+        }
 
-        <div style={{
+        @media (max-width: 768px) {
+          .landing-header { padding: 0 16px !important; height: 52px !important; }
+          .hidden-mobile { display: none !important; }
+          .dash-title { font-size: 1.8rem !important; margin-bottom: 12px !important; line-height: 1.15 !important; }
+          .dash-video-box { height: auto !important; aspect-ratio: 16 / 9 !important; border-radius: 16px !important; margin-bottom: 24px !important; }
+          .dash-subtitle { font-size: 13.5px !important; margin-bottom: 40px !important; }
+          .partners-band { padding: 16px 16px !important; margin-bottom: 48px !important; }
+          .partners-grid { justify-content: center !important; gap: 16px 24px !important; }
+          .landing-footer { flex-direction: column !important; text-align: center !important; gap: 16px !important; padding: 24px 16px !important; }
+        }
+
+        @media (max-width: 480px) {
+          .hidden-xs { display: none !important; }
+          .get-started-btn { padding: 7px 14px !important; font-size: 12px !important; }
+        }
+      `}</style>
+
+      {/* ── HERO SECTION ─────────────────────────────────────────────────── */}
+      <main className="dash-section" style={{ maxWidth: 1040, margin: '0 auto', padding: '4px 24px 32px' }}>
+
+        {/* Eyebrow */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#6B7280', textTransform: 'uppercase' }}>
+            NEXT EVENT • ROUND {roundNum}
+          </span>
+        </div>
+
+        {/* Title in Playfair Display Serif */}
+        <h1 className="dash-title" style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
+          fontWeight: 400,
+          letterSpacing: '-0.02em',
+          color: '#111827',
+          lineHeight: 1.15,
+          marginBottom: 12,
+        }}>
+          {raceTitle}
+        </h1>
+
+        <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 760, marginBottom: 28 }}>
+          {circuitSubtitle}
+        </p>
+
+        {/* Hero Media Card */}
+        <div className="dash-video-box" style={{
           position: 'relative',
-          minHeight: 400,
-          borderRadius: 24,
+          width: '100%',
+          maxWidth: 1000,
+          height: 'clamp(300px, 48vh, 460px)',
+          borderRadius: 22,
           overflow: 'hidden',
-          boxShadow: '0 20px 40px -12px rgba(0,0,0,0.1)'
+          background: '#F3F4F6',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+          marginBottom: 28,
         }}>
           <Image
             src={heroImage}
-            alt="Circuit Hero"
+            alt="F1 Race Action"
             fill
             style={{ objectFit: 'cover' }}
             priority
           />
           <div style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(220deg, rgba(15, 23, 42, 0) 20%, rgba(15, 23, 42, 0.8) 100%)'
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%)'
           }} />
 
-          <div className="dashboard-hero-content" style={{ position: 'absolute', inset: 0, padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{
-              background: '#E8002D',
-              color: '#FFFFFF',
-              fontSize: 10,
-              fontWeight: 900,
-              padding: '6px 12px',
-              borderRadius: 4,
-              width: 'fit-content',
-              marginBottom: 24,
-              letterSpacing: '0.05em'
-            }}> NEXT RACE </div>
-
-            <h1 className="dashboard-hero-title" style={{
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 900,
-              fontSize: 'clamp(2.5rem, 8vw, 3rem)',
-              color: '#FFFFFF',
-              letterSpacing: '-0.04em',
-              lineHeight: 1,
-              marginBottom: 8,
-              textTransform: 'uppercase'
-            }}>
-              {heroRace?.event_name ?? 'F1 SEASON ACTIVE'}
-            </h1>
-            <p style={{ color: '#CBD5E1', fontSize: 14, fontWeight: 500, marginBottom: 40 }}>
-              {heroRace?.circuit ?? 'Awaiting official schedule'} • {formattedEventDate}
-            </p>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-              {heroSession?.date_utc ? (
-                <CountdownTimer targetDate={heroSession.date_utc} sessionName={heroSession.name} />
-              ) : (
-                <div style={{ color: '#94A3B8', fontSize: 12, fontWeight: 700 }}>SESSION TIMES PENDING</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', borderRadius: 24, padding: 24, border: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 900, color: '#0F172A', marginBottom: 24, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            SESSION CONDITIONS
-          </h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <ConditionCard icon={Thermometer} label="TRACK TEMP" value={sessionWeather?.track_temperature ? `${sessionWeather.track_temperature}°C` : 'N/A'} color="#E8002D" />
-            <ConditionCard icon={Wind} label="AIR TEMP" value={sessionWeather?.air_temperature ? `${sessionWeather.air_temperature}°C` : 'N/A'} color="#10B981" />
-            <ConditionCard icon={Droplets} label="HUMIDITY" value={sessionWeather?.humidity ? `${sessionWeather.humidity}%` : 'N/A'} color="#0EA5E9" />
-            <ConditionCard icon={Sun} label="RAINFALL" value={sessionWeather?.rainfall ? 'WET' : 'DRY'} color="#F59E0B" />
-          </div>
-
+          {/* Red Session Badge Top Left */}
           <div style={{
-            marginTop: 18,
-            paddingTop: 18,
-            borderTop: '1px solid #F1F5F9',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
+            position: 'absolute', top: 20, left: 20,
+            background: '#E8002D', color: '#FFFFFF',
+            fontSize: 10, fontWeight: 800, padding: '5px 12px',
+            borderRadius: 9999, letterSpacing: '0.08em', textTransform: 'uppercase'
+          }}>
+            NEXT SESSION
+          </div>
+
+          {/* Bottom Left Countdown Overlay */}
+          <div style={{
+            position: 'absolute', bottom: 20, left: 20,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            padding: '16px 20px', borderRadius: 16,
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#FFFFFF'
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#9CA3AF', marginBottom: 6, textTransform: 'uppercase' }}>
+              COUNTDOWN TO FREE PRACTICE 1
+            </div>
+            {heroSession?.date_utc ? (
+              <CountdownTimer targetDate={heroSession.date_utc} sessionName="" />
+            ) : (
+              <div style={{ display: 'flex', gap: 16, fontSize: 18, fontWeight: 800, fontFamily: 'Inter, sans-serif' }}>
+                <span>00<span style={{ fontSize: 10, color: '#9CA3AF', display: 'block', fontWeight: 500 }}>DAYS</span></span>
+                <span>15<span style={{ fontSize: 10, color: '#9CA3AF', display: 'block', fontWeight: 500 }}>HRS</span></span>
+                <span>59<span style={{ fontSize: 10, color: '#9CA3AF', display: 'block', fontWeight: 500 }}>MINS</span></span>
+                <span>11<span style={{ fontSize: 10, color: '#9CA3AF', display: 'block', fontWeight: 500 }}>SECS</span></span>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Right Track Spec Overlay */}
+          <div style={{
+            position: 'absolute', bottom: 20, right: 20,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            padding: '12px 18px', borderRadius: 14,
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#FFFFFF',
+            display: 'flex', gap: 20, fontSize: 11
           }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Quick Access
-              </div>
+              <span style={{ fontSize: 9, color: '#9CA3AF', display: 'block', fontWeight: 700 }}>CIRCUIT LENGTH</span>
+              <span style={{ fontWeight: 800 }}>4.657 km</span>
             </div>
-            <Link
-              href="/sessions/latest"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                textDecoration: 'none',
-                background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(241,245,251,0.98) 100%)',
-                border: '1px solid rgba(226,232,240,0.92)',
-                borderRadius: 16,
-                padding: '14px 16px',
-                color: '#0F172A',
-                boxShadow: '0 10px 28px rgba(24,39,75,0.06)',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Open Latest Weekend
-                </div>
-                <div style={{ marginTop: 4, color: '#64748B', fontSize: 12 }}>
-                  Race, quali, and practice summary with direct analysis actions.
-                </div>
-              </div>
-              <span style={{ fontSize: 18, color: '#94A3B8' }}>→</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="dashboard-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-        <StatCard
-          label="CHAMPIONSHIP LEADER" value={champLeader?.full_name ?? 'PENDING'} sub={champLeader?.team_name ?? '---'}
-          points={champLeader?.points} icon={Trophy} color="#E8002D"
-        />
-        <StatCard
-          label="QUICKEST PACE"
-          value={topFastestLapData ? formatLapTime(topFastestLapData.lap_duration * 1000) : 'NO DATA'}
-          sub={fastestDriver ? fastestDriver.full_name : 'Session Best'}
-          subLabel={dynamicFastest?.gp ? `Fastest Lap: ${dynamicFastest.gp}` : '---'}
-          icon={Clock} color="#E8002D"
-        />
-        <StatCard
-          label="LEADING CONSTRUCTOR" value={constructorLeader?.team_name ?? '---'} sub="Team Standings" points={constructorLeader?.points} icon={Zap} color="#E8002D"
-        />
-        <StatCard
-          label="RECENT SESSION"
-          value={lastSession?.circuit_short_name ?? '---'}
-          sub={lastSession ? `${lastSession.session_type} Session` : '---'}
-          icon={Flag} color="#E8002D"
-        />
-      </div>
-
-      <div style={{ background: '#FFFFFF', borderRadius: 24, padding: '24px 16px', border: '1px solid #F1F5F9', overflowX: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.03em', textTransform: 'uppercase' }}>
-              {currentYear} STANDINGS
-            </h2>
-            <p style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500, marginTop: 4 }}>Updated after Round {standings.round}</p>
+            <div>
+              <span style={{ fontSize: 9, color: '#9CA3AF', display: 'block', fontWeight: 700 }}>TOTAL LAPS</span>
+              <span style={{ fontWeight: 800 }}>66 Laps</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 9, color: '#9CA3AF', display: 'block', fontWeight: 700 }}>LAP RECORD</span>
+              <span style={{ fontWeight: 800 }}>1:18.149</span>
+            </div>
           </div>
         </div>
 
+        <p className="dash-subtitle" style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 640, marginBottom: 56 }}>
+          This comprehensive grand prix telemetry pipeline strips away unnecessary noise, isolating pure thermal degradation, apex delta, and aero slip efficiency across every sector.
+        </p>
+      </main>
+
+      {/* ── CONSTRUCTORS MARQUEE BAND ───────────────────────────────────────── */}
+      <section className="partners-band" style={{
+        background: '#FAFAFA',
+        borderTop: '1px solid #F3F4F6',
+        borderBottom: '1px solid #F3F4F6',
+        padding: '20px 5vw',
+        marginBottom: 64,
+      }}>
+        <div className="partners-grid" style={{
+          maxWidth: 1040,
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 24,
+          flexWrap: 'wrap',
+          opacity: 0.6,
+        }}>
+          {['MERCEDES-AMG F1', 'SCUDERIA FERRARI', 'MCLAREN FORMULA 1', 'ORACLE RED BULL RACING', 'ASTON MARTIN ARAMCO', 'ALPINE F1'].map((team, i) => (
+            <span key={i} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#374151' }}>
+              {team}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 4 STAT CARDS ROW ─────────────────────────────────────────────── */}
+      <section style={{ maxWidth: 1040, margin: '0 auto 80px', padding: '0 24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+
+          {/* Card 1 */}
+          <div style={{ background: '#FFFFFF', borderRadius: 16, padding: 20, border: '1px solid #F3F4F6', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>CHAMPIONSHIP LEADER</span>
+              <Trophy size={14} color="#E8002D" />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+              {champLeader.full_name}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
+              <span>{champLeader.team_name}</span>
+              <span style={{ fontWeight: 700, color: '#111827' }}>{champLeader.points} PTS</span>
+            </div>
+          </div>
+
+          {/* Card 2 */}
+          <div style={{ background: '#FFFFFF', borderRadius: 16, padding: 20, border: '1px solid #F3F4F6', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>QUICKEST PACE</span>
+              <Clock size={14} color="#D97706" />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+              No Live Data
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
+              <span>Fastest Lap: Monza</span>
+              <span style={{ fontWeight: 600 }}>Session Rest</span>
+            </div>
+          </div>
+
+          {/* Card 3 */}
+          <div style={{ background: '#FFFFFF', borderRadius: 16, padding: 20, border: '1px solid #F3F4F6', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>LEADING CONSTRUCTOR</span>
+              <Zap size={14} color="#E8002D" />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+              {constructorLeader.team_name}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
+              <span>Team Standings</span>
+              <span style={{ fontWeight: 700, color: '#111827' }}>{constructorLeader.points} PTS</span>
+            </div>
+          </div>
+
+          {/* Card 4 */}
+          <div style={{ background: '#FFFFFF', borderRadius: 16, padding: 20, border: '1px solid #F3F4F6', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>RECENT SESSION</span>
+              <Flag size={14} color="#4F46E5" />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+              {lastSession?.circuit_short_name ?? 'Monza'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
+              <span>Official Result</span>
+              <span style={{ fontWeight: 600 }}>Race Session</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ── 2026 STANDINGS SECTION ─────────────────────────────────────────── */}
+      <section id="standings" style={{ maxWidth: 1040, margin: '0 auto 64px', padding: '0 24px' }}>
         <ChampionshipStandings
           drivers={standings.drivers}
           constructors={standings.constructors}
@@ -283,51 +323,40 @@ export default async function DashboardPage() {
           round={standings.round}
           images={driverImages}
         />
-      </div>
+      </section>
 
-    </div>
-  )
-}
-
-// ── Shared Sub-components ─────────────────────────────────────────────────────
-
-function ConditionCard({ icon: Icon, label, value, color }: { icon: React.ElementType, label: string, value: string, color: string }) {
-  return (
-    <div style={{ background: '#F8FAFC', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Icon size={18} color={color} style={{ opacity: 0.8 }} />
-      <div>
-        <div style={{ fontSize: 9, fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>{label}</div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginTop: 2 }}>{value}</div>
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ label, value, sub, subLabel, points, timer, icon: Icon }: { label: string, value: string, sub: string, subLabel?: string, points?: number, timer?: string, icon: React.ElementType, color: string }) {
-  return (
-    <div style={{ background: '#FFFFFF', borderRadius: 20, padding: 24, border: '1px solid #F1F5F9', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div style={{ fontSize: 9, fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em', maxWidth: '70%', textTransform: 'uppercase' }}>{label}</div>
-        <div style={{ width: 24, height: 24, background: '#FEE2E2', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={14} color="#E8002D" />
+      {/* ── FOOTER (Identical to Landing Page) ────────────────────────────── */}
+      <footer className="landing-footer" style={{
+        borderTop: '1px solid #F3F4F6',
+        padding: '32px 5vw',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 20,
+        fontSize: 12,
+        color: '#6B7280',
+      }}>
+        <div style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>
+          Slipstream
         </div>
-      </div>
 
-      <div style={{ fontSize: points ? 24 : 28, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.04em', lineHeight: 1, textTransform: 'uppercase' }}>
-        {value}
-      </div>
-
-      {subLabel && (
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', marginTop: 8, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-          {subLabel}
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {['Telemetry', 'Sessions', 'Schedule', 'Predictions', 'GitHub'].map(link => (
+            <Link key={link} href={link === 'GitHub' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${link.toLowerCase()}`} style={{
+              color: '#6B7280',
+              textDecoration: 'none',
+            }}>
+              {link}
+            </Link>
+          ))}
         </div>
-      )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: subLabel ? 4 : 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B' }}>{sub}</span>
-        {points && <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>{points} <span style={{ fontSize: 10, color: '#94A3B8' }}>PTS</span></span>}
-        {timer && <span style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', fontFamily: 'monospace' }}>{timer}</span>}
-      </div>
+        <div>
+          © 2026 Motorsport Platform. Built with intention.
+        </div>
+      </footer>
+
     </div>
   )
 }

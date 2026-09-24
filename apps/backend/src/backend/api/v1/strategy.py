@@ -101,3 +101,39 @@ def race_strategy(session_key: int):
         stints.append(d)
 
     return jsonify({"total_laps": total_laps, "stints": stints})
+
+
+@strategy_bp.get("/sessions/<int:session_key>/race-order")
+def race_order(session_key: int):
+    """Final race classification — last recorded position per driver."""
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            WITH final_pos AS (
+                SELECT DISTINCT ON (driver_number)
+                    driver_number, position
+                FROM lap_times
+                WHERE session_key = :sk
+                  AND position IS NOT NULL
+                  AND deleted    = FALSE
+                ORDER BY driver_number, lap_number DESC
+            )
+            SELECT
+                fp.driver_number,
+                d.abbreviation,
+                d.team_name,
+                d.team_colour,
+                fp.position
+            FROM final_pos fp
+            JOIN drivers d
+                ON d.driver_number = fp.driver_number
+                AND d.session_key  = :sk
+            ORDER BY fp.position ASC NULLS LAST
+        """), {"sk": session_key}).mappings().all()
+
+    order = []
+    for r in rows:
+        d = dict(r)
+        d["team_colour"] = _resolve(d.get("team_colour"), d.get("team_name"))
+        order.append(d)
+
+    return jsonify(order)

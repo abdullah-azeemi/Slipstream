@@ -5,9 +5,13 @@ FastF1 client — fetches and normalises session data.
 from __future__ import annotations
 import math
 import warnings
-import fastf1
+from typing import TYPE_CHECKING
+
 import pandas as pd
 import structlog
+
+if TYPE_CHECKING:
+    import fastf1
 
 warnings.filterwarnings("ignore")
 log = structlog.get_logger()
@@ -49,6 +53,8 @@ def _segment_quali_laps(laps):
 
 
 def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
+    import fastf1  # heavy — pulled in lazily; ingestion workers only
+
     fastf1.Cache.enable_cache("./fastf1_cache")
     session = fastf1.get_session(year, gp, session_type)
     load_weather = True

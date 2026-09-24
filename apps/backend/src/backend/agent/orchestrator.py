@@ -14,6 +14,7 @@ from typing import Any, Callable
 from backend.agent import circuit_breaker, context as agent_context, memory
 from backend.agent import llm, tools, types
 from backend.config import settings
+from backend.agent.nodes import compute_node, critic_node, synthesis_node
 
 ProgressCallback = Callable[[dict], None]
 
@@ -46,7 +47,6 @@ _TOOLS: dict[types.ToolName, Callable] = {
 }
 _MAX_WORKERS = 4
 MAX_DAG_NODES = 8
-MAX_RETRIES = 3
 
 
 _BINDERS: dict[types.ToolName, Callable[[dict, dict], Any]] = {}
@@ -693,179 +693,6 @@ def _execute_dag(
     return tuple(trace), env, failed_ids
 
 
-def _serialise_evidence_as_csv(env: dict) -> str:
-    """Convert numeric telemetry in env into a CSV string for ComputeNode."""
-    import csv
-    import io
-
-    rows: list[dict] = []
-    telemetry = env.get("telemetry")
-    if telemetry is not None:
-        for trace in getattr(telemetry, "traces", ()):
-            samples = trace.samples
-            avg_speed = (
-                round(sum(s.speed_kmh for s in samples) / len(samples), 1)
-                if samples
-                else ""
-            )
-            rows.append(
-                {
-                    "lap": trace.lap_number,
-                    "driver": trace.driver_abbreviation,
-                    "avg_speed_kmh": avg_speed,
-                }
-            )
-    laps = env.get("laps")
-    if laps is not None:
-        for ev in getattr(laps, "events", ()):
-            rows.append(
-                {
-                    "lap": ev.lap_number,
-                    "time_ms": ev.lap_time_ms,
-                    "compound": ev.compound,
-                }
-            )
-    stints = env.get("stints")
-    if stints is not None:
-        for stint in getattr(stints, "stints", ()):
-            for point in getattr(stint, "laps", ()):
-                rows.append(
-                    {
-                        "lap": point.lap_number,
-                        "time_ms": point.lap_time_ms,
-                        "tyre_age": point.tyre_age,
-                    }
-                )
-    if not rows:
-        return ""
-    buf = io.StringIO()
-    fieldnames = list(dict.fromkeys(k for row in rows for k in row.keys()))
-    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(rows)
-    return buf.getvalue()
-
-
-def _serialise_evidence_as_text(env: dict) -> str:
-    """Produce a plain-text summary of all tool outputs for SynthesisNode."""
-    lines = []
-    for key, val in env.items():
-        if key in ("routed", "session", "driver") or val is None:
-            continue
-        if hasattr(val, "__dataclass_fields__"):
-            text = str(asdict(val))
-        else:
-            text = str(val)
-        lines.append(f"[{key}]: {text[:800]}")
-    return "\n".join(lines)
-
-
-def _synthesize(
-    question: str,
-    routed: types.RoutedQuestion,
-    outputs: dict[str, Any],
-    progress: ProgressCallback | None = None,
-) -> str | None:
-    """Compute -> Critic -> Synthesis pipeline. Returns the final Markdown
-    answer, or None if the LLM is unavailable so the caller keeps the
-    already-composed fallback (fail-closed)."""
-    from backend.agent.nodes import compute_node, critic_node, synthesis_node
-
-    try:
-        compute_result: str | None = None
-        if routed.requires_compute:
-            _emit(
-                progress,
-                type="node_start",
-                tool="compute_node",
-                node_id="compute_node",
-                label="Compute Analysis",
-            )
-            data_csv = _serialise_evidence_as_csv(outputs)
-            compute_inp = compute_node.ComputeInput(query=question, data_csv=data_csv)
-
-            for attempt in range(MAX_RETRIES):
-                out = compute_node.run(compute_inp)
-                if not out.success:
-                    break  # Script failed to execute; skip critic
-
-                _emit(
-                    progress,
-                    type="node_start",
-                    tool="critic_node",
-                    node_id="critic_node",
-                    label="Validate Result",
-                )
-                eval_result = critic_node.run(
-                    critic_node.CriticInput(
-                        user_query=question, compute_result=out.result
-                    )
-                )
-
-                if eval_result.is_logically_sound:
-                    compute_result = out.result
-                    _emit(
-                        progress,
-                        type="node_complete",
-                        node_id="critic_node",
-                        status="ok",
-                        label="Validated",
-                    )
-                    break
-
-                _emit(
-                    progress,
-                    type="self_correcting",
-                    tool="compute_node",
-                    node_id="compute_node",
-                    attempt=attempt + 1,
-                    label="Retrying compute",
-                )
-                compute_inp = compute_node.ComputeInput(
-                    query=question,
-                    data_csv=data_csv,
-                    error_feedback=eval_result.error_feedback or "",
-                )
-
-            _emit(
-                progress,
-                type="node_complete",
-                node_id="compute_node",
-                status="ok" if compute_result is not None else "error",
-                label="Compute finished",
-            )
-
-        _emit(
-            progress,
-            type="node_start",
-            tool="synthesizer",
-            node_id="synthesizer",
-            label="Synthesizing answer",
-        )
-        synth_inp = synthesis_node.SynthesisInput(
-            user_query=question,
-            tool_evidence=_serialise_evidence_as_text(outputs),
-            compute_result=compute_result,
-        )
-        chunks: list[str] = []
-        for chunk in synthesis_node.stream(synth_inp):
-            _emit(progress, type="synthesis_chunk", chunk=chunk)
-            chunks.append(chunk)
-        final_synthesis = "".join(chunks).strip()
-        _emit(
-            progress,
-            type="node_complete",
-            node_id="synthesizer",
-            status="ok",
-            label="Answer synthesized",
-        )
-        return final_synthesis or None
-    except types.LLMError:
-        return None
-    except Exception:
-        return None
-
-
 def _compose(
     question: str,
     routed: types.RoutedQuestion,
@@ -1284,16 +1111,11 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
                 refusal="missing_compare_driver",
             )
         
+    env: dict | None = None
     if settings.agent_planner_mode == "llm":
         env = _run_agentic(question, routed, progress, memory_snippets=memory_snippets)
         if env is not None:
-            answer = _compose_agentic(
-                question, routed, env, progress, memory_snippets=memory_snippets
-            )
-            final_md = _synthesize(question, routed, env, progress)
-            if final_md and not answer.refusals:
-                answer = replace(answer, answer=final_md)
-            return answer
+            return _compose_agentic(question, routed, env, progress, memory_snippets=memory_snippets)
         
     try:
         dag = build_dag(routed)
@@ -1315,12 +1137,132 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
     )
 
     trace, outputs, failed_ids = _execute_dag(dag, routed, progress)
+
+    if env is None:
+        env = outputs
+
     answer = _compose(question, routed, outputs, failed_ids, trace, progress)
-    final_md = _synthesize(question, routed, outputs, progress)
-    if final_md and not answer.refusals:
-        answer = replace(answer, answer=final_md)
+
+    MAX_RETRIES = 3
+    compute_result: str | None = None
+
+    if routed.requires_compute:
+        _emit(progress, event="node_start", tool="compute_node")
+        data_csv = _serialise_evidence_as_csv(env)
+        compute_inp = compute_node.ComputeInput(query=question, data_csv=data_csv)
+
+        for attempt in range(MAX_RETRIES):
+            out = compute_node.run(compute_inp)
+            if not out.success:
+                break  
+
+            _emit(progress, event="node_start", tool="critic_node")
+            eval_result = critic_node.run(critic_node.CriticInput(user_query=question, compute_result=out.result))
+
+            if eval_result.is_logically_sound:
+                compute_result = out.result
+                _emit(progress, event="node_done", tool="critic_node")
+                break
+
+            _emit(progress, event="self_correcting", tool="compute_node", attempt=attempt + 1)
+            compute_inp = compute_node.ComputeInput(
+                query=question,
+                data_csv=data_csv,
+                error_feedback=eval_result.error_feedback or "",
+            )
+
+        _emit(progress, event="node_done", tool="compute_node")
+
+    _emit(progress, event="node_start", tool="synthesizer")
+    try:
+        synth_inp = synthesis_node.SynthesisInput(
+            user_query=question,
+            tool_evidence=_serialise_evidence_as_text(env),
+            compute_result=compute_result,
+        )
+        synthesis_chunks: list[str] = []
+        for chunk in synthesis_node.stream(synth_inp):
+            _emit(progress, event="synthesis_chunk", chunk=chunk)
+            synthesis_chunks.append(chunk)
+        final_synthesis = "".join(synthesis_chunks).strip()
+        if final_synthesis:
+            answer = replace(answer, answer=final_synthesis)
+    except types.LLMError:
+        pass
+    except Exception:
+        pass
+    finally:
+        _emit(progress, event="node_done", tool="synthesizer")
+
     return replace(
         answer,
         cost_usd=round(routing_cost + answer.cost_usd, 6),
         routing_context=agent_context.routed_to_context(routed),
     )
+
+
+def _serialise_evidence_as_csv(env: dict) -> str:
+    """Convert numeric telemetry in env into a CSV string for ComputeNode."""
+    import csv
+    import io
+
+    rows: list[dict] = []
+    telemetry = env.get("telemetry")
+    if telemetry is not None:
+        for trace in getattr(telemetry, "traces", ()):
+            samples = trace.samples
+            avg_speed = (
+                round(sum(s.speed_kmh for s in samples) / len(samples), 1)
+                if samples
+                else ""
+            )
+            rows.append(
+                {
+                    "lap": trace.lap_number,
+                    "driver": trace.driver_abbreviation,
+                    "avg_speed_kmh": avg_speed,
+                }
+            )
+    laps = env.get("laps")
+    if laps is not None:
+        for ev in getattr(laps, "events", ()):
+            rows.append(
+                {
+                    "lap": ev.lap_number,
+                    "time_ms": ev.lap_time_ms,
+                    "compound": ev.compound,
+                }
+            )
+    stints = env.get("stints")
+    if stints is not None:
+        for stint in getattr(stints, "stints", ()):
+            for point in getattr(stint, "laps", ()):
+                rows.append(
+                    {
+                        "lap": point.lap_number,
+                        "time_ms": point.lap_time_ms,
+                        "tyre_age": point.tyre_age,
+                    }
+                )
+    if not rows:
+        return ""
+    buf = io.StringIO()
+    fieldnames = list(dict.fromkeys(k for row in rows for k in row.keys()))
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue()
+
+
+def _serialise_evidence_as_text(env: dict) -> str:
+    """Produce a plain-text summary of all tool outputs for SynthesisNode."""
+    lines = []
+    for key, val in env.items():
+        if key in ("routed", "session", "driver") or val is None:
+            continue
+        if hasattr(val, "__dataclass_fields__"):
+            text = str(asdict(val))
+        else:
+            text = str(val)
+        lines.append(f"[{key}]: {text[:800]}")
+    return "\n".join(lines)

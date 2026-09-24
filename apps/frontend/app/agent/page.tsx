@@ -4,6 +4,7 @@ import { useAuth, UserButton } from '@clerk/nextjs'
 import {
   Bot,
   Braces,
+  Check,
   ChevronRight,
   CircuitBoard,
   Clock3,
@@ -21,10 +22,17 @@ import {
   Zap,
   CircleHelp,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  Search,
+  Flame,
+  ChevronDown,
+  Download,
+  Mic,
+  ArrowRight,
+  Map,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type React from 'react'
+import React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -173,6 +181,7 @@ export default function AgentPage() {
   const [feedbackStats, setFeedbackStats] = useState<FeedbackStats | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [canvasPhase, setCanvasPhase] = useState<CanvasPhase>('idle')
+  const [canvasTurnId, setCanvasTurnId] = useState<number | null>(null)
   const [animationIndex, setAnimationIndex] = useState<Record<string, number>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const dissolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -186,17 +195,23 @@ export default function AgentPage() {
     () => [...turns].reverse().find((turn) => turn.nodes.length > 0) ?? null,
     [turns]
   )
+  const canvasTurn = useMemo(
+    () =>
+      (canvasTurnId !== null ? turns.find((turn) => turn.id === canvasTurnId) : null) ??
+      (loadingQuestion
+        ? [...turns].reverse().find((turn) => turn.question === loadingQuestion)
+        : null) ??
+      latestDagTurn,
+    [canvasTurnId, latestDagTurn, loadingQuestion, turns]
+  )
   const selectedNodeView = useMemo<NodeInspectorView | null>(() => {
-    if (!selectedNodeId) return null
-    for (const turn of [...turns].reverse()) {
-      const node = turn.nodes.find((n) => n.id === selectedNodeId)
-      if (!node) continue
-      const info = turn.nodeStates[selectedNodeId] ?? { state: 'idle' }
-      const call = turn.reply?.trace.find((t) => t.node_id === selectedNodeId) ?? null
-      return buildNodeInspectorView(node, info, call)
-    }
-    return null
-  }, [turns, selectedNodeId])
+    if (!selectedNodeId || !canvasTurn) return null
+    const node = canvasTurn.nodes.find((item) => item.id === selectedNodeId)
+    if (!node) return null
+    const info = canvasTurn.nodeStates[selectedNodeId] ?? { state: 'idle' }
+    const call = canvasTurn.reply?.trace.find((item) => item.node_id === selectedNodeId) ?? null
+    return buildNodeInspectorView(node, info, call)
+  }, [canvasTurn, selectedNodeId])
   const successfulRuns = turns.filter((turn) => turn.reply && !turn.reply.refusals.length).length
   const refusedRuns = turns.filter((turn) => turn.reply?.refusals.length).length
   const traceCount = latestReply?.trace.length ?? 0
@@ -209,8 +224,8 @@ export default function AgentPage() {
     canvasPhase === 'running' || canvasPhase === 'completing' || canvasPhase === 'expanded'
 
   // The active question/intent for passing to the canvas root node
-  const activeQuestion = loadingQuestion ?? latestDagTurn?.question ?? ''
-  const activeIntent = latestDagTurn?.reply?.intent ?? ''
+  const activeQuestion = canvasTurn?.question ?? loadingQuestion ?? ''
+  const activeIntent = canvasTurn?.reply?.intent ?? ''
 
   // Auto-scroll chat to bottom when new content arrives
   useEffect(() => {
@@ -269,6 +284,8 @@ export default function AgentPage() {
       setTurns(loaded)
       setConversationId(convId)
       setCanvasPhase('idle')
+      setCanvasTurnId(null)
+      setSelectedNodeId(null)
       if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
     } catch {
       // Silently fail
@@ -281,6 +298,7 @@ export default function AgentPage() {
     setTurns([])
     setConversationId(null)
     setCanvasPhase('idle')
+    setCanvasTurnId(null)
     setSelectedNodeId(null)
     setSidebarOpen(false)
     if (dissolveTimer.current) clearTimeout(dissolveTimer.current)
@@ -294,6 +312,8 @@ export default function AgentPage() {
     const id = Date.now()
     setLoadingQuestion(trimmed)
     setQuestion('')
+    setSelectedNodeId(null)
+    setCanvasTurnId(id)
     setTurns((current) => [...current, { id, question: trimmed, reply: null, error: null, progress: [], nodes: [], edges: [], nodeStates: {}, rating: null }])
     setCanvasPhase('running')
 
@@ -439,161 +459,84 @@ export default function AgentPage() {
 
   // ── Sidebar content (shared between desktop and mobile drawer) ──────────────
   const SidebarContent = (
-    <div className="flex h-full flex-col overflow-y-auto">
-      {/* Agent core card */}
-      <div className="p-4">
-        <div className="border border-slate-200 bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-slate-300 bg-white">
-              <Bot className="h-5 w-5 text-rose-500" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-extrabold uppercase tracking-[0.08em] text-slate-700">
-                Agent Core
-              </div>
-              <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600">
-                v1.0.14 stable
-              </div>
-            </div>
+    <div className="flex h-full flex-col bg-white">
+      {/* Top logo */}
+      <div className="p-6 flex items-center gap-4 border-b border-slate-100">
+        <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold text-sm">S</div>
+        <div>
+          <div className="text-[13px] font-extrabold tracking-[0.1em] text-black flex items-center gap-2">
+            SLIPSTREAM <span className="text-[8px] font-bold px-1.5 py-0.5 border border-slate-200 rounded text-slate-500">PRO</span>
           </div>
-          <button
-            onClick={() => { fillSuggestion(SUGGESTED_QUESTIONS[2]); setSidebarOpen(false) }}
-            className="mt-4 flex w-full items-center justify-center gap-2 bg-rose-600 px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-white transition hover:bg-rose-500"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Prime Query
-          </button>
+          <div className="text-[9px] text-slate-400 font-bold tracking-[0.15em] mt-0.5">TELEMETRY AGENT V2.4</div>
+        </div>
+      </div>
+
+      <div className="px-5 pt-6 pb-4">
+        <button className="w-full bg-[#1A1A1A] text-white rounded-lg flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-black transition-colors" onClick={newConversation}>
+          <div className="flex items-center gap-2 text-xs font-semibold"><Plus className="w-4 h-4 text-rose-500" /> New Pit Wall Inquiry</div>
+          <div className="text-[10px] text-slate-400 font-mono bg-white/10 px-1.5 py-0.5 rounded">⌘N</div>
+        </button>
+      </div>
+
+      <div className="px-5 pb-6">
+        <div className="relative">
+          <input type="text" placeholder="Search telemetries & logs..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 placeholder-slate-400 focus:outline-none focus:border-rose-400" />
+          <div className="absolute left-3 top-2.5"><Search className="w-4 h-4 text-slate-400" /></div>
+          <div className="absolute right-3 top-2.5"><div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">⌘K</div></div>
+        </div>
+      </div>
+
+      <div className="px-3 space-y-1">
+        <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-rose-50/50 text-rose-600 font-semibold text-xs border border-rose-100/50">
+          <div className="flex items-center gap-2"><Zap className="w-4 h-4" /> Live Strategy Orchestrator</div>
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2.5 text-slate-500 font-medium text-xs hover:bg-slate-50 rounded-lg cursor-pointer">
+          <History className="w-4 h-4 text-slate-400" /> Historical FIA Archive
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2.5 text-slate-500 font-medium text-xs hover:bg-slate-50 rounded-lg cursor-pointer">
+          <ShieldCheck className="w-4 h-4 text-slate-400" /> Deterministic Evidence Gate
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6 mt-2">
+        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Today's Sessions</div>
+        <div className="space-y-1 mb-8">
+           <div className="text-xs text-black font-semibold px-2 py-1.5 bg-rose-50/50 border border-rose-100/50 rounded flex items-center gap-2 cursor-pointer"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Sainz pit telemetry · Monaco 2026</div>
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Hamilton vs Russell S2 delta</div>
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Silverstone crossover lap 32 forecast</div>
+        </div>
+        
+        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Yesterday</div>
+        <div className="space-y-1 mb-8">
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Leclerc apex speed comparison T3</div>
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Red Bull front wing aero wake balance</div>
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Verstappen pit stop stationary vs in-lap</div>
         </div>
 
-        {/* Session stats */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <MiniMetric label="runs" value={String(turns.length)} />
-          <MiniMetric label="ok" value={String(successfulRuns)} tone="green" />
-          <MiniMetric label="refused" value={String(refusedRuns)} tone="amber" />
-          <MiniMetric label="tools" value={String(traceCount)} tone="red" />
+        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Prior Grands Prix</div>
+        <div className="space-y-1 mb-8">
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Miami DRS train degradation model</div>
+           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Spa-Francorchamps Eau Rouge vMin</div>
         </div>
+      </div>
 
-        {/* Usage + feedback compact row */}
-        {(usage || feedbackStats) && (
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            {usage && (
-              <MiniMetric
-                label="remaining"
-                value={`${usage.remaining}/${usage.limit}`}
-                tone={usage.remaining <= 2 ? 'red' : 'green'}
-              />
-            )}
-            {feedbackStats && (
-              <MiniMetric
-                label="runtime"
-                value={totalTraceMs ? `${totalTraceMs}ms` : 'idle'}
-                tone={totalTraceMs ? 'green' : 'slate'}
-              />
-            )}
-          </div>
-        )}
-
-        {/* System modules */}
-        <div className="mt-5 space-y-2">
-          {SYSTEM_MODULES.map(([label, Icon, hot]) => (
-            <div
-              key={label}
-              className="flex items-center justify-between border border-slate-200 bg-white px-3 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <Icon className={`h-3.5 w-3.5 ${hot ? 'text-rose-500' : 'text-slate-400'}`} />
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-slate-500">
-                  {label}
-                </span>
-              </div>
-              <span className={`h-1.5 w-1.5 rounded-full ${hot ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+      <div className="p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+         <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center text-white text-[10px] font-bold">CS</div>
+            <div>
+               <div className="text-xs font-bold text-black">Chief Strategist</div>
+               <div className="text-[10px] text-slate-400 font-mono mt-0.5">Telemetry Unit 01</div>
             </div>
-          ))}
-        </div>
-
-        {/* Admin stats (compact) */}
-        {adminStats && (
-          <div className="mt-4 grid grid-cols-2 gap-3 border border-slate-200 bg-slate-50 p-3">
-            <div className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 col-span-2 mb-1">
-              Admin · Today
-            </div>
-            <MiniMetric label="cost" value={`$${adminStats.total_cost_usd.toFixed(4)}`} tone={adminStats.total_cost_usd > 1 ? 'red' : 'green'} />
-            <MiniMetric label="completed" value={String(adminStats.completed)} tone="green" />
-          </div>
-        )}
-
-        {/* Conversation history */}
-        <div className="mt-5">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-slate-500">
-              <History className="h-3 w-3 text-rose-500" />
-              History
-            </div>
-            <button
-              onClick={newConversation}
-              className="flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-500 hover:border-rose-300 hover:text-rose-600 transition-colors"
-              title="New conversation"
-            >
-              <Plus className="h-3 w-3" />
-              New
-            </button>
-          </div>
-
-          {loadingHistory && (
-            <div className="flex items-center gap-2 p-2 text-[10px] text-slate-400">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading...
-            </div>
-          )}
-
-          {!loadingHistory && conversations.length === 0 && (
-            <div className="p-2 text-[10px] text-slate-400">No conversations yet</div>
-          )}
-
-          <div className="space-y-1 max-h-52 overflow-y-auto">
-            {conversations.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => loadConversation(conv.id)}
-                className={`w-full text-left border px-2.5 py-2 transition-colors ${
-                  conversationId === conv.id
-                    ? 'border-rose-300 bg-rose-50 text-rose-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                <div className="text-[11px] font-semibold truncate">
-                  {conv.title || 'Untitled'}
-                </div>
-                <div className="mt-0.5 text-[9px] text-slate-400">
-                  {conv.message_count} messages
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Next build targets */}
-        <div className="mt-5 border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-            <Clock3 className="h-3.5 w-3.5 text-rose-500" />
-            Next targets
-          </div>
-          <div className="mt-3 space-y-2">
-            {['Open research intent', 'Streaming telemetry'].map((item) => (
-              <div key={item} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
+         </div>
+         <Radio className="w-4 h-4 text-slate-300" />
       </div>
     </div>
   )
 
   return (
-    <div className="agent-page-root bg-[#f7f8fb] bg-[linear-gradient(#e7eaf0_1px,transparent_1px),linear-gradient(90deg,#e7eaf0_1px,transparent_1px)] bg-[size:18px_18px] text-slate-900">
-
+    <div className="agent-page-root flex h-screen w-full bg-[#FDFDFD] text-slate-900 font-sans overflow-hidden">
+      
       {/* ── Mobile sidebar drawer overlay ──────────── */}
       {sidebarOpen && (
         <div
@@ -606,357 +549,291 @@ export default function AgentPage() {
           sidebarOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
         }`}
       >
-        <div className="flex min-h-9 items-center justify-between border-b border-slate-200 bg-slate-100/80 px-3">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-rose-500">Orchestrator_v1</div>
-            <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500">Analysis</div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
-            <X className="h-4 w-4" />
-          </button>
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+           <div className="text-xs font-bold">Menu</div>
+           <button onClick={() => setSidebarOpen(false)} className="p-1"><X className="w-4 h-4" /></button>
         </div>
         {SidebarContent}
       </aside>
 
-      {/* ── Main 2-col grid ────────────────────────── */}
-      <div className="agent-grid mx-auto">
+      {/* ── Main 2-col layout ────────────────────────── */}
+      
+      {/* ── Left sidebar (desktop only) ───────────── */}
+      <aside className="hidden sm:flex flex-col w-[280px] shrink-0 border-r border-slate-200 bg-white shadow-[10px_0_40px_rgba(0,0,0,0.02)] z-10">
+        {SidebarContent}
+      </aside>
 
-        {/* ── Left sidebar (desktop only) ───────────── */}
-        <aside className="agent-sidebar hidden sm:flex flex-col border-r border-slate-200 bg-white/90 shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur overflow-hidden">
-          <PanelHeader
-            eyebrow="Orchestrator_v1"
-            title="Analysis"
-            action={<UserButton appearance={{ elements: { avatarBox: 'h-7 w-7' } }} />}
-          />
-          {SidebarContent}
-        </aside>
+      {/* ── Center panel (chat) ──────────── */}
+      <section className="flex flex-col flex-1 bg-[#FAFAFA] min-w-0 h-full relative">
+        
+        {/* Topbar */}
+        <div className="h-16 px-8 border-b border-slate-100 flex items-center justify-between bg-white shrink-0 absolute top-0 left-0 right-0 z-20">
+           <div className="flex items-center gap-6">
+              <button onClick={() => setSidebarOpen(true)} className="sm:hidden p-1 -ml-2"><Menu className="w-5 h-5 text-slate-500" /></button>
+              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.1em] text-black">
+                 <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
+                 STRATEGY_BOT // ACTIVE SESSION
+              </div>
+              <div className="w-px h-4 bg-slate-200 hidden sm:block"></div>
+              <div className="text-xs text-slate-500 font-medium hidden sm:block">2026 Monaco Grand Prix</div>
+           </div>
+           <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50/50">
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                 FIA Feed 12ms
+              </div>
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white shadow-sm">
+                 <Database className="w-3.5 h-3.5 text-rose-500" />
+                 Telemetry Hybrid Engine v2.4
+                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-1" />
+              </div>
+              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-50 shadow-sm transition-colors">
+                 <Download className="w-3.5 h-3.5" />
+                 <span className="hidden sm:inline">Export Stint Data</span>
+              </button>
+           </div>
+        </div>
 
-        {/* ── Center panel (chat + canvas) ──────────── */}
-        <section className="agent-center flex flex-col overflow-hidden border-x border-slate-200 bg-white/82 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+        {/* Scrollable Area */}
+        <div className="flex-1 overflow-y-auto pt-16 pb-32 scroll-smooth" ref={chatScrollRef}>
+            
+            {/* Idle State */}
+            {turns.length === 0 && !loadingQuestion && (
+              <div className="flex flex-col items-center justify-center min-h-full p-8 max-w-4xl mx-auto w-full pt-20">
+                 <div className="w-24 h-24 mb-10 rounded-full bg-rose-50/50 flex items-center justify-center relative">
+                    <div className="absolute inset-0 rounded-full bg-rose-100/30 blur-xl"></div>
+                    <div className="absolute inset-2 rounded-full border border-rose-200/50 shadow-[0_0_30px_rgba(244,63,94,0.2)]"></div>
+                    <Flame className="w-8 h-8 text-rose-500 relative z-10" strokeWidth={1.5} />
+                 </div>
+                 
+                 <h1 className="text-[44px] text-center mb-5 text-black tracking-tight leading-tight">
+                    <span className="font-serif text-slate-700">Hello, </span>
+                    <span className="font-serif italic text-slate-800">Chief Strategist</span>
+                    <br />
+                    <span className="font-medium text-slate-900">How can the pit wall assist you today?</span>
+                 </h1>
+                 
+                 <p className="text-slate-500 text-center max-w-2xl mb-16 text-[13px] font-medium leading-relaxed">
+                    Deterministic sensor calculations paired with multi-step reasoning. Real-time sector times,<br/>tyre degradation degradation vectors, and pit window models.
+                 </p>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                    <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group" onClick={() => fillSuggestion("Compare Hard (C3) vs Medium (C4) wear degradation slopes for Ferrari past Lap 35 under green flag.")}>
+                       <div className="flex items-center gap-2 mb-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-rose-500 group-hover:scale-125 transition-transform"></div>
+                          <div className="text-[13px] font-bold text-slate-800">Synthesize Tyre Degradation</div>
+                       </div>
+                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed pl-3.5">Compare Hard (C3) vs Medium (C4) wear degradation slopes for Ferrari past Lap 35 under green flag.</p>
+                    </div>
+                    
+                    <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-emerald-200 transition-all cursor-pointer group" onClick={() => fillSuggestion("Calculate minimum gap requirement for Sainz to jump Verstappen at Monaco Saint-Dévote.")}>
+                       <div className="flex items-center gap-2 mb-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform"></div>
+                          <div className="text-[13px] font-bold text-slate-800">Pit Window Undercut Solver</div>
+                       </div>
+                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed pl-3.5">Calculate minimum gap requirement for Sainz to jump Verstappen at Monaco Saint-Dévote.</p>
+                    </div>
+                    
+                    <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group" onClick={() => fillSuggestion("Overlay Norris vs Leclerc minimum cornering speeds across Rascasse and the Swimming Pool chicane.")}>
+                       <div className="flex items-center gap-2 mb-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 group-hover:scale-125 transition-transform"></div>
+                          <div className="text-[13px] font-bold text-slate-800">Apex Speed Delta Overlay</div>
+                       </div>
+                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed pl-3.5">Overlay Norris vs Leclerc minimum cornering speeds across Rascasse and the Swimming Pool chicane.</p>
+                    </div>
+                    
+                    <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group" onClick={() => fillSuggestion("Model 4°C track temperature drop impact on front-left graining threshold within 12 laps.")}>
+                       <div className="flex items-center gap-2 mb-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform"></div>
+                          <div className="text-[13px] font-bold text-slate-800">Weather Radar Stint Impact</div>
+                       </div>
+                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed pl-3.5">Model 4°C track temperature drop impact on front-left graining threshold within 12 laps.</p>
+                    </div>
+                 </div>
+              </div>
+            )}
 
-          {/* Mobile topbar */}
-          <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-100/80 px-3 py-2 sm:hidden">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="flex h-7 w-7 items-center justify-center border border-slate-200 bg-white text-slate-500"
-              aria-label="Open menu"
-            >
-              <Menu className="h-4 w-4" />
-            </button>
-            <div className="flex-1">
-              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-rose-500">Pitwall</div>
-              <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500">AI Agent</div>
-            </div>
-            <UserButton appearance={{ elements: { avatarBox: 'h-7 w-7' } }} />
-          </div>
+            {/* Active Stream Divider */}
+            {turns.length > 0 && (
+              <div className="max-w-4xl mx-auto px-8 py-10 flex items-center justify-center gap-4">
+                 <div className="h-px bg-slate-200 flex-1"></div>
+                 <div className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-slate-400">Active Stream</div>
+                 <div className="h-px bg-slate-200 flex-1"></div>
+              </div>
+            )}
 
-          {/* Center panel header (desktop, idle only) */}
-          {canvasPhase === 'idle' && (
-            <div className="hidden sm:block">
-              <PanelHeader
-                eyebrow="Dag_visualizer"
-                title="Race question pipeline"
-                action={
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Gauge className="h-3.5 w-3.5" />
-                    <Braces className="h-3.5 w-3.5" />
+            {/* Chat Turns */}
+            <div className="max-w-4xl mx-auto px-6 sm:px-8 space-y-12 pb-10">
+              {turns.map((turn) => (
+                <div key={turn.id} className="flex flex-col gap-6">
+                  
+                  {/* User bubble */}
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] border border-slate-200 bg-white rounded-2xl rounded-tr-sm px-6 py-5 shadow-sm flex flex-col gap-3">
+                      <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                        <span>CHIEF_STRATEGIST · {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                      </div>
+                      <p className="text-[14px] font-medium leading-relaxed text-slate-800">{turn.question}</p>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4 mt-2">CS</div>
                   </div>
-                }
-              />
-              <div className="border-b border-slate-200 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                &gt; resolve race --&gt;
-                {latestDagTurn
-                  ? `${latestDagTurn.nodes.length} nodes / ${latestDagTurn.edges.length} edges`
-                  : ' identify driver --&gt; verify evidence'}
+
+                  {/* Agent Response */}
+                  {(turn.nodes.length > 0 || turn.reply) && (
+                    <div className="flex gap-4 w-full">
+                       <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-md shadow-rose-500/20">
+                          <Zap className="w-4 h-4" />
+                       </div>
+                       
+                       <div className="flex-1 flex flex-col gap-4">
+                          
+                          {/* Final Answer Text */}
+                          {turn.reply && (
+                            <>
+                              <div className="pitwall-prose answer-reveal bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-[15px] leading-relaxed text-slate-700">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.reply.answer}</ReactMarkdown>
+                              </div>
+                              {turn.nodes.length > 0 && (
+                                <div className="flex items-center gap-3 pl-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCanvasTurnId(turn.id)
+                                      setSelectedNodeId(null)
+                                      setCanvasPhase('expanded')
+                                    }}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-600"
+                                    aria-label={`View execution graph for ${turn.question}`}
+                                  >
+                                    <CircuitBoard className="h-3.5 w-3.5 text-rose-500" />
+                                    View execution flow
+                                    <span className="border-l border-slate-200 pl-2 text-[10px] font-medium text-slate-400">
+                                      {turn.nodes.length} steps
+                                    </span>
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          
+                       </div>
+                    </div>
+                  )}
+
+                </div>
+              ))}
+              
+              {loadingQuestion && !turns.find(t => t.question === loadingQuestion)?.reply && (
+                <div className="flex justify-end opacity-60">
+                   <div className="max-w-[85%] border border-slate-200 bg-white rounded-2xl rounded-tr-sm px-6 py-4 flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-bounce"></div>
+                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-bounce delay-75"></div>
+                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-bounce delay-150"></div>
+                   </div>
+                   <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4">CS</div>
+                </div>
+              )}
+            </div>
+            
+        </div>
+        
+        {/* Floating Input area */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#FAFAFA] via-[#FAFAFA]/90 to-transparent pointer-events-none">
+          <form
+            onSubmit={ask}
+            className="mx-auto max-w-3xl relative bg-white border border-slate-200 rounded-2xl shadow-[0_8px_40px_rgb(0,0,0,0.08)] p-3 flex flex-col gap-3 pointer-events-auto transition-shadow hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)]"
+          >
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="In British GP 2024, when did Carlos pit?"
+              className="w-full text-[15px] font-medium bg-transparent border-none px-3 pt-2 pb-1 focus:ring-0 focus:outline-none placeholder-slate-400 text-slate-800"
+            />
+            <div className="flex items-center justify-between px-2">
+               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-500 rounded-md flex shrink-0 text-[11px] font-bold border border-slate-100">
+                     <Database className="w-3 h-3 text-rose-500" /> Telemetry Ingestion
+                  </div>
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-500 rounded-md shrink-0 text-[11px] font-bold border border-slate-100">
+                     <Map className="w-3 h-3 text-slate-400" /> Silverstone Circuit
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded-md shrink-0 text-[11px] font-bold">
+                     Multi-Stint Delta
+                  </div>
+               </div>
+               <div className="flex items-center gap-3 shrink-0 ml-4">
+                  <Mic className="w-5 h-5 text-slate-300 cursor-pointer hover:text-slate-600 transition-colors" />
+                  <button type="submit" disabled={!question.trim() || loadingQuestion} className="w-10 h-10 rounded-full bg-rose-600 flex items-center justify-center text-white hover:bg-rose-500 transition-all disabled:opacity-50 disabled:hover:bg-rose-600 shadow-md shadow-rose-500/20">
+                     {loadingQuestion ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
+                  </button>
+               </div>
+            </div>
+          </form>
+          <div className="text-center mt-4 mb-2 text-[9px] text-slate-400 font-mono tracking-widest uppercase">
+             Slipstream Neural Kernel 2.4. Telemetry verified via FIA Technical Regulation Appx L.
+          </div>
+        </div>
+        {canvasVisible && (
+          <div
+            className={`absolute inset-x-0 bottom-0 top-16 z-30 flex flex-col bg-[#F2F4FA] ${
+              canvasPhase === 'completing' ? 'canvas-dissolving' : ''
+            }`}
+            aria-label="Agent execution graph"
+          >
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3 sm:px-7">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.13em] text-rose-500">
+                  <span className={`h-1.5 w-1.5 rounded-full ${canvasPhase === 'running' ? 'animate-pulse bg-emerald-500' : 'bg-rose-500'}`} />
+                  {canvasPhase === 'running'
+                    ? activeTurnHasProgress
+                      ? 'Live execution'
+                      : 'Planning execution'
+                    : canvasPhase === 'completing'
+                      ? 'Result ready'
+                      : 'Completed execution'}
+                </div>
+                <h2 className="mt-1 text-sm font-bold uppercase tracking-[0.06em] text-slate-800">
+                  Directed Acyclic Graph Canvas
+                </h2>
+                <p className="mt-1 truncate text-[11px] text-slate-500">{activeQuestion}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">
+                  {canvasTurn?.nodes.length ?? 0} NODES
+                </span>
+                {canvasPhase === 'expanded' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCanvasPhase('minimap')
+                      setSelectedNodeId(null)
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-rose-200 hover:text-rose-600"
+                  >
+                    Back to answer
+                  </button>
+                )}
               </div>
             </div>
-          )}
 
-          {/* Breadcrumb trail — shown during running */}
-          {(canvasPhase === 'running' || canvasPhase === 'completing') && latestDagTurn && (
-            <div className="overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white px-4 py-2 font-mono text-[10px] uppercase tracking-[0.06em] text-slate-400">
-              {latestDagTurn.nodes
-                .filter((n) => latestDagTurn.nodeStates[n.id]?.state === 'done')
-                .map((n) => n.tool_name.replace(/_/g, ' ').toUpperCase())
-                .join(' › ')}
-              {loadingQuestion && <span className="ml-2 animate-pulse text-amber-500">›</span>}
-            </div>
-          )}
-
-          {/* DAG CANVAS — minimap always at top, full canvas during running */}
-          {latestDagTurn && (canvasPhase === 'minimap' || canvasVisible) && (
-            <div
-              className={`relative overflow-hidden transition-[height] duration-300 ease-in-out flex-shrink-0 ${
-                canvasPhase === 'completing' ? 'canvas-dissolving' : ''
-              }`}
-              style={{
-                height:
-                  canvasPhase === 'minimap'
-                    ? '120px'
-                    : canvasPhase === 'expanded'
-                      ? '60vh'
-                      : 'calc(100vh - 260px)',
-              }}
-            >
+            <div className="relative min-h-0 flex-1">
               <ReasoningGraphCanvas
-                nodes={latestDagTurn.nodes}
-                edges={latestDagTurn.edges}
-                states={latestDagTurn.nodeStates}
+                nodes={canvasTurn?.nodes ?? []}
+                edges={canvasTurn?.edges ?? []}
+                states={canvasTurn?.nodeStates ?? {}}
                 onSelectNode={setSelectedNodeId}
                 selectedNodeId={selectedNodeId}
-                phase={
-                  canvasPhase === 'minimap'
-                    ? 'minimap'
-                    : canvasPhase === 'expanded'
-                      ? 'expanded'
-                      : 'running'
-                }
+                phase={canvasPhase === 'completing' ? 'completing' : canvasPhase === 'expanded' ? 'expanded' : 'running'}
                 animationIndex={animationIndex}
                 question={activeQuestion}
                 intent={activeIntent}
               />
-              <NodeInspectorDrawer
-                view={selectedNodeView}
-                onClose={() => setSelectedNodeId(null)}
-              />
-
-              {canvasPhase === 'expanded' && (
-                <button
-                  onClick={() => setCanvasPhase('minimap')}
-                  className="absolute right-3 top-3 z-10 flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
-                >
-                  collapse
-                </button>
-              )}
-
-              {canvasPhase === 'minimap' && (
-                <button
-                  onClick={() => setCanvasPhase('expanded')}
-                  className="absolute inset-0 z-10 cursor-pointer"
-                  title="Click to re-expand reasoning graph"
-                >
-                  <span className="absolute bottom-2 right-3 rounded border border-slate-200 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 shadow-sm">
-                    {latestDagTurn.nodes.length} nodes · Click to expand
-                  </span>
-                </button>
-              )}
+              <NodeInspectorDrawer view={selectedNodeView} onClose={() => setSelectedNodeId(null)} />
             </div>
-          )}
-
-          {/* ── Scrollable turns area ─────────────────── */}
-          <div
-            ref={chatScrollRef}
-            className={`flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-5 ${
-              (canvasPhase === 'running' || canvasPhase === 'completing') ? 'hidden' : 'block'
-            }`}
-          >
-            {/* Empty state */}
-            {turns.length === 0 && !loadingQuestion && canvasPhase === 'idle' && (
-              <div className="grid h-full place-items-center">
-                <div className="w-full max-w-xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-                  <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-rose-500">
-                    <Zap className="h-3.5 w-3.5" />
-                    Strategy bot listening
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    Ask for a race, driver, pit stop, and speed comparison. The agent will keep
-                    the math in deterministic tools and only use the model to route and explain.
-                  </p>
-                  {/* Suggested questions — horizontal scroll on mobile */}
-                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap">
-                    {SUGGESTED_QUESTIONS.map((q) => (
-                      <button
-                        key={q}
-                        onClick={() => fillSuggestion(q)}
-                        className="shrink-0 border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Chat turns */}
-            {turns.map((turn) => (
-              <div key={turn.id} className="space-y-3">
-                {/* User bubble */}
-                <div className="flex justify-end">
-                  <div className="max-w-[92%] border border-slate-300 bg-white px-4 py-3 shadow-sm sm:max-w-[78%]">
-                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                      User input
-                    </div>
-                    <p className="text-sm font-semibold leading-6 text-slate-800">{turn.question}</p>
-                  </div>
-                </div>
-
-                {/* Answer */}
-                {turn.reply && (
-                  <div className="answer-reveal border-l-2 border-rose-500 bg-white/90 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Bot className="h-4 w-4 text-rose-500" />
-                        <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                          Strategy_bot
-                        </span>
-                        <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-600">
-                          processed
-                        </span>
-                      </div>
-                      <span className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          intent: {turn.reply.intent}
-                        </span>
-                        {turn.reply.run_id ? (
-                          <span className="flex items-center gap-0.5 border border-slate-200 bg-white px-1 py-0.5">
-                            <button
-                              type="button"
-                              onClick={() => rateAnswer(turn.id, 1)}
-                              className="p-0.5 transition-colors"
-                              title="Good answer"
-                              aria-label="Good answer"
-                            >
-                              <ThumbsUp
-                                className={`h-3.5 w-3.5 ${
-                                  turn.rating === 1
-                                    ? 'text-emerald-500'
-                                    : 'text-slate-300 hover:text-slate-500'
-                                }`}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => rateAnswer(turn.id, -1)}
-                              className="p-0.5 transition-colors"
-                              title="Bad answer"
-                              aria-label="Bad answer"
-                            >
-                              <ThumbsDown
-                                className={`h-3.5 w-3.5 ${
-                                  turn.rating === -1
-                                    ? 'text-rose-500'
-                                    : 'text-slate-300 hover:text-slate-500'
-                                }`}
-                              />
-                            </button>
-                          </span>
-                        ) : null}
-                      </span>
-                    </div>
-                    <div className="pitwall-prose px-4 py-3">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.reply.answer}</ReactMarkdown>
-                    </div>
-                    {turn.reply.clarification && (
-                      <div className="mx-4 mb-4 flex items-start gap-3 border border-sky-200 bg-sky-50 px-3 py-2.5">
-                        <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
-                        <div>
-                          <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-sky-600">
-                            Need {turn.reply.clarification.missing.join(', ')}
-                          </div>
-                          <p className="mt-0.5 text-[13px] font-medium leading-5 text-sky-900">
-                            {turn.reply.clarification.question}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-4 px-4 pb-4">
-                      <RefusalBanner refusals={turn.reply.refusals} />
-                      <EvidenceCards
-                        session={turn.reply.session}
-                        driver={turn.reply.driver}
-                        pitStop={turn.reply.pit_stop}
-                        speedWindow={turn.reply.speed_window}
-                      />
-                      <AgentSpeedChart speedWindow={turn.reply.speed_window} />
-                      <TelemetryOverlayChart result={turn.reply.telemetry_overlay} />
-                      <CircuitHeatmap result={turn.reply.telemetry_overlay} />
-                      <TyreDegradationChart result={turn.reply.stint_degradation} />
-                      <RadioClip result={turn.reply.team_radio} />
-                      <WeatherEvidence result={turn.reply.weather} />
-                      <ToolTraceAccordion
-                        trace={turn.reply.trace}
-                        visibility={turn.reply.trace_visibility}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Running progress (fallback when no DAG yet) */}
-                {!turn.reply && !turn.error && turn.progress.length > 0 && (
-                  <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
-                    <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                      Running agent pipeline
-                    </div>
-                    <AgentProgressRail events={turn.progress} />
-                  </div>
-                )}
-
-                {/* Error */}
-                {turn.error && (
-                  <div className="border-l-2 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                    {turn.error}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Pre-DAG loading skeleton */}
-            {loadingQuestion && !activeTurnHasProgress && !latestDagTurn && (
-              <div className="border-l-2 border-rose-500 bg-white/88 p-4 shadow-sm">
-                <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                  Synthesizing with lap history
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                  {['Resolve session', 'Read telemetry', 'Verify result'].map((step) => (
-                    <div key={step} className="h-16 animate-pulse border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{step}</div>
-                      <div className="mt-3 h-1.5 w-2/3 bg-rose-200" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* ── Sticky input bar ──────────────────────── */}
-          <form
-            onSubmit={ask}
-            className="agent-input-bar border-t border-slate-200 bg-white/94 p-3"
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
-              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-rose-500">
-                Strategy_Bot Listening
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="In British GP 2024, when did Carlos pit?"
-                disabled={Boolean(loadingQuestion)}
-                className="min-w-0 flex-1 border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-[12px] placeholder:font-semibold placeholder:text-slate-400 focus:border-rose-400 focus:bg-white"
-              />
-              <button
-                type="submit"
-                disabled={Boolean(loadingQuestion) || !question.trim()}
-                className="flex h-12 w-12 shrink-0 items-center justify-center bg-rose-600 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                aria-label="Send question"
-              >
-                {loadingQuestion ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
+        )}
+      </section>
     </div>
   )
 }

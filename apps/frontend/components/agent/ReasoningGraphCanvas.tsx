@@ -14,7 +14,7 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { DAG_NODE_H, DAG_NODE_W, layeredLayout, topoRankMap } from '@/lib/dag-layout'
+import { DAG_GAP_X, DAG_GAP_Y, DAG_NODE_H, DAG_NODE_W, layeredLayout, topoRankMap } from '@/lib/dag-layout'
 import {
   AgentDAGEdge,
   AgentDAGNode as AgentDAGNodeSpec,
@@ -62,13 +62,23 @@ export default function ReasoningGraphCanvas({
 
   const rfNodes = useMemo<FlowNode[]>(() => {
     const positions = layeredLayout(nodes, isMinimap ? 1.35 : 1)
-
-    // Calculate vertical midpoint for query root node
-    let avgY = 0
-    if (nodes.length > 0) {
-      const ySum = nodes.reduce((sum, n) => sum + (positions[n.id]?.y ?? 0), 0)
-      avgY = ySum / nodes.length
-    }
+    const parallelPositions = Object.values(positions).map((position) => position.y)
+    const minParallelPosition = parallelPositions.length ? Math.min(...parallelPositions) : 0
+    const parallelScale = (DAG_NODE_W + DAG_GAP_X) / (DAG_NODE_H + DAG_GAP_Y)
+    const topDownPositions = Object.fromEntries(
+      Object.entries(positions).map(([id, position]) => [
+        id,
+        {
+          x: (position.y - minParallelPosition) * parallelScale + 20,
+          y: position.x + 160,
+        },
+      ])
+    )
+    const rootNodes = nodes.filter((node) => node.depends_on.length === 0)
+    const rootCenterX = rootNodes.length
+      ? rootNodes.reduce((sum, node) => sum + (topDownPositions[node.id]?.x ?? 0) + 140, 0) /
+        rootNodes.length
+      : 180
 
     const flowNodes: FlowNode[] = []
 
@@ -77,7 +87,7 @@ export default function ReasoningGraphCanvas({
       flowNodes.push({
         id: 'query_root',
         type: 'query',
-        position: { x: isMinimap ? -360 : -420, y: avgY },
+        position: { x: rootCenterX - 160, y: 20 },
         data: {
           question: question || 'Processing query...',
           intent: intent || 'race_analysis',
@@ -93,7 +103,7 @@ export default function ReasoningGraphCanvas({
       flowNodes.push({
         id: node.id,
         type: 'agent',
-        position: positions[node.id],
+          position: topDownPositions[node.id],
         data: {
           label: node.label,
           tool_name: node.tool_name,
@@ -181,7 +191,7 @@ export default function ReasoningGraphCanvas({
         )}
         {!isMinimap && <Controls showInteractive={false} position="bottom-left" />}
         <NodeZoomAnimator nodeId={selectedNodeId} drawerWidth={300} />
-        <FitController trigger={phase} />
+        <FitController trigger={`${phase}:${nodes.length}`} />
       </ReactFlow>
     </div>
   )

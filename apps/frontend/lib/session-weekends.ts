@@ -80,7 +80,7 @@ export function getLatestWeekendOverviewRoute(sessions: Session[]): string | nul
   if (!latestWeekend) return null
 
   const latestSession = pickLatestWeekendSession(latestWeekend.sessions)
-  return latestSession ? `/sessions/${latestSession.session_key}/overview` : null
+  return latestSession ? `/sessions/${latestSession.session_key}` : null
 }
 
 export function findWeekendBySessionKey(sessions: Session[], sessionKey: number): WeekendGroup | null {

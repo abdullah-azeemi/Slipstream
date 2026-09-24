@@ -1,859 +1,1115 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Activity, BarChart3, Brain, CheckCircle2, ChevronDown, Cpu, Database, FlaskConical, GitBranch, Sigma, TrendingUp, AlertCircle, Trophy } from 'lucide-react'
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-const HERO_IMAGE = 'https://images.unsplash.com/photo-1696178946280-776bfa09ba90?q=80&w=2232&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
+import React, { useState, useMemo } from 'react'
+import {
+  RotateCw,
+  Database,
+  RefreshCw,
+  CheckCircle2,
+  Box,
+  Activity,
+  Download,
+  Maximize2,
+  ChevronDown
+} from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ShapFactor = {
-  feature: string
-  label: string
-  positive: boolean
-  shap_value: number
-  stream?: string
-  stream_label?: string
+interface PodiumCandidate {
+  rank: number
+  rankLabel: string
+  carNumber: number
+  teamName: string
+  driverName: string
+  podiumProb: number
+  podiumColor: string
+  winProb: number
+  p2Prob: number
+  p3Prob: number
+  metric1Label: string
+  metric1Val: string
+  metric1Color?: string
+  metric2Label: string
+  metric2Val: string
+  metric2Color?: string
 }
 
-type FeatureStream = {
-  stream: string
-  label: string
-  share: number
-  score: number
+interface HeatmapRow {
+  driver: string
+  constructor: string
+  teamColor: string
+  s1: { val: string; bg: string; color: string }
+  s2: { val: string; bg: string; color: string }
+  s3: { val: string; bg: string; color: string }
+  drag: { val: string; bg: string; color: string }
+  tyre: { val: string; bg: string; color: string }
+  brake: { val: string; bg: string; color: string }
+  degrade: { val: string; bg: string; color: string }
+  longRun: { val: string; bg: string; color: string }
+  winBias: { val: string; bg: string; color: string }
 }
 
-type ValidationFeature = {
-  feature: string
-  stream_label?: string
-  cohens_d?: number | null
-  p_value?: number | null
-  spearman_r?: number | null
-  importance?: number | null
-  vif?: number | null
+interface GridDriver {
+  pred: string
+  grid: string
+  delta: string
+  deltaType: 'up' | 'down' | 'same'
+  driver: string
+  team: string
+  teamColor: string
+  podiumProb: number
+  podiumColor: string
+  winProb: number
+  curveBars: number[]
+  status: string
+  statusColor: string
 }
 
-type Prediction = {
-  driver_number: number
-  abbreviation: string
-  team_name: string
-  team_colour: string
-  grid_position: number
-  predicted_position: number
-  p1_probability?: number
-  p2_probability?: number
-  p3_probability?: number
-  win_probability: number
-  podium_probability: number
-  position_probabilities: Record<string, number>
-  factors: ShapFactor[]
-  feature_streams?: FeatureStream[]
-}
+// ── Static Mock Data ──────────────────────────────────────────────────────────
 
-type PredictionResponse = {
-  session_key: number
-  gp_name: string
-  year: number
-  predictions: Prediction[]
-  validation_report?: {
-    available: boolean
-    caveat: string
-    feature_tests: ValidationFeature[]
-    vif: ValidationFeature[]
-    permutation_importance: ValidationFeature[]
-  }
-  model_baselines?: {
-    grid_top3_accuracy?: number | null
-    model_top3_accuracy?: number | null
-    podium_precision?: number | null
-    podium_recall?: number | null
-    podium_brier?: number | null
-  }
-  weekend_inputs_used?: Record<string, {
-    available: boolean
-    session_type: string
-    session_key?: number
-    lap_count: number
-  }>
-  model?: {
-    scope?: 'global' | 'gp'
-    best_estimator?: string | null
-    cv_mae_mean?: number | null
-    cv_mae_std?: number | null
-    cv_top3_accuracy_mean?: number | null
-    cv_podium_precision_mean?: number | null
-    cv_podium_recall_mean?: number | null
-    cv_podium_brier_mean?: number | null
-    grid_baseline_top3_accuracy_mean?: number | null
-    cv_folds?: number | null
-    n_training_rows?: number | null
-    years?: number[]
-    gp_name?: string | null
-  }
-}
+const PODIUM_CANDIDATES: PodiumCandidate[] = [
+  {
+    rank: 1,
+    rankLabel: 'P1 FAVORITE',
+    carNumber: 16,
+    teamName: 'SCUDERIA FERRARI',
+    driverName: 'Charles Leclerc',
+    podiumProb: 77.7,
+    podiumColor: '#E8002D',
+    winProb: 45.0,
+    p2Prob: 21.4,
+    p3Prob: 11.3,
+    metric1Label: 'LONG-RUN PACE DELTA',
+    metric1Val: '-0.184s / lap',
+    metric2Label: 'QUALIFYING PACE',
+    metric2Val: 'SEC-1 PURPLE',
+    metric2Color: '#7C3AED',
+  },
+  {
+    rank: 2,
+    rankLabel: 'P2 CHALLENGER',
+    carNumber: 1,
+    teamName: 'RED BULL RACING',
+    driverName: 'Max Verstappen',
+    podiumProb: 69.8,
+    podiumColor: '#1E293B',
+    winProb: 36.8,
+    p2Prob: 20.1,
+    p3Prob: 12.9,
+    metric1Label: 'TOP SPEED (SPEED TRAP)',
+    metric1Val: '349.2 km/h',
+    metric2Label: 'RACE SIM ORDER',
+    metric2Val: 'P2 (+0.091s)',
+    metric2Color: '#1E293B',
+  },
+  {
+    rank: 3,
+    rankLabel: 'P3 WILDCARD',
+    carNumber: 12,
+    teamName: 'MERCEDES-AMG',
+    driverName: 'Kimi Antonelli',
+    podiumProb: 40.7,
+    podiumColor: '#0D9488',
+    winProb: 9.1,
+    p2Prob: 15.8,
+    p3Prob: 15.8,
+    metric1Label: 'BRAKING STABILITY',
+    metric1Val: '99.1% INDEX',
+    metric1Color: '#0284C7',
+    metric2Label: 'CHEVRON DELTA',
+    metric2Val: '+0.248s',
+  },
+]
 
-type QualiSession = {
-  session_key: number
-  gp_name: string
-  year: number
-  date_start: string
-}
+// Heatmap palette helpers
+const C_APEX = '#1E3A8A' // dark navy
+const C_HIGH = '#2563EB' // royal blue
+const C_MED = '#60A5FA'  // medium blue
+const C_LOW = '#93C5FD'  // light blue
+const C_IMPUTE = '#F1F5F9' // grey
+const C_RED = '#DC2626'   // red for Leclerc win bias
+const C_TEAL = '#0D9488'  // teal for Antonelli win bias
+const C_CYAN = '#0284C7'  // cyan
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const HEATMAP_DATA: HeatmapRow[] = [
+  {
+    driver: 'Leclerc',
+    constructor: 'FER',
+    teamColor: '#E8002D',
+    s1: { val: '.98', bg: C_APEX, color: '#FFFFFF' },
+    s2: { val: '.89', bg: C_HIGH, color: '#FFFFFF' },
+    s3: { val: '.56', bg: C_MED, color: '#FFFFFF' },
+    drag: { val: '.98', bg: C_APEX, color: '#FFFFFF' },
+    tyre: { val: '.41', bg: C_LOW, color: '#1E293B' },
+    brake: { val: '.88', bg: C_HIGH, color: '#FFFFFF' },
+    degrade: { val: '.51', bg: C_MED, color: '#FFFFFF' },
+    longRun: { val: '.92', bg: C_APEX, color: '#FFFFFF' },
+    winBias: { val: '.78', bg: C_RED, color: '#FFFFFF' },
+  },
+  {
+    driver: 'Verstappen',
+    constructor: 'RBR',
+    teamColor: '#3671C6',
+    s1: { val: '.92', bg: C_APEX, color: '#FFFFFF' },
+    s2: { val: '.97', bg: C_APEX, color: '#FFFFFF' },
+    s3: { val: '.81', bg: C_HIGH, color: '#FFFFFF' },
+    drag: { val: '.76', bg: C_HIGH, color: '#FFFFFF' },
+    tyre: { val: '.71', bg: C_HIGH, color: '#FFFFFF' },
+    brake: { val: '.82', bg: C_HIGH, color: '#FFFFFF' },
+    degrade: { val: '.46', bg: C_MED, color: '#FFFFFF' },
+    longRun: { val: '.74', bg: C_HIGH, color: '#FFFFFF' },
+    winBias: { val: '.73', bg: C_APEX, color: '#FFFFFF' },
+  },
+  {
+    driver: 'Antonelli',
+    constructor: 'MER',
+    teamColor: '#27F4D2',
+    s1: { val: '.87', bg: C_HIGH, color: '#FFFFFF' },
+    s2: { val: '.74', bg: C_HIGH, color: '#FFFFFF' },
+    s3: { val: '.90', bg: C_APEX, color: '#FFFFFF' },
+    drag: { val: '.81', bg: C_HIGH, color: '#FFFFFF' },
+    tyre: { val: '.68', bg: C_MED, color: '#FFFFFF' },
+    brake: { val: '.99', bg: C_APEX, color: '#FFFFFF' },
+    degrade: { val: '.38', bg: C_LOW, color: '#1E293B' },
+    longRun: { val: '.77', bg: C_HIGH, color: '#FFFFFF' },
+    winBias: { val: '.41', bg: C_TEAL, color: '#FFFFFF' },
+  },
+  {
+    driver: 'Norris',
+    constructor: 'MCL',
+    teamColor: '#FF8000',
+    s1: { val: '.81', bg: C_HIGH, color: '#FFFFFF' },
+    s2: { val: '.91', bg: C_APEX, color: '#FFFFFF' },
+    s3: { val: '.84', bg: C_HIGH, color: '#FFFFFF' },
+    drag: { val: '.72', bg: C_HIGH, color: '#FFFFFF' },
+    tyre: { val: 'N/A', bg: C_IMPUTE, color: '#94A3B8' },
+    brake: { val: '.84', bg: C_HIGH, color: '#FFFFFF' },
+    degrade: { val: '.61', bg: C_MED, color: '#FFFFFF' },
+    longRun: { val: '.82', bg: C_HIGH, color: '#FFFFFF' },
+    winBias: { val: '.31', bg: C_CYAN, color: '#FFFFFF' },
+  },
+  {
+    driver: 'Hamilton',
+    constructor: 'FER',
+    teamColor: '#E8002D',
+    s1: { val: '.86', bg: C_HIGH, color: '#FFFFFF' },
+    s2: { val: '.78', bg: C_HIGH, color: '#FFFFFF' },
+    s3: { val: '.65', bg: C_MED, color: '#FFFFFF' },
+    drag: { val: '.95', bg: C_APEX, color: '#FFFFFF' },
+    tyre: { val: '.44', bg: C_LOW, color: '#1E293B' },
+    brake: { val: '.89', bg: C_HIGH, color: '#FFFFFF' },
+    degrade: { val: 'N/A', bg: C_IMPUTE, color: '#94A3B8' },
+    longRun: { val: '.85', bg: C_HIGH, color: '#FFFFFF' },
+    winBias: { val: '.29', bg: C_CYAN, color: '#FFFFFF' },
+  },
+]
 
-function ProbBar({ value, colour, max }: { value: number; colour: string; max: number }) {
-  const pct = max > 0 ? (value / max) * 100 : 0
-  return (
-    <div style={{ flex: 1, height: '6px', background: '#DCE6F5', borderRadius: '999px', overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: '#' + colour + 'AA', borderRadius: '3px', transition: 'width 0.5s ease' }} />
-    </div>
-  )
-}
+const GRID_DRIVERS: GridDriver[] = [
+  {
+    pred: 'P1',
+    grid: 'P1',
+    delta: '±0',
+    deltaType: 'same',
+    driver: 'Charles Leclerc',
+    team: 'Scuderia Ferrari',
+    teamColor: '#E8002D',
+    podiumProb: 77.7,
+    podiumColor: '#E8002D',
+    winProb: 45.0,
+    curveBars: [24, 18, 12, 6, 3],
+    status: 'POLE FAVORITE',
+    statusColor: '#059669',
+  },
+  {
+    pred: 'P2',
+    grid: 'P2',
+    delta: '±0',
+    deltaType: 'same',
+    driver: 'Max Verstappen',
+    team: 'Red Bull Racing',
+    teamColor: '#1E293B',
+    podiumProb: 69.8,
+    podiumColor: '#1E293B',
+    winProb: 36.8,
+    curveBars: [16, 22, 14, 8, 4],
+    status: 'IN HUNTER SEAT',
+    statusColor: '#1E293B',
+  },
+  {
+    pred: 'P3',
+    grid: 'P4',
+    delta: '+1',
+    deltaType: 'up',
+    driver: 'Kimi Antonelli',
+    team: 'Mercedes-AMG',
+    teamColor: '#0D9488',
+    podiumProb: 40.7,
+    podiumColor: '#0D9488',
+    winProb: 9.1,
+    curveBars: [6, 12, 20, 16, 8],
+    status: 'ASCENDING',
+    statusColor: '#0D9488',
+  },
+  {
+    pred: 'P4',
+    grid: 'P3',
+    delta: '-1',
+    deltaType: 'down',
+    driver: 'Lando Norris',
+    team: 'McLaren F1',
+    teamColor: '#64748B',
+    podiumProb: 38.2,
+    podiumColor: '#475569',
+    winProb: 5.8,
+    curveBars: [4, 8, 16, 22, 12],
+    status: 'DEGRADATION RISK',
+    statusColor: '#D97706',
+  },
+  {
+    pred: 'P5',
+    grid: 'P5',
+    delta: '±0',
+    deltaType: 'same',
+    driver: 'Lewis Hamilton',
+    team: 'Scuderia Ferrari',
+    teamColor: '#64748B',
+    podiumProb: 29.4,
+    podiumColor: '#64748B',
+    winProb: 2.4,
+    curveBars: [2, 6, 10, 14, 20],
+    status: 'LONG STINT SPEC',
+    statusColor: '#64748B',
+  },
+]
 
-function PositionBadge({ pos }: { pos: number }) {
-  const gold = pos === 1
-  const silver = pos === 2
-  const bronze = pos === 3
-  const bg = gold ? '#FFD70022' : silver ? '#C0C0C022' : bronze ? '#CD7F3222' : '#1A1A1A'
-  const col = gold ? '#FFD700' : silver ? '#C0C0C0' : bronze ? '#CD7F32' : '#52525B'
-  return (
-    <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700, color: col }}>P{pos}</span>
-    </div>
-  )
-}
-
-function pct(value?: number | null, digits = 0) {
-  return value == null ? 'n/a' : `${(value * 100).toFixed(digits)}%`
-}
-
-function StreamBars({ streams }: { streams?: FeatureStream[] }) {
-  const palette: Record<string, string> = {
-    car_pace: '#2563EB',
-    tyre_strategy: '#059669',
-    driver_team_form: '#7C3AED',
-    circuit_context: '#D97706',
-    other: '#64748B',
-  }
-  const visible = (streams ?? []).filter(s => Number.isFinite(s.share)).slice(0, 4)
-  if (!visible.length) {
-    return <div style={{ fontSize: '12px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace' }}>No stream attribution available.</div>
-  }
-  return (
-    <div style={{ display: 'grid', gap: '10px' }}>
-      {visible.map(stream => {
-        const colour = palette[stream.stream] ?? '#64748B'
-        return (
-          <div key={stream.stream}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', marginBottom: '5px' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif', color: '#56657C', fontWeight: 700 }}>{stream.label}</span>
-              <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#14233C' }}>{pct(stream.share)}</span>
-            </div>
-            <div style={{ height: '8px', borderRadius: '999px', overflow: 'hidden', background: '#DCE6F5' }}>
-              <div style={{ width: `${Math.max(4, stream.share * 100)}%`, height: '100%', background: colour, borderRadius: '999px' }} />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function statusTone(status: 'accepted' | 'pending' | 'limited') {
-  if (status === 'accepted') return { bg: '#ECFDF5', border: '#A7F3D0', text: '#047857' }
-  if (status === 'limited') return { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E' }
-  return { bg: '#F8FAFC', border: '#E2E8F0', text: '#64748B' }
-}
-
-function StatusPill({ status }: { status: 'accepted' | 'pending' | 'limited' }) {
-  const tone = statusTone(status)
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', height: '22px', padding: '0 8px', borderRadius: '999px', border: `1px solid ${tone.border}`, background: tone.bg, color: tone.text, fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-      {status}
-    </span>
-  )
-}
-
-function ProcessFlow({ data, isMobile }: { data: PredictionResponse; isMobile: boolean }) {
-  const validationAvailable = Boolean(data.validation_report?.available && data.validation_report.feature_tests?.length)
-  const baselineAvailable = data.model_baselines?.model_top3_accuracy != null || data.model_baselines?.podium_brier != null
-  const streamAvailable = Boolean(data.predictions[0]?.feature_streams?.length)
-  const inputCount = Object.values(data.weekend_inputs_used ?? {}).filter(input => input.available).length
-  const toolStack = [
-    { label: 'FLAML AutoML', detail: 'model selection / tuning' },
-    { label: data.model?.best_estimator ?? 'XGBoost', detail: 'race-order baseline' },
-    { label: 'SHAP', detail: 'driver-level feature attribution' },
-    { label: 'SciPy / sklearn', detail: 'effect sizes, p-tests, permutation' },
-    { label: 'Monte Carlo', detail: 'P1/P2/P3 uncertainty' },
-  ]
-  const stages = [
-    {
-      title: 'Historical Extraction',
-      icon: Database,
-      status: (data.model?.n_training_rows || data.model?.years?.length) ? 'accepted' : 'limited',
-      metric: data.model?.scope === 'gp' ? `${data.model.gp_name ?? data.gp_name}` : `${data.model?.n_training_rows ?? 0} rows`,
-      detail: `${data.model?.years?.length ? data.model.years.join(', ') : 'Legacy metadata'} training coverage`,
-    },
-    {
-      title: 'Weekend Streams',
-      icon: GitBranch,
-      status: inputCount >= 2 ? 'accepted' : inputCount === 1 ? 'limited' : 'pending',
-      metric: `${inputCount}/4 live streams`,
-      detail: 'FP1 race sim, SQ, Sprint, and Q availability are tracked separately.',
-    },
-    {
-      title: 'Validation Gate',
-      icon: Sigma,
-      status: validationAvailable ? 'accepted' : 'pending',
-      metric: validationAvailable ? `${data.validation_report?.feature_tests?.length ?? 0} feature tests` : 'metadata pending',
-      detail: validationAvailable ? 'Cohen d, p-values, Spearman, VIF, and permutation checks are available.' : 'Retrain v1.5 to publish statistical acceptance artifacts.',
-    },
-    {
-      title: 'Podium Simulator',
-      icon: Cpu,
-      status: baselineAvailable ? 'accepted' : 'limited',
-      metric: `${pct(data.model_baselines?.model_top3_accuracy)} top-3 hit`,
-      detail: `Compared against grid baseline ${pct(data.model_baselines?.grid_top3_accuracy)} with Brier ${data.model_baselines?.podium_brier?.toFixed(3) ?? 'n/a'}.`,
-    },
-    {
-      title: 'XAI Output',
-      icon: FlaskConical,
-      status: streamAvailable ? 'accepted' : 'pending',
-      metric: streamAvailable ? `${data.predictions[0]?.feature_streams?.length ?? 0} streams` : 'SHAP pending',
-      detail: 'Driver explanations are grouped into car pace, tyre/strategy, form, and circuit context.',
-    },
-  ] as const
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '22px', padding: '18px', boxShadow: '0 16px 42px rgba(24,39,75,0.10)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#14233C' }}>
-            <GitBranch size={15} style={{ color: '#E8002D' }} />
-            Model Reasoning Flow
-          </div>
-          <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '5px', lineHeight: 1.5 }}>
-            Data streams are normalized, tested, simulated, then explained per driver.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {toolStack.map(tool => (
-            <div key={tool.label} title={tool.detail} style={{ border: '1px solid #D7E2F1', background: '#F8FAFC', borderRadius: '10px', padding: '7px 9px' }}>
-              <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, color: '#14233C' }}>{tool.label}</div>
-              <div style={{ fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '3px' }}>{tool.detail}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(5, minmax(0, 1fr))', gap: '10px', alignItems: 'stretch' }}>
-        {stages.map((stage, idx) => {
-          const Icon = stage.icon
-          const tone = statusTone(stage.status)
-          return (
-            <div key={stage.title} style={{ position: 'relative', border: `1px solid ${tone.border}`, borderRadius: '16px', padding: '13px', background: tone.bg, minHeight: '158px' }}>
-              {!isMobile && idx < stages.length - 1 && (
-                <div style={{ position: 'absolute', right: '-11px', top: '50%', width: '12px', height: '2px', background: '#CBD5E1' }} />
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '9px', background: '#fff', border: `1px solid ${tone.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={14} style={{ color: tone.text }} />
-                </div>
-                <StatusPill status={stage.status} />
-              </div>
-              <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#14233C', marginBottom: '7px' }}>{stage.title}</div>
-              <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: tone.text, fontWeight: 800, marginBottom: '8px' }}>{stage.metric}</div>
-              <div style={{ fontSize: '10px', fontFamily: 'Inter, sans-serif', color: '#56657C', lineHeight: 1.45 }}>{stage.detail}</div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function ValidationDeepDive({ data, isMobile }: { data: PredictionResponse; isMobile: boolean }) {
-  const tests = data.validation_report?.feature_tests ?? []
-  const vif = data.validation_report?.vif ?? []
-  const permutation = data.validation_report?.permutation_importance ?? []
-  const accepted = tests.filter(f => Math.abs(f.cohens_d ?? 0) >= 0.5 && (f.p_value == null || f.p_value <= 0.05)).length
-  const limited = tests.filter(f => Math.abs(f.cohens_d ?? 0) > 0 && Math.abs(f.cohens_d ?? 0) < 0.5).length
-
-  const columns = [
-    {
-      title: 'Effect Size Gate',
-      subtitle: `${accepted} accepted · ${limited} weak`,
-      rows: tests.slice(0, 6).map(f => ({
-        label: f.feature,
-        left: f.stream_label ?? 'feature',
-        right: `d=${f.cohens_d ?? 'n/a'} · p=${f.p_value ?? 'n/a'}`,
-        status: Math.abs(f.cohens_d ?? 0) >= 0.5 ? 'accepted' : 'limited',
-      })),
-      empty: 'Train v1.5 metadata to show Cohen d and p-values.',
-    },
-    {
-      title: 'Collinearity Gate',
-      subtitle: 'VIF pressure check',
-      rows: vif.slice(0, 6).map(f => ({
-        label: f.feature,
-        left: 'VIF',
-        right: `${f.vif ?? 'n/a'}`,
-        status: (f.vif ?? 0) > 10 ? 'limited' : 'accepted',
-      })),
-      empty: 'VIF report pending.',
-    },
-    {
-      title: 'Permutation Gate',
-      subtitle: 'Does shuffling hurt?',
-      rows: permutation.slice(0, 6).map(f => ({
-        label: f.feature,
-        left: f.stream_label ?? 'feature',
-        right: `${f.importance ?? 'n/a'}`,
-        status: (f.importance ?? 0) > 0 ? 'accepted' : 'limited',
-      })),
-      empty: 'Permutation importance pending.',
-    },
-  ] as const
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '22px', padding: '18px', boxShadow: '0 16px 42px rgba(24,39,75,0.10)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#14233C', marginBottom: '8px' }}>
-        <BarChart3 size={15} style={{ color: '#E8002D' }} />
-        Statistical Acceptance Report
-      </div>
-      <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#64748B', lineHeight: 1.55, marginBottom: '14px' }}>
-        {data.validation_report?.caveat ?? 'Acceptance metadata appears after v1.5 training. Legacy models can still predict, but cannot claim validation gates were accepted.'}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
-        {columns.map(column => (
-          <div key={column.title} style={{ border: '1px solid #D7E2F1', borderRadius: '16px', overflow: 'hidden', background: '#F8FAFC' }}>
-            <div style={{ padding: '12px', borderBottom: '1px solid #D7E2F1', background: '#fff' }}>
-              <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#14233C' }}>{column.title}</div>
-              <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '4px' }}>{column.subtitle}</div>
-            </div>
-            <div style={{ padding: '10px 12px', display: 'grid', gap: '8px' }}>
-              {column.rows.length ? column.rows.map(row => {
-                const tone = statusTone(row.status as 'accepted' | 'limited')
-                return (
-                  <div key={`${column.title}-${row.label}`} style={{ display: 'grid', gap: '4px', paddingBottom: '8px', borderBottom: '1px solid #E2E8F0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#334155' }}>{row.label}</span>
-                      <span style={{ fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', color: tone.text, fontWeight: 800 }}>{row.status}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#64748B' }}>
-                      <span>{row.left}</span>
-                      <span>{row.right}</span>
-                    </div>
-                  </div>
-                )
-              }) : (
-                <div style={{ fontSize: '11px', color: '#94A3B8', lineHeight: 1.5 }}>{column.empty}</div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function PredictionsPage() {
-  const [sessions, setSessions] = useState<QualiSession[]>([])
-  const [selectedKey, setSelectedKey] = useState<number | null>(null)
-  const [data, setData] = useState<PredictionResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [sessionsLoading, setSessionsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [sessionError, setSessionError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<number | null>(null)
-  const [dropOpen, setDropOpen] = useState(false)
-  const [showAllGrid, setShowAllGrid] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  const [selectedCircuit, setSelectedCircuit] = useState('Autodromo Nazionale Monza')
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [sortBy, setSortBy] = useState<'pred' | 'uci' | 'delta'>('pred')
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 1024)
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  const handleRerunSim = () => {
+    setIsSimulating(true)
+    setTimeout(() => setIsSimulating(false), 800)
+  }
 
-  // Load qualifying sessions for the selector
-  useEffect(() => {
-    setSessionsLoading(true)
-    setSessionError(null)
-    fetch(`${BASE}/api/v1/sessions`)
-      .then(r => {
-        if (!r.ok) throw new Error(`API returned ${r.status}`)
-        return r.json()
+  const sortedGrid = useMemo(() => {
+    const list = [...GRID_DRIVERS]
+    if (sortBy === 'uci') {
+      return list.sort((a, b) => b.winProb - a.winProb)
+    }
+    if (sortBy === 'delta') {
+      return list.sort((a, b) => {
+        const deltaA = parseInt(a.delta.replace('±', '0')) || 0
+        const deltaB = parseInt(b.delta.replace('±', '0')) || 0
+        return deltaB - deltaA
       })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then((all: any[]) => {
-        const quali = all
-          .filter(s => s.session_type === 'Q' || s.session_type === 'SQ')
-          .sort((a, b) => new Date(b.date_start).getTime() - new Date(a.date_start).getTime())
-          .map(s => ({ session_key: s.session_key, gp_name: s.gp_name, year: s.year, date_start: s.date_start }))
-        setSessions(quali)
-        if (quali.length) setSelectedKey(quali[0].session_key)
-      })
-      .catch(() => {
-        setSessionError(`Backend API is not reachable at ${BASE}. Start the Flask backend, then refresh this page.`)
-      })
-      .finally(() => setSessionsLoading(false))
-  }, [])
-
-  // Fetch predictions when session changes
-  useEffect(() => {
-    if (!selectedKey) return
-    setLoading(true)
-    setError(null)
-    setData(null)
-    setShowAllGrid(false)
-    setExpanded(null)
-    fetch(`${BASE}/api/v1/sessions/${selectedKey}/predictions`)
-      .then(r => {
-        if (!r.ok) throw new Error(`API returned ${r.status}`)
-        return r.json()
-      })
-      .then(d => {
-        if (d.error) { setError(d.error); return }
-        const sorted = {
-          ...d,
-          predictions: [...(d.predictions || [])].sort((a, b) => b.podium_probability - a.podium_probability)
-        }
-        setData(sorted)
-      })
-      .catch(() => setError('Failed to load predictions'))
-      .finally(() => setLoading(false))
-  }, [selectedKey])
-
-  const selected = sessions.find(s => s.session_key === selectedKey)
-  const maxPodium = data ? Math.max(...data.predictions.map(p => p.podium_probability)) : 1
-  const modelLabel = data?.model?.scope === 'gp' ? 'GP-specific model' : 'Global fallback model'
-  const modelName = data?.model?.best_estimator ?? 'AutoML'
-  const coverageLabel = data?.model?.scope === 'gp'
-    ? `${data.model?.gp_name ?? data?.gp_name ?? 'Circuit'} · ${(data.model?.years?.length ?? 0)} season${(data.model?.years?.length ?? 0) === 1 ? '' : 's'}`
-    : `${data?.model?.n_training_rows ?? 0} training rows`
-  const maeLabel = data?.model?.cv_mae_mean != null
-    ? `${data.model.cv_mae_mean}${data.model.cv_mae_std != null ? ` ± ${data.model.cv_mae_std}` : ''} pos`
-    : 'n/a'
-  const visiblePredictions = data ? (showAllGrid ? data.predictions : data.predictions.slice(0, 10)) : []
-  const topFactors = useMemo(() => {
-    if (!data?.predictions.length) return []
-    return [...(data.predictions[0].factors ?? [])]
-      .sort((a, b) => Math.abs(b.shap_value) - Math.abs(a.shap_value))
-      .slice(0, 5)
-  }, [data])
-  const topStreams = data?.predictions[0]?.feature_streams ?? []
-  const validationFeatures = data?.validation_report?.feature_tests?.slice(0, 5) ?? []
-  const permutationFeatures = data?.validation_report?.permutation_importance?.slice(0, 5) ?? []
-  const weekendInputs = data?.weekend_inputs_used ? Object.entries(data.weekend_inputs_used) : []
+    }
+    return list
+  }, [sortBy])
 
   return (
-    <div className="predictions-container" style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '980px', margin: '0 auto', padding: isMobile ? '0 12px 32px' : '0 0 48px' }}>
+    <div style={{ background: '#F8FAFC', minHeight: '100vh', paddingBottom: 64 }}>
+      <div style={{ maxWidth: 1040, margin: '0 auto', padding: '36px 20px 0' }}>
 
-      {/* Header */}
-      <section className="fade-up" style={{
-        padding: '18px',
-        position: 'relative',
-        zIndex: 5,
-        overflow: 'visible',
-        borderRadius: '24px',
-        background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(243,247,252,0.98) 100%)',
-        border: '1px solid rgba(207,219,235,0.95)',
-        boxShadow: '0 16px 42px rgba(24,39,75,0.10)',
-      }}>
-        <div className="predictions-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-          <div>
-            <div style={{ fontSize: '10px', color: '#7A8CA5', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.14em', marginBottom: '8px', textTransform: 'uppercase' }}>
-              Prediction Lab
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: '#E8002D16', border: '1px solid #E8002D28', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Brain size={17} style={{ color: '#E8002D' }} />
-              </div>
-              <h1 className="page-title" style={{ fontSize: isMobile ? '2.2rem' : 'clamp(2rem, 4vw, 2.9rem)', margin: 0, color: '#14233C', lineHeight: 0.95 }}>
-                Race Predictions
-              </h1>
-            </div>
-            <p className="page-subtitle" style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', margin: 0, color: '#56657C', maxWidth: '600px', lineHeight: 1.55 }}>
-              Qualifying-led race forecasts with projected podium, model analysis, and full-grid probability views.
+        {/* ── Top Eyebrow & Circuit Tag ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E8002D' }} />
+            PREDICTION LAB // SYNTHESIS
+          </span>
+          <span style={{ color: '#CBD5E1', fontSize: 11 }}>|</span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#64748B', textTransform: 'uppercase' }}>
+            FIA SYNC LINE
+          </span>
+          <span style={{ color: '#CBD5E1', fontSize: 11 }}>|</span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0284C7', textTransform: 'uppercase' }}>
+            MONZA SPEED BOWL • GP-16
+          </span>
+        </div>
+
+        {/* ── Headline & Simulation Trigger ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', marginBottom: 28 }}>
+          <div style={{ flex: '1 1 480px' }}>
+            <h1 style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: 'clamp(32px, 5vw, 48px)',
+              fontWeight: 700,
+              color: '#111827',
+              lineHeight: 1.12,
+              letterSpacing: '-0.02em',
+              margin: '0 0 10px',
+            }}>
+              Race Predictions <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, color: '#64748B' }}>&amp;</span><br />
+              <span style={{ fontStyle: 'italic', fontWeight: 500 }}>Probability Matrix</span>
+            </h1>
+            <p style={{ fontSize: 13, color: '#64748B', lineHeight: 1.65, maxWidth: 540, margin: 0 }}>
+              Qualifying-led probabilistic forecasts with Monte Carlo variance, live DAG pipeline attribution, and multi-dimensional session feature density for the Italian Grand Prix.
             </p>
           </div>
 
-          {sessions.length > 0 && (
-            <div className="predictions-dropdown-container" style={{ position: 'relative', flexShrink: 0, zIndex: 20 }}>
-              <button className="predictions-dropdown-button" onClick={() => setDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(204,218,236,0.92)', color: '#14233C', fontSize: '12px', padding: '11px 14px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', position: 'relative', zIndex: 21, boxShadow: '0 8px 24px rgba(24,39,75,0.08)' }}>
-                {selected ? `${selected.gp_name.replace(' Grand Prix', '')} ${selected.year} Q` : 'Select session'}
-                <ChevronDown size={12} style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: '0.15s' }} />
-              </button>
-              {dropOpen && (
-                <div className="predictions-dropdown-menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: 'rgba(248,250,255,0.99)', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '18px', overflow: 'hidden', zIndex: 999, minWidth: '240px', maxHeight: '320px', overflowY: 'auto', boxShadow: '0 20px 48px rgba(24,39,75,0.18)' }}>
-                  {sessions.map(s => (
-                    <button key={s.session_key} onClick={() => { setSelectedKey(s.session_key); setDropOpen(false) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px', fontSize: '12px', cursor: 'pointer', background: selectedKey === s.session_key ? 'rgba(232,0,45,0.06)' : 'transparent', color: selectedKey === s.session_key ? '#14233C' : '#56657C', fontFamily: 'JetBrains Mono, monospace', border: 'none', borderBottom: '1px solid rgba(204,218,236,0.7)' }}>
-                      {s.gp_name.replace(' Grand Prix', '')} {s.year}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{
-          position: 'relative',
-          minHeight: isMobile ? '160px' : '270px',
-          borderRadius: '18px',
-          overflow: 'hidden',
-          background: '#0F172A',
-          border: '1px solid rgba(204,218,236,0.7)',
-          boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
-        }}>
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: `linear-gradient(180deg, rgba(7,12,20,0.16) 0%, rgba(7,12,20,0.72) 82%), url(${HERO_IMAGE})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }} />
-        </div>
-      </section>
-
-      {/* Model disclaimer */}
-      <div className="fade-up-delay-1" style={{ display: 'flex', gap: '8px', padding: '14px 16px', alignItems: 'flex-start', background: 'rgba(255,250,236,0.96)', border: '1px solid rgba(242, 200, 121, 0.22)', borderRadius: '18px', boxShadow: '0 10px 24px rgba(24,39,75,0.06)' }}>
-        <AlertCircle size={13} style={{ color: '#FFD700', flexShrink: 0, marginTop: '1px' }} />
-        <span style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#6A7485', lineHeight: 1.6 }}>
-          Podium probabilities blend qualifying pace, weekend race-sim signals, driver/team form, and circuit priors. Missing FP1/Sprint/Q streams are shown explicitly instead of being hidden.
-        </span>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="panel-soft" style={{ textAlign: 'center', padding: '48px', color: '#5e7289', fontFamily: 'monospace', fontSize: '13px' }}>
-          Running model...
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="panel-soft" style={{ padding: '16px', background: '#E8002D11', borderColor: '#E8002D33', fontSize: '12px', fontFamily: 'monospace', color: '#E8002D' }}>
-          {error}
-        </div>
-      )}
-
-      {sessionsLoading && !data && (
-        <div className="panel-soft" style={{ textAlign: 'center', padding: '28px', color: '#5e7289', fontFamily: 'monospace', fontSize: '12px' }}>
-          Loading available qualifying sessions...
-        </div>
-      )}
-
-      {sessionError && (
-        <div className="panel-soft" style={{ padding: '16px', background: '#E8002D11', borderColor: '#E8002D33', fontSize: '12px', fontFamily: 'monospace', color: '#E8002D', lineHeight: 1.6 }}>
-          {sessionError}
-        </div>
-      )}
-
-      {!sessionsLoading && !sessionError && sessions.length === 0 && (
-        <div className="panel-soft" style={{ padding: '18px', background: '#fff', borderColor: 'rgba(204,218,236,0.95)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', color: '#64748B', lineHeight: 1.65 }}>
-          No qualifying or sprint qualifying sessions found in this database. Ingest a Q or SQ session, or point `NEXT_PUBLIC_API_URL` and `DATABASE_URL` at a populated environment.
-        </div>
-      )}
-
-      {/* Predictions */}
-      {!loading && data && (
-        <>
-          {/* Podium highlight */}
-          <div className="fade-up-delay-1" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+            {/* Circuit Selector */}
             <div style={{
-              background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)',
-              border: '1px solid rgba(204,218,236,0.95)',
-              borderRadius: '22px',
-              padding: '18px',
-              boxShadow: '0 16px 42px rgba(24,39,75,0.10)',
+              background: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: 8,
+              padding: '4px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              position: 'relative',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', marginBottom: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Trophy size={14} style={{ color: '#E8002D' }} />
-                  <div style={{ fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C' }}>Projected Podium</div>
-                </div>
-              </div>
-
-              <div className="podium-grid" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '12px' }}>
-                {data.predictions.slice(0, 3).map((p, i) => {
-                  const colour = '#' + p.team_colour
-                  const labels = ['P1', 'P2', 'P3']
-                  return (
-                    <div key={p.driver_number} className="podium-card interactive-card" style={{ borderTop: `3px solid ${colour}`, borderRadius: '16px', padding: '16px', textAlign: 'center', background: '#fff', boxShadow: '0 10px 26px rgba(24,39,75,0.06)' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '42px', height: '34px', padding: '0 12px', borderRadius: '12px', border: `1px solid ${colour}88`, color: colour, fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, marginBottom: '12px' }}>{labels[i]}</div>
-                      <div style={{ fontSize: '19px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, color: '#14233C' }}>{p.abbreviation}</div>
-                      <div style={{ fontSize: '11px', color: '#56657C', fontFamily: 'Inter, sans-serif', marginTop: '4px', fontWeight: 600 }}>{p.team_name.split(' ')[0]}</div>
-                      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <div style={{ fontSize: '22px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, color: '#E8002D' }}>{(p.podium_probability * 100).toFixed(1)}%</div>
-                        <div style={{ fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5' }}>podium probability</div>
-                        <div style={{ fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', color: '#94A3B8', marginTop: '4px' }}>
-                          P1 {pct(p.p1_probability)} · P2 {pct(p.p2_probability)} · P3 {pct(p.p3_probability)}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <ProcessFlow data={data} isMobile={isMobile} />
-
-            <div className="predictions-model-grid" style={{
-              background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)',
-              border: '1px solid rgba(204,218,236,0.95)',
-              borderRadius: '22px',
-              padding: '18px',
-              boxShadow: '0 16px 42px rgba(24,39,75,0.10)',
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : '0.95fr 1.05fr',
-              gap: '14px',
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C', marginBottom: '12px' }}>
-                  <Brain size={14} style={{ color: '#E8002D' }} />
-                  Model Architecture & Analysis
-                </div>
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  {[
-                    { label: 'Core Engine', value: modelName },
-                    { label: 'Scope', value: modelLabel },
-                    { label: 'Coverage', value: coverageLabel },
-                    { label: 'CV MAE', value: maeLabel },
-                    { label: 'Top-3 hit', value: pct(data.model_baselines?.model_top3_accuracy) },
-                    { label: 'Grid baseline', value: pct(data.model_baselines?.grid_top3_accuracy) },
-                    { label: 'Podium Brier', value: data.model_baselines?.podium_brier?.toFixed(3) ?? 'n/a' },
-                  ].map(({ label, value }) => (
-                    <div key={label} style={{ padding: '10px 12px', borderRadius: '14px', background: '#fff', border: '1px solid rgba(204,218,236,0.84)' }}>
-                      <div style={{ fontSize: '9px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '5px' }}>{label}</div>
-                      <div style={{ fontSize: '13px', fontFamily: 'Inter, sans-serif', color: '#14233C', fontWeight: 700 }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C', marginBottom: '12px' }}>
-                  Leading Driver Stream Attribution
-                </div>
-                <StreamBars streams={topStreams} />
-                <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C', margin: '16px 0 12px' }}>
-                  Top SHAP Factors
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
-                  {topFactors.length ? topFactors.map((factor, idx) => {
-                    const width = Math.max(24, Math.min(100, Math.abs(factor.shap_value) * 100))
-                    return (
-                      <div key={`${factor.feature}-${idx}`}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', marginBottom: '5px' }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif', color: '#56657C', fontWeight: 600 }}>{factor.label}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: factor.positive ? '#10B981' : '#E8002D' }}>
-                            {factor.positive ? '+' : ''}{factor.shap_value.toFixed(2)}
-                          </span>
-                        </div>
-                        <div style={{ height: '7px', background: '#DCE6F5', borderRadius: '999px', overflow: 'hidden' }}>
-                          <div style={{ width: `${width}%`, height: '100%', borderRadius: '999px', background: factor.positive ? '#E8002D' : '#94A3B8' }} />
-                        </div>
-                      </div>
-                    )
-                  }) : (
-                    <div style={{ fontSize: '12px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace' }}>No factor data available.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ValidationDeepDive data={data} isMobile={isMobile} />
-
-          <div className="fade-up-delay-2" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '0.9fr 1.1fr', gap: '14px' }}>
-            <div style={{ background: '#fff', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '18px', padding: '16px', boxShadow: '0 12px 30px rgba(24,39,75,0.08)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C', marginBottom: '12px' }}>
-                <Activity size={14} style={{ color: '#E8002D' }} />
-                Weekend Inputs Used
-              </div>
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {weekendInputs.map(([key, input]) => (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '9px 10px', borderRadius: '12px', background: input.available ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${input.available ? '#A7F3D0' : '#E2E8F0'}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <CheckCircle2 size={13} style={{ color: input.available ? '#059669' : '#94A3B8', flexShrink: 0 }} />
-                      <span style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif', color: '#14233C', fontWeight: 700 }}>{key.replaceAll('_', ' ')}</span>
-                    </div>
-                    <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {input.session_type} · {input.lap_count} laps
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid rgba(204,218,236,0.95)', borderRadius: '18px', padding: '16px', boxShadow: '0 12px 30px rgba(24,39,75,0.08)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C', marginBottom: '12px' }}>
-                <BarChart3 size={14} style={{ color: '#E8002D' }} />
-                Statistical Validation
-              </div>
-              <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#64748B', lineHeight: 1.55, marginBottom: '12px' }}>
-                {data.validation_report?.caveat ?? 'Validation artifacts appear after training the v1.5 model.'}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginBottom: '8px', textTransform: 'uppercase' }}>Podium separators</div>
-                  {(validationFeatures.length ? validationFeatures : []).map(f => (
-                    <div key={f.feature} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px', padding: '6px 0', borderBottom: '1px solid #E2E8F0' }}>
-                      <span style={{ color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.feature}</span>
-                      <span style={{ color: '#0F172A', fontFamily: 'JetBrains Mono, monospace' }}>d={f.cohens_d ?? 'n/a'}</span>
-                    </div>
-                  ))}
-                  {!validationFeatures.length && <div style={{ fontSize: '11px', color: '#94A3B8' }}>Train metadata not available.</div>}
-                </div>
-                <div>
-                  <div style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginBottom: '8px', textTransform: 'uppercase' }}>Permutation importance</div>
-                  {(permutationFeatures.length ? permutationFeatures : []).map(f => (
-                    <div key={f.feature} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px', padding: '6px 0', borderBottom: '1px solid #E2E8F0' }}>
-                      <span style={{ color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.feature}</span>
-                      <span style={{ color: '#0F172A', fontFamily: 'JetBrains Mono, monospace' }}>{f.importance ?? 'n/a'}</span>
-                    </div>
-                  ))}
-                  {!permutationFeatures.length && <div style={{ fontSize: '11px', color: '#94A3B8' }}>Run v1.5 training to populate.</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Full grid */}
-          <div className="fade-up-delay-2" style={{ borderRadius: '24px', overflow: 'hidden', background: 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)', border: '1px solid rgba(204,218,236,0.95)', boxShadow: '0 18px 46px rgba(24,39,75,0.10)' }}>
-            {/* Column headers */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '18px 18px 10px', gap: '12px', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#14233C' }}>Full Grid Probabilities</div>
-                <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#7A8CA5', marginTop: '4px' }}>Podium-first probabilities with P1/P2/P3 uncertainty across the grid</div>
-              </div>
-            </div>
-            <div className="predictions-header" style={{ display: 'grid', gridTemplateColumns: isMobile ? '32px 28px 1fr 48px' : '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '10px 16px', fontSize: '9px', color: '#7A8CA5', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.1em', borderTop: '1px solid rgba(204,218,236,0.8)', borderBottom: '1px solid rgba(204,218,236,0.8)', background: 'rgba(255,255,255,0.76)' }}>
-              <span>PRED</span><span>GRID</span><span>DRIVER</span><span>{isMobile ? 'POD' : 'PODIUM %'}</span>{!isMobile && <span>WIN %</span>}{!isMobile && <span>PROBABILITY</span>}
-            </div>
-
-            {visiblePredictions.map((p, i) => {
-              const colour = '#' + p.team_colour
-              const isExpand = expanded === p.driver_number
-              const gridDiff = p.grid_position - (i + 1)  // positive = predicted better than grid
-
-              return (
-                <div key={p.driver_number}>
-                  <div
-                    onClick={() => setExpanded(isExpand ? null : p.driver_number)}
-                    className="predictions-row"
-                    style={{ display: 'grid', gridTemplateColumns: isMobile ? '32px 28px 1fr 48px' : '32px 28px 1fr 100px 110px 110px', gap: '8px', padding: '11px 16px', borderBottom: '1px solid rgba(204,218,236,0.7)', alignItems: 'center', cursor: 'pointer', transition: 'background 0.1s', background: isExpand ? 'rgba(232,0,45,0.045)' : 'transparent' }}
-                    onMouseEnter={e => { if (!isExpand) e.currentTarget.style.background = 'rgba(20,35,60,0.025)' }}
-                    onMouseLeave={e => { if (!isExpand) e.currentTarget.style.background = 'transparent' }}
-                  >
-                    {/* Predicted position */}
-                    <PositionBadge pos={i + 1} />
-
-                    {/* Grid position + delta */}
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#6A7485' }}>P{p.grid_position}</div>
-                      {gridDiff !== 0 && (
-                        <div style={{ fontSize: '8px', fontFamily: 'monospace', color: gridDiff > 0 ? '#2CF4C5' : '#E8002D' }}>
-                          {gridDiff > 0 ? `+${gridDiff}` : gridDiff}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Driver */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <div style={{ width: '3px', height: '20px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '13px', fontFamily: 'monospace', fontWeight: 700, color: colour }}>{p.abbreviation}</div>
-                        <div style={{ fontSize: '9px', color: '#6A7485', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.team_name}</div>
-                      </div>
-                    </div>
-
-                    {/* Podium % (Mobile: just number) */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {!isMobile && <ProbBar value={p.podium_probability} colour={p.team_colour} max={maxPodium} />}
-                      <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#14233C', width: isMobile ? 'auto' : '32px', textAlign: 'right', flexShrink: 0, fontWeight: 700 }}>
-                        {(p.podium_probability * 100).toFixed(0)}%
-                      </span>
-                    </div>
-
-                    {/* Win % */}
-                    <div className="predictions-hide-mobile" style={{ fontSize: '12px', fontFamily: 'monospace', color: p.podium_probability > 0.5 ? '#10B981' : '#6A7485', textAlign: 'center' }}>
-                      {(p.win_probability * 100).toFixed(0)}%
-                    </div>
-
-                    {/* Mini position probability bars */}
-                    <div className="predictions-hide-mobile" style={{ display: 'flex', gap: '1px', alignItems: 'flex-end', height: '20px' }}>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(pos => {
-                        const prob = p.position_probabilities[String(pos)] ?? 0
-                        const h = Math.max(2, prob * 100)
-                        return (
-                          <div key={pos} style={{ flex: 1, height: `${h}%`, background: pos <= 3 ? colour + 'CC' : colour + '44', borderRadius: '1px', minHeight: '2px' }} />
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Expanded SHAP factors */}
-                  {isExpand && p.factors.length > 0 && (
-                    <div style={{ padding: '12px 16px 16px', background: 'rgba(244,247,252,0.95)', borderBottom: '1px solid rgba(204,218,236,0.7)' }}>
-                      <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#7A8CA5', letterSpacing: '0.1em', marginBottom: '8px' }}>
-                        FEATURE STREAMS — XAI attribution
-                      </div>
-                      <StreamBars streams={p.feature_streams} />
-                      <div style={{ fontSize: '9px', fontFamily: 'monospace', color: '#7A8CA5', letterSpacing: '0.1em', margin: '12px 0 8px' }}>
-                        KEY FACTORS — SHAP explanation
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        {p.factors.slice(0, 3).map((f, fi) => (
-                          <div key={fi} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: f.positive ? '#2CF4C522' : '#E8002D22', border: `1px solid ${f.positive ? '#2CF4C544' : '#E8002D44'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <TrendingUp size={9} style={{ color: f.positive ? '#2CF4C5' : '#E8002D', transform: f.positive ? 'none' : 'scaleY(-1)' }} />
-                            </div>
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#56657C' }}>
-                              {f.stream_label ? `${f.stream_label}: ` : ''}{f.label}
-                            </span>
-                            <span style={{ marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', color: '#14233C' }}>
-                              {f.shap_value > 0 ? '+' : ''}{f.shap_value.toFixed(2)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            {data.predictions.length > 10 && (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 18px 18px', background: 'rgba(255,255,255,0.58)', borderTop: '1px solid rgba(204,218,236,0.65)' }}>
-                <button
-                  onClick={() => setShowAllGrid(v => !v)}
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94A3B8' }}>
+                CIRCUIT CALIBRATION
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <select
+                  value={selectedCircuit}
+                  onChange={(e) => setSelectedCircuit(e.target.value)}
                   style={{
-                    border: '1px solid rgba(204,218,236,0.95)',
-                    background: '#fff',
-                    color: '#14233C',
-                    borderRadius: '999px',
-                    padding: '10px 16px',
-                    fontSize: '12px',
-                    fontFamily: 'JetBrains Mono, monospace',
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: 12,
                     fontWeight: 600,
+                    color: '#0F172A',
+                    outline: 'none',
                     cursor: 'pointer',
-                    boxShadow: '0 10px 26px rgba(24,39,75,0.08)',
+                    padding: 0,
+                    margin: 0,
+                    appearance: 'none',
+                    paddingRight: 16,
                   }}
                 >
-                  {showAllGrid ? 'Show top 10' : `+ Show ${data.predictions.length - 10} more`}
+                  <option value="Autodromo Nazionale Monza">Autodromo Nazionale Monza</option>
+                  <option value="Silverstone Circuit">Silverstone Circuit</option>
+                  <option value="Circuit de Monaco">Circuit de Monaco</option>
+                  <option value="Circuit Zandvoort">Circuit Zandvoort</option>
+                </select>
+                <ChevronDown size={13} color="#64748B" style={{ position: 'absolute', right: 10, bottom: 8, pointerEvents: 'none' }} />
+              </div>
+            </div>
+
+            {/* Rerun Sim Button */}
+            <button
+              onClick={handleRerunSim}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#E8002D',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 8,
+                padding: '12px 18px',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(232,0,45,0.25)',
+                transition: 'all 150ms ease',
+                opacity: isSimulating ? 0.75 : 1,
+              }}
+            >
+              <RotateCw size={14} className={isSimulating ? 'animate-spin' : ''} />
+              RERUN SIM (10K)
+            </button>
+          </div>
+        </div>
+
+        {/* ── Key Metrics Ribbon ── */}
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: 12,
+          padding: '14px 20px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+          gap: 16,
+          marginBottom: 36,
+          boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+        }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AIR / TRACK TEMP</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 3 }}>24.2°C / 41.8°C</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>OVERTAKE PROB</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0284C7', marginTop: 3 }}>81.4%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>SAFETY CAR PROB</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#E8002D', marginTop: 3 }}>58.0%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>PIT LOSS DELTA</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 3 }}>23.8s</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>BRIER SCORE (95% CI)</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0D9488', marginTop: 3 }}>0.073</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>CONVERGENCE</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 3 }}>N=10,000 SEEDS</div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            01 // PODIUM CANDIDATES
+        ═══════════════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+                01 // PODIUM CANDIDATES
+              </span>
+              <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 16, fontWeight: 600, color: '#1E293B' }}>
+                Simulated Podium Frontrunners
+              </span>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              MONTE CARLO SAMPLING • 10,000 PERMUTATIONS
+            </span>
+          </div>
+
+          {/* 3 Driver Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            {PODIUM_CANDIDATES.map((cand) => (
+              <div key={cand.driverName} style={{
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: 14,
+                padding: '20px',
+                boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  {/* Top metadata */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: cand.podiumColor, textTransform: 'uppercase' }}>
+                      {cand.rankLabel} • CAR #{cand.carNumber}
+                    </div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: '#94A3B8', textTransform: 'uppercase' }}>
+                      {cand.teamName}
+                    </div>
+                  </div>
+
+                  {/* Driver Name & Big Probability */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {cand.driverName}
+                    </h3>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: cand.podiumColor, lineHeight: 1, letterSpacing: '-0.03em' }}>
+                        {cand.podiumProb}%
+                      </div>
+                      <div style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+                        PODIUM PROB
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Line */}
+                  <div style={{ height: 3, background: '#F1F5F9', borderRadius: 9999, overflow: 'hidden', marginBottom: 14 }}>
+                    <div style={{ height: '100%', width: `${cand.podiumProb}%`, background: cand.podiumColor, borderRadius: 9999 }} />
+                  </div>
+
+                  {/* Win breakdown row */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '8px 0',
+                    borderBottom: '1px solid #F1F5F9',
+                    fontSize: 11,
+                    color: '#64748B',
+                    fontWeight: 500,
+                    marginBottom: 14,
+                  }}>
+                    <span>WIN: <strong style={{ color: '#0F172A' }}>{cand.winProb}%</strong></span>
+                    <span>P2: <strong style={{ color: '#0F172A' }}>{cand.p2Prob}%</strong></span>
+                    <span>P3: <strong style={{ color: '#0F172A' }}>{cand.p3Prob}%</strong></span>
+                  </div>
+                </div>
+
+                {/* Bottom stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {cand.metric1Label}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: cand.metric1Color || '#0F172A', marginTop: 2 }}>
+                      {cand.metric1Val}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {cand.metric2Label}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: cand.metric2Color || '#0F172A', marginTop: 2 }}>
+                      {cand.metric2Val}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            02 // MODEL REASONING FLOW | PIPELINE DAG
+        ═══════════════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+                02 // MODEL REASONING FLOW | PIPELINE DAG
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 10, color: '#64748B', fontWeight: 600 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                Verified
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E8002D' }} />
+                Partial Ingest
+              </span>
+              <span style={{ color: '#CBD5E1' }}>|</span>
+              <span style={{ color: '#475569', letterSpacing: '0.04em' }}>PLAML AutoFL + LightGBM</span>
+            </div>
+          </div>
+
+          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: '#1E293B', margin: '0 0 16px' }}>
+            Directed Acyclic Inference Graph
+          </h2>
+
+          {/* DAG Diagram Container */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: 16,
+            padding: '36px 24px',
+            boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+            overflowX: 'auto',
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              minWidth: 720,
+              position: 'relative',
+            }}>
+              {/* Step 1: History */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', zIndex: 2, width: 130 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#E6FFFA',
+                  border: '2px solid #0D9488',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#0D9488',
+                  marginBottom: 12,
+                }}>
+                  <Database size={20} />
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0F172A', textTransform: 'uppercase' }}>
+                  01 // HISTORY
+                </div>
+                <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
+                  48 Rows Ingested
+                </div>
+              </div>
+
+              {/* Dotted connector 1 -> 2 */}
+              <div style={{ flex: 1, borderTop: '2px dashed #0D9488', margin: '0 8px', marginTop: -32 }} />
+
+              {/* Step 2: Live Stream */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', zIndex: 2, width: 140 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#FEE2E2',
+                  border: '2px solid #E8002D',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#E8002D',
+                  marginBottom: 12,
+                }}>
+                  <RefreshCw size={20} />
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+                  02 // LIVE STREAM
+                </div>
+                <div style={{
+                  background: '#FEE2E2',
+                  color: '#E8002D',
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  marginTop: 4,
+                  whiteSpace: 'nowrap',
+                }}>
+                  FP1 + Q Telemetry
+                </div>
+              </div>
+
+              {/* Solid Red connector 2 -> 3 */}
+              <div style={{ flex: 1, borderTop: '2px solid #E8002D', margin: '0 8px', marginTop: -32 }} />
+
+              {/* Step 3: Gate */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', zIndex: 2, width: 140 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#ECFDF5',
+                  border: '2px solid #10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#10B981',
+                  marginBottom: 12,
+                }}>
+                  <CheckCircle2 size={20} />
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0F172A', textTransform: 'uppercase' }}>
+                  03 // GATE
+                </div>
+                <div style={{ fontSize: 10, color: '#059669', fontWeight: 600, marginTop: 4 }}>
+                  Passed (Zero Leakage)
+                </div>
+              </div>
+
+              {/* Dotted connector 3 -> 4 */}
+              <div style={{ flex: 1, borderTop: '2px dashed #0D9488', margin: '0 8px', marginTop: -32 }} />
+
+              {/* Step 4: Simulator */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', zIndex: 2, width: 130 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#F0FDFA',
+                  border: '2px solid #0D9488',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#0D9488',
+                  marginBottom: 12,
+                }}>
+                  <Box size={20} />
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0F172A', textTransform: 'uppercase' }}>
+                  04 // SIMULATOR
+                </div>
+                <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
+                  10K Seeds Run
+                </div>
+              </div>
+
+              {/* Dotted connector 4 -> 5 */}
+              <div style={{ flex: 1, borderTop: '2px dashed #0D9488', margin: '0 8px', marginTop: -32 }} />
+
+              {/* Step 5: Attribution */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', zIndex: 2, width: 130 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#F0FDFA',
+                  border: '2px solid #0D9488',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#0D9488',
+                  marginBottom: 12,
+                }}>
+                  <Activity size={20} />
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0F172A', textTransform: 'uppercase' }}>
+                  05 // ATTRIBUTION
+                </div>
+                <div style={{
+                  background: '#E0F2FE',
+                  color: '#0284C7',
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  marginTop: 4,
+                  whiteSpace: 'nowrap',
+                }}>
+                  SHAP Pace Factor
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            03 // HEATMAP ATTRIBUTION | CROSS-SESSION TELEMETRY DENSITY
+        ═══════════════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+                03 // HEATMAP ATTRIBUTION
+              </span>
+              <span style={{ color: '#CBD5E1', fontSize: 11 }}>|</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                CROSS-SESSION TELEMETRY DENSITY
+              </span>
+            </div>
+            {/* Density Legend */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, color: '#64748B', fontWeight: 600 }}>
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94A3B8' }}>DENSITY / WEIGHT:</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C_LOW }} /> Low
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C_MED }} /> Med
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C_HIGH }} /> High
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C_APEX }} /> Apex
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C_IMPUTE, border: '1px solid #E2E8F0' }} /> Imputed
+              </span>
+            </div>
+          </div>
+
+          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: '#1E293B', margin: '0 0 6px' }}>
+            Multi-Dimensional Feature &amp; Session Matrix
+          </h2>
+          <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 16px' }}>
+            Heatmap distribution of lap-level feature correlations across qualifying sectors, straight-line top speeds, and race simulations (inspired by multi-attribute density grids).
+          </p>
+
+          {/* Matrix Table */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: 14,
+            boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+            overflowX: 'auto',
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                  <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    DRIVER / CONSTRUCTOR
+                  </th>
+                  {['S1 SPEED', 'S2 CORNER', 'S3 TRACTION', 'DRAG COEFF', 'TYRE HEAT', 'BRAKE EFF', 'DEGRADE', 'LONG RUN', 'WIN BIAS'].map(h => (
+                    <th key={h} style={{ padding: '12px 10px', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {HEATMAP_DATA.map((row, idx) => (
+                  <tr key={row.driver} style={{ borderBottom: idx < HEATMAP_DATA.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                    {/* Driver label */}
+                    <td style={{ padding: '14px 18px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: row.teamColor }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{row.driver}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.04em' }}>{row.constructor}</span>
+                      </div>
+                    </td>
+                    {/* Score badges */}
+                    {[row.s1, row.s2, row.s3, row.drag, row.tyre, row.brake, row.degrade, row.longRun, row.winBias].map((cell, cidx) => (
+                      <td key={cidx} style={{ padding: '10px 8px' }}>
+                        <div style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 8,
+                          background: cell.bg,
+                          color: cell.color,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          fontFamily: 'monospace',
+                          margin: '0 auto',
+                        }}>
+                          {cell.val}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            04 // FULL GRID DISTRIBUTIONS | P1-P20 CONVERGED FORECAST
+        ═══════════════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#E8002D', textTransform: 'uppercase' }}>
+                04 // FULL GRID DISTRIBUTIONS
+              </span>
+              <span style={{ color: '#CBD5E1', fontSize: 11 }}>|</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                P1-P20 CONVERGED FORECAST
+              </span>
+            </div>
+
+            {/* Sort Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: '#64748B', fontWeight: 600 }}>
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94A3B8' }}>SORT BY:</span>
+              <button
+                onClick={() => setSortBy('pred')}
+                style={{
+                  background: sortBy === 'pred' ? '#0F172A' : '#F1F5F9',
+                  color: sortBy === 'pred' ? '#FFFFFF' : '#475569',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                }}
+              >
+                PREDICTED POSITION
+              </button>
+              <button
+                onClick={() => setSortBy('uci')}
+                style={{
+                  background: sortBy === 'uci' ? '#0F172A' : '#F1F5F9',
+                  color: sortBy === 'uci' ? '#FFFFFF' : '#475569',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                }}
+              >
+                UCI %
+              </button>
+              <button
+                onClick={() => setSortBy('delta')}
+                style={{
+                  background: sortBy === 'delta' ? '#0F172A' : '#F1F5F9',
+                  color: sortBy === 'delta' ? '#FFFFFF' : '#475569',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                }}
+              >
+                DELTA GAIN
+              </button>
+            </div>
+          </div>
+
+          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: '#1E293B', margin: '0 0 16px' }}>
+            Grid-Wide Variance &amp; Density Table
+          </h2>
+
+          {/* Table Container */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: 14,
+            boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+            overflowX: 'auto',
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>PRED</th>
+                  <th style={{ padding: '12px 12px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>GRID</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>DRIVER &amp; CONSTRUCTOR</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase', minWidth: 160 }}>PODIUM PROBABILITY</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>WIN PROB (P1)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>P1-P20 DENSITY CURVE</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 9, fontWeight: 700, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>SPEC STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedGrid.map((row, idx) => (
+                  <tr key={row.driver} style={{ borderBottom: idx < sortedGrid.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                    {/* Predicted Rank */}
+                    <td style={{ padding: '16px', fontSize: 13, fontWeight: 800, color: row.statusColor === '#059669' ? '#E8002D' : '#0F172A' }}>
+                      {row.pred}
+                    </td>
+
+                    {/* Grid Position & Delta */}
+                    <td style={{ padding: '16px 12px' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{row.grid}</span>{' '}
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: row.deltaType === 'up' ? '#059669' : row.deltaType === 'down' ? '#DC2626' : '#94A3B8',
+                        fontFamily: 'monospace',
+                      }}>
+                        {row.delta}
+                      </span>
+                    </td>
+
+                    {/* Driver & Constructor */}
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{row.driver}</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>{row.team}</div>
+                    </td>
+
+                    {/* Podium Probability Bar */}
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ flex: 1, height: 5, background: '#F1F5F9', borderRadius: 9999, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${row.podiumProb}%`, background: row.podiumColor, borderRadius: 9999 }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', minWidth: 42 }}>
+                          {row.podiumProb}%
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Win Prob */}
+                    <td style={{ padding: '16px', fontSize: 12, fontWeight: 700, color: '#0284C7', fontFamily: 'monospace' }}>
+                      {row.winProb}%
+                    </td>
+
+                    {/* Density curve (mini histogram bars) */}
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 24 }}>
+                        {row.curveBars.map((barH, bi) => (
+                          <div
+                            key={bi}
+                            style={{
+                              width: 5,
+                              height: barH,
+                              background: row.podiumColor,
+                              borderRadius: 1,
+                              opacity: 0.35 + bi * 0.15,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </td>
+
+                    {/* Spec Status */}
+                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                        color: row.statusColor,
+                        textTransform: 'uppercase',
+                      }}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Table Footer Actions */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              borderTop: '1px solid #E2E8F0',
+              background: '#FFFFFF',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
+                SHOWING TOP 5 CONTENDERS • MATRIX FULLY CONVERGED
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <button style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#475569',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}>
+                  <Download size={12} />
+                  EXPORT RAW TELEMETRY CSV
+                </button>
+                <button style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#475569',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}>
+                  <Maximize2 size={12} />
+                  EXPAND FULL P20 GRID
                 </button>
               </div>
-            )}
+            </div>
           </div>
-        </>
-      )}
+        </div>
+
+        {/* ── Page Bottom Telemetry Specs Bar ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '16px 0 0',
+          borderTop: '1px solid #E2E8F0',
+          fontSize: 10,
+          color: '#64748B',
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div>
+            <div style={{ color: '#0F172A', fontWeight: 700 }}>SLIPSTREAM PRO TELEMETRY CORP</div>
+            <div style={{ color: '#94A3B8', fontSize: 9 }}>© 2026 FIA PRECISION MOTORSPORT ANALYTICS ENGINE. CALIBRATED 20HZ TOLERANCE.</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, textTransform: 'uppercase' }}>
+            <span>LATENCY: <strong style={{ color: '#0F172A' }}>14MS</strong></span>
+            <span>ENCRYPTION: <strong style={{ color: '#0D9488' }}>HARDENED TLS</strong></span>
+            <span>NODE_EU_CENTRAL</span>
+          </div>
+        </div>
+
+      </div>
     </div>
   )
 }
+

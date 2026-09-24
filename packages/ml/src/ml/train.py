@@ -259,7 +259,9 @@ def main():
                 "n_features":      len(FEATURE_COLS),
                 "features":        json.dumps(FEATURE_COLS),
             })
-            mlflow.log_metrics({
+            # Filter out None metrics (e.g. when CV had no folds due to
+            # single-year data) — MLflow rejects None values.
+            cv_log_metrics = {
                 "cv_mae_mean":           cv_metrics['mae_mean'],
                 "cv_mae_std":            cv_metrics['mae_std'],
                 "cv_top3_accuracy_mean": cv_metrics['top3_accuracy_mean'],
@@ -267,7 +269,8 @@ def main():
                 "cv_podium_recall_mean": cv_metrics["podium_recall_mean"],
                 "cv_podium_brier_mean": cv_metrics["podium_brier_mean"],
                 "grid_baseline_top3_accuracy_mean": cv_metrics["grid_baseline_top3_accuracy_mean"],
-            })
+            }
+            mlflow.log_metrics({k: v for k, v in cv_log_metrics.items() if v is not None})
 
         # Log feature importance — the most valuable thing to track.
         # WHY: knowing WHICH features the model relies on tells you:

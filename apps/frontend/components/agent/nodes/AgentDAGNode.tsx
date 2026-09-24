@@ -92,7 +92,7 @@ function AgentDAGNode({ data }: NodeProps<AgentNode>) {
     >
       <Handle
         type="target"
-        position={Position.Left}
+        position={Position.Top}
         className="!h-2 !w-2 !min-w-0 !border !border-slate-300 !bg-white"
       />
 
@@ -160,7 +160,7 @@ function AgentDAGNode({ data }: NodeProps<AgentNode>) {
 
       <Handle
         type="source"
-        position={Position.Right}
+        position={Position.Bottom}
         className="!h-2 !w-2 !min-w-0 !border !border-slate-300 !bg-white"
       />
     </div>

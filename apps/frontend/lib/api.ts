@@ -88,7 +88,7 @@ export const telemetryApi = {
 export const predictionsApi = {
   predict: (qualiKey: number) =>
     get<import('@/types/f1').PredictionResponse>(
-      `/api/v1/sessions/${qualiKey}/predict`
+      `/api/v1/sessions/${qualiKey}/predictions`
     ),
 }
 
@@ -97,12 +97,6 @@ export const raceIntelligenceApi = {
     get<import('@/types/f1').RaceIntelligenceResponse>(
       `/api/v1/sessions/${key}/analysis/race-intelligence`
     ),
-    events: (key: number, type?: string) => {
-      const q = type ? `?type=${encodeURIComponent(type)}` : ''
-      return get<import('@/types/f1').RaceIntelligenceResponse>(
-        `/api/v1/sessions/${key}/analysis/race-intelligence/events${q}`
-      )
-    },
 }
 
 export const API_URL =

@@ -109,6 +109,12 @@ seed:
 	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session Q
 	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session R
 	uv run python -m ingestion.ingest_session --year 2024 --gp "British" --session FP2 --skip-telemetry
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monaco" --session Q
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monaco" --session R
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monaco" --session FP2 --skip-telemetry
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monza" --session Q
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monza" --session R
+	uv run python -m ingestion.ingest_session --year 2024 --gp "Monza" --session FP2 --skip-telemetry
 
 
 # ── Development ───────────────────────────────────────────────────────────────

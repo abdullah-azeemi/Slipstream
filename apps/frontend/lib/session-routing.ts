@@ -9,7 +9,7 @@ export function getSessionRoute(sessionKey: number, sessionType: string): string
 }
 
 export function getSessionOverviewRoute(sessionKey: number): string {
-  return `/sessions/${sessionKey}/overview`
+  return `/sessions/${sessionKey}`
 }
 
 export function getSessionTelemetryRoute(sessionKey: number): string {

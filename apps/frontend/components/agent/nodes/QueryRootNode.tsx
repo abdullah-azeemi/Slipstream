@@ -79,10 +79,10 @@ function QueryRootNode({ data }: Props) {
         </p>
       </div>
 
-      {/* Source handle (Right side only) */}
+      {/* Query feeds into the first execution layer below. */}
       <Handle
         type="source"
-        position={Position.Right}
+        position={Position.Bottom}
         className="!h-2.5 !w-2.5 !min-w-0 !border !border-amber-400 !bg-white"
       />
     </div>

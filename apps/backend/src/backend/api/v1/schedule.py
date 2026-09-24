@@ -9,7 +9,6 @@ import logging
 from datetime import datetime, timezone
 from functools import lru_cache
 
-import fastf1
 from flask import Blueprint, jsonify
 
 log = logging.getLogger(__name__)
@@ -86,6 +85,8 @@ def _load_schedule() -> list[dict]:
     first call — every subsequent call returns the cached result instantly.
     """
     log.info("Loading 2026 F1 schedule from FastF1 (first call only)...")
+    import fastf1  # heavy — kept out of boot path; only loaded when first needed
+
     try:
         fastf1.Cache.enable_cache("/tmp/fastf1_cache")
     except Exception:
