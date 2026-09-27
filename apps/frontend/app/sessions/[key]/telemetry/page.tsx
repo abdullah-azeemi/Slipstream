@@ -13,11 +13,11 @@ import {
 import { createHoverClearController } from '@/lib/hover-clear'
 import { teamColour, formatLapTime } from '@/lib/utils'
 import type { Driver, TelemetrySample } from '@/types/f1'
-import RaceAnalysis from '@/components/analysis/RaceAnalysis'
 import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
 import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
 import CornerInsights from '@/components/analysis/CornerInsights'
 import QualiSpeedPanel from '@/components/telemetry/QualiSpeedPanel'
+import SvgSpeedTrace from '@/components/telemetry/SvgSpeedTrace'
 import LapStory, { type LapStoryDriver } from '@/components/telemetry/LapStory'
 import dynamic from 'next/dynamic'
 import type { InsightsData } from '@/components/analysis/BrakingAnalysis'
@@ -241,7 +241,6 @@ function drawDots(ctx: CanvasRenderingContext2D, nx: number, W: number, H: numbe
 
 const CHARTS = [
   { label: 'SPEED', unit: 'km/h', field: 'speed', yMin: 60, yMax: 360, height: 420, gridCount: 6, isRpm: false },
-  { label: 'BRAKING', unit: '%', field: 'brake', yMin: 0, yMax: 100, height: 160, gridCount: 4, isRpm: false },
   { label: 'THROTTLE', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 220, gridCount: 4, isRpm: false },
   { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 6000, yMax: 13000, height: 140, gridCount: 5, isRpm: true },
 ]
@@ -857,6 +856,7 @@ function TelemetryDecisionHero({
   sectorTimes,
   telLapNumbers,
   isMobile,
+  sessionType,
 }: {
   sessionName: string
   selectedSegment: 'Q1' | 'Q2' | 'Q3'
@@ -867,6 +867,7 @@ function TelemetryDecisionHero({
   sectorTimes: Map<number, DriverSectorTimes>
   telLapNumbers: Map<number, number>
   isMobile: boolean
+  sessionType: string | null
 }) {
   const rows = driverData.map(d => {
     const driver = drivers.find(item => item.abbreviation === d.abbr)
@@ -905,13 +906,13 @@ function TelemetryDecisionHero({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.red }} />
-          <span style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>{sessionName} · {selectedSegment}</span>
+          <span style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>{sessionName}{isRaceSession(sessionType) ? '' : ` · ${selectedSegment}`}</span>
         </div>
-        <div style={{ display: 'flex', gap: 16 }}>
+        {!isRaceSession(sessionType) && (<div style={{ display: 'flex', gap: 16 }}>
           {(['Q1', 'Q2', 'Q3'] as const).map(segment => (
             <button key={segment} onClick={() => onSegmentChange(segment)} disabled={!segmentCounts[segment]} style={{ border: 0, borderBottom: selectedSegment === segment ? `1px solid ${C.textBright}` : '1px solid transparent', padding: '0 0 4px', background: 'transparent', color: selectedSegment === segment ? C.textBright : C.textDim, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', cursor: segmentCounts[segment] ? 'pointer' : 'not-allowed' }}>{segment}</button>
           ))}
-        </div>
+        </div>)}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(260px, 0.72fr)', gap: isMobile ? 24 : 40, alignItems: 'end' }}>
@@ -982,7 +983,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [insightDriverColours, setInsightDriverColours] = useState<Record<string, string>>({})
   const [chartWidth, setChartWidth] = useState(0)
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTION_OPEN)
-  const [activeChannel, setActiveChannel] = useState<'speed' | 'brake' | 'throttle' | 'rpm'>('speed')
+  const [activeChannel, setActiveChannel] = useState<'speed' | 'throttle' | 'rpm'>('speed')
 
   const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
   const deltaRef = useRef<HTMLCanvasElement | null>(null)
@@ -995,6 +996,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const segmentDriverNumbers = getSegmentDriverNumbers(segmentEntries)
   const segmentLapByDriver = getSegmentLapByDriver(segmentEntries)
   const isQualifying = !isRaceSession(sessionType) && !isPracticeSession(sessionType)
+  const showTelemetry = isQualifying || isRaceSession(sessionType)
   const selectedKey = selected.join(',')
 
   const toggleSection = useCallback((key: SectionKey) => {
@@ -1057,7 +1059,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   // Telemetry fetch
   useEffect(() => {
-    if (!selected.length || !sessionType || !isQualifying) {
+    if (!selected.length || !sessionType || !showTelemetry) {
       setLoading(false)
       setTelemetryError(null)
       setTelData(new Map())
@@ -1110,7 +1112,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       active = false
       abort.abort()
     }
-  }, [sessionKey, selected, selectedKey, sessionType, selectedSegment, qualiSegments, isQualifying])
+  }, [sessionKey, selected, selectedKey, sessionType, selectedSegment, qualiSegments, showTelemetry])
 
   // Sector times
   useEffect(() => {
@@ -1141,7 +1143,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
   // Quali segments
   useEffect(() => {
-    if (!sessionType || !isQualifying) {
+    if (!sessionType || !showTelemetry) {
       setQualiSegments(null)
       return
     }
@@ -1161,7 +1163,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       active = false
       abort.abort()
     }
-  }, [sessionKey, sessionType, isQualifying])
+  }, [sessionKey, sessionType, showTelemetry])
 
   // Tel stats
   useEffect(() => {
@@ -1499,7 +1501,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   }, [])
 
   const toggleDriver = (dn: number) => {
-    if (isQualifying && qualiSegments?.segments && !segmentDriverNumbers.has(dn)) return
+    if (showTelemetry && qualiSegments?.segments && !segmentDriverNumbers.has(dn)) return
     setSelected(prev => prev.includes(dn) ? prev.filter(d => d !== dn) : prev.length < 4 ? [...prev, dn] : prev)
   }
 
@@ -1512,7 +1514,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: 'linear-gradient(180deg, #F5F7FB 0%, #EEF3FA 22%, #EAF0F8 100%)', minHeight: '100vh', paddingBottom: 80 }}>
-      <div ref={containerRef} style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px' }}>
+      <div ref={containerRef} style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '0 16px' : '0 36px' }}>
 
         {/* Header */}
         <div style={{ padding: '22px 8px 20px', borderBottom: `1px solid ${C.border}`, marginBottom: 18 }}>
@@ -1555,21 +1557,13 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           )}
         </div>
 
-        {/* Race mode */}
-        {isRaceSession(sessionType) && (
-          <>
-            <RaceAnalysis sessionKey={sessionKey} sessionName={sessionName} drivers={driverList} />
-            <div style={{ marginTop: 24 }}>
-              <LapTimeDistribution sessionKey={sessionKey} />
-            </div>
-          </>
-        )}
+
 
         {/* Practice mode */}
         {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} session={session} drivers={driverList} />}
 
         {/* Qualifying mode */}
-        {isQualifying && (
+        {showTelemetry && (
           <div ref={chartMeasureRef}>
             <TelemetryDecisionHero
               sessionName={sessionName}
@@ -1585,6 +1579,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               sectorTimes={sectorTimes}
               telLapNumbers={telLapNumbers}
               isMobile={isMobile}
+              sessionType={sessionType}
             />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14, padding: '12px 14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
@@ -1630,7 +1625,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   <span style={{ marginRight: 4, fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>Channels</span>
                   {[
                     { key: 'speed' as const, label: 'Velocity (km/h)' },
-                    { key: 'brake' as const, label: 'Brake pressure' },
                     { key: 'throttle' as const, label: 'Throttle %' },
                     { key: 'rpm' as const, label: 'Engine RPM' },
                   ].map(channel => {
@@ -1681,7 +1675,13 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{driverData.map((driver, index) => <span key={driver.abbr} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textMid }}><span style={{ width: 12, height: index ? 2 : 3, background: driver.colour, borderTop: index ? `1px dashed ${driver.colour}` : undefined }} />{driver.abbr}</span>)}</div>
                   </div>
                   <div style={{ padding: '10px 0 0', position: 'relative' }}>
-                    {CHARTS.map((chart, index) => <canvas key={chart.field} ref={element => { chartRefs.current[index] = element }} height={isMobile ? (chart.field === 'speed' ? 270 : 160) : chart.field === 'speed' ? 360 : Math.min(chart.height, 220)} style={{ display: activeChannel === chart.field ? 'block' : 'none', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />)}
+                    {CHARTS.map((chart, index) => chart.field === 'speed' ? (
+                      <div key={chart.field} style={{ display: activeChannel === chart.field ? 'block' : 'none' }}>
+                        <SvgSpeedTrace driverData={driverData} tooltipNx={tooltipNx} onMouseMove={handleMouseMove as unknown as React.MouseEventHandler<SVGSVGElement>} onMouseLeave={handleMouseLeave} />
+                      </div>
+                    ) : (
+                      <canvas key={chart.field} ref={element => { chartRefs.current[index] = element }} height={isMobile ? 160 : Math.min(chart.height, 220)} style={{ display: activeChannel === chart.field ? 'block' : 'none', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                    ))}
                     {activeChannel === 'speed' && <canvas ref={deltaRef} height={isMobile ? 110 : 135} style={{ display: 'block', width: '100%', cursor: 'crosshair', borderTop: `1px solid ${C.border}` }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />}
                     {hoverActive && tooltipData && (
                       <div style={{
@@ -1780,7 +1780,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   <div style={{ padding: '16px 18px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 320px) minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
                       <div>
-                        {qualiSegments?.segments && (
+                        {qualiSegments?.segments && !isRaceSession(sessionType) && (
                           <div style={{ marginBottom: 16 }}>
                             <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim, marginBottom: 8 }}>
                               Segment Lens
@@ -1814,7 +1814,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                           {drivers.map(d => {
                             const isSel = selected.includes(d.driver_number)
                             const colour = teamColour(d.team_colour, d.team_name)
-                            const unavail = isQualifying && qualiSegments?.segments ? !segmentDriverNumbers.has(d.driver_number) : false
+                            const unavail = showTelemetry && qualiSegments?.segments ? !segmentDriverNumbers.has(d.driver_number) : false
                             const segLap = segmentLapByDriver.get(d.driver_number)
                             return (
                               <button key={d.driver_number} disabled={unavail} onClick={() => toggleDriver(d.driver_number)} style={{
@@ -2023,7 +2023,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         </div>
                       } />
                       <div style={{ width: '100%' }}>
-                        <canvas ref={el => { chartRefs.current[0] = el }} height={isMobile ? 300 : CHARTS[0].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                        <SvgSpeedTrace driverData={driverData} tooltipNx={tooltipNx} onMouseMove={handleMouseMove as unknown as React.MouseEventHandler<SVGSVGElement>} onMouseLeave={handleMouseLeave} />
                       </div>
                     </Panel>
 
@@ -2096,14 +2096,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               )}
             </CollapsibleSection>
 
-            <CollapsibleSection
+            {!isRaceSession(sessionType) && (<CollapsibleSection
               title="Qualifying Tables"
               subtitle="Session order, speed trap analysis, and lap progression grouped into one lower-priority data section."
               open={openSections.qualifyingTables}
               onToggle={() => toggleSection('qualifyingTables')}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {qualiSegments?.segments && (
+                {qualiSegments?.segments && !isRaceSession(sessionType) && (
                   <Panel>
                     <PanelHeader
                       title="Qualifying Segments"
@@ -2177,9 +2177,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
 
                 <QualiSpeedPanel sessionKey={sessionKey} />
               </div>
-            </CollapsibleSection>
+            </CollapsibleSection>)}
               </>
             )}
+            <div style={{ marginTop: 24 }}>
+              <LapTimeDistribution sessionKey={sessionKey} />
+            </div>
           </div>
         )}
 

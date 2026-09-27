@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import Plot from 'react-plotly.js'
+import React, { useEffect, useState, useMemo } from 'react'
+import ReactECharts from 'echarts-for-react'
 import { COMPOUND_COLOURS } from '@/lib/utils'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -46,17 +46,16 @@ function median(vals: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
-export default function LapTimeDistribution({
-  sessionKey,
-}: {
-  sessionKey: number
-}) {
+export default function LapTimeDistribution({ sessionKey }: { sessionKey: number }) {
   const [data, setData] = useState<LapEvolutionResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
 
+  const seededRef = React.useRef(false)
+
   useEffect(() => {
+    seededRef.current = false
     const abort = new AbortController()
     let active = true
     setLoading(true)
@@ -68,16 +67,17 @@ export default function LapTimeDistribution({
       .then(d => {
         if (!active) return
         setData(d)
-        const keys = Object.keys(d.drivers)
-        if (selected.length === 0 && keys.length > 0) {
-          setSelected(keys.slice(0, Math.min(4, keys.length)))
+        if (!seededRef.current) {
+          seededRef.current = true
+          const keys = Object.keys(d.drivers)
+          if (keys.length > 0) setSelected(keys.slice(0, Math.min(4, keys.length)))
         }
       })
       .catch(err => { if (active && err?.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Error') })
       .finally(() => { if (active) setLoading(false) })
 
     return () => { active = false; abort.abort() }
-  }, [sessionKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionKey])
 
   const allDrivers = useMemo(() => {
     if (!data) return []
@@ -89,90 +89,139 @@ export default function LapTimeDistribution({
     }))
   }, [data])
 
-  const { traces, xPositions, xLabels } = useMemo(() => {
-    const traces: Record<string, unknown>[] = []
-    let xPositions: number[] = []
-    let xLabels: string[] = []
+  const chartOption = useMemo(() => {
+    if (!data || selected.length === 0) return null
 
-    if (!data || selected.length === 0) return { traces, xPositions, xLabels }
+    const drivers = selected.map((dn, i) => ({
+      dn,
+      abbr: data.drivers[dn]?.abbreviation ?? dn,
+      colour: data.drivers[dn]?.team_colour?.startsWith('#')
+        ? data.drivers[dn].team_colour
+        : `#${data.drivers[dn]?.team_colour ?? '666'}`,
+      x: i,
+    }))
 
-    const n = selected.length
-    const spacing = 1.2
-    const positions = selected.map((_, i) => (i - (n - 1) / 2) * spacing)
-    xPositions = positions
-    xLabels = selected.map(dn => data.drivers[dn]?.abbreviation ?? dn)
+    // One box per driver — value is [x, min, Q1, median, Q3, max]
+    const boxData = drivers.map(({ dn, x, colour }) => {
+      const d = data.drivers[dn]
+      if (!d) return null
+      const times = d.laps
+        .filter(l => !l.deleted && l.lap_time_ms != null)
+        .map(l => l.lap_time_ms / 1000)
+      if (times.length < 2) return null
+      const s = [...times].sort((a, b) => a - b)
+      return {
+        value: [x, s[0], s[Math.floor(s.length * 0.25)], median(s), s[Math.floor(s.length * 0.75)], s[s.length - 1]],
+        itemStyle: { color: `${colour}33`, borderColor: colour, borderWidth: 1.5 },
+      }
+    }).filter(Boolean)
 
-    for (let di = 0; di < n; di++) {
-      const dn = selected[di]
-      const driver = data.drivers[dn]
-      if (!driver) continue
-      const laps = driver.laps.filter(l => !l.deleted && l.lap_time_ms != null)
-      if (laps.length === 0) continue
+    // Scatter — each point at [x + small jitter, time], coloured by compound
+    const scatterData = drivers.flatMap(({ dn, x }) => {
+      const d = data.drivers[dn]
+      if (!d) return []
+      return d.laps
+        .filter(l => !l.deleted && l.lap_time_ms != null)
+        .map(l => {
+          const cmpd = (l.compound ?? '').toUpperCase()
+          const cColour = COMPOUND_COLOURS[cmpd] ?? '#9CA3AF'
+          return {
+            value: [x + (Math.random() - 0.5) * 0.28, l.lap_time_ms / 1000],
+            itemStyle: {
+              color: cColour,
+              opacity: 0.85,
+              borderColor: cmpd === 'HARD' ? '#9CA3AF' : 'rgba(255,255,255,0.6)',
+              borderWidth: cmpd === 'HARD' ? 1 : 0.5,
+            },
+            name: `Lap ${l.lap_number}`,
+            stint: l.stint,
+            compound: l.compound,
+          }
+        })
+    })
 
-      const teamColour = driver.team_colour?.startsWith('#') ? driver.team_colour : `#${driver.team_colour ?? '666'}`
-      const times = laps.map(l => l.lap_time_ms / 1000)
-      const hoverTexts = laps.map(l => {
-        const totalSec = l.lap_time_ms / 1000
-        const mins = Math.floor(totalSec / 60)
-        const secs = (totalSec % 60).toFixed(3).padStart(6, '0')
-        const compound = COMPOUND_COLOURS[l.compound] ? l.compound.charAt(0) + l.compound.slice(1).toLowerCase() : l.compound
-        return `${driver.abbreviation} Lap ${l.lap_number} — ${mins}:${secs}<br>${compound} (Stint ${l.stint})<br>Pos ${l.position}`
-      })
+    const xMin = -0.5
+    const xMax = drivers.length - 0.5
 
-      traces.push({
-        type: 'violin',
-        y: times,
-        x: Array(times.length).fill(positions[di]),
-        name: driver.abbreviation,
-        side: 'both',
-        points: 'all',
-        pointpos: 0,
-        jitter: 0.3,
-        spanmode: 'soft',
-        bandwidth: 0.12,
-        scalemode: 'width',
-        scalegroup: 'all',
-        line: { color: 'transparent', width: 0 },
-        fillcolor: 'transparent',
-        marker: {
-          color: teamColour,
-          size: 5.5,
-          line: { width: 0.5, color: 'rgba(0,0,0,0.3)' },
-          opacity: 0.85,
+    return {
+      grid: { left: 64, right: 18, top: 20, bottom: 40 },
+      tooltip: {
+        trigger: 'item',
+        formatter: (p: { name: string, data: { value: number[], compound: string, stint: number }, seriesType: string, value: number[] }) => {
+          if (p.seriesType === 'scatter') {
+            const time = p.value[1]
+            const mins = Math.floor(time / 60)
+            const secs = (time % 60).toFixed(3).padStart(6, '0')
+            return `${p.name}<br/>Time: ${mins}:${secs}<br/>Compound: ${p.data.compound}<br/>Stint: ${p.data.stint}`
+          }
+          if (p.seriesType === 'boxplot') {
+            const v = p.data.value as number[]
+            const fmt = (n: number) => { const m = Math.floor(n / 60); return `${m}:${(n % 60).toFixed(3).padStart(6, '0')}` }
+            return `Min: ${fmt(v[1])}<br/>Q1: ${fmt(v[2])}<br/>Median: ${fmt(v[3])}<br/>Q3: ${fmt(v[4])}<br/>Max: ${fmt(v[5])}`
+          }
+          return null
         },
-        box: { visible: false },
-        meanline: { visible: false },
-        text: hoverTexts,
-        hoveron: 'points',
-        hoverinfo: 'text',
-      } as unknown as Record<string, unknown>)
+      },
+      xAxis: {
+        type: 'value',
+        min: xMin,
+        max: xMax,
+        interval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: {
+          color: C.textBright,
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 12,
+          fontWeight: 700,
+          formatter: (v: number) => {
+            const d = drivers.find(dr => dr.x === Math.round(v))
+            return d ? d.abbr : ''
+          },
+        },
+      },
+      yAxis: {
+        type: 'value',
+        inverse: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: '#EEF1F6', type: 'dashed' } },
+        axisLabel: {
+          color: C.textDim,
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 10,
+          formatter: (v: number) => {
+            const mins = Math.floor(v / 60)
+            const secs = (v % 60).toFixed(3).padStart(6, '0')
+            return `${mins}:${secs}`
+          },
+        },
+        scale: true,
+      },
+      series: [
+        {
+          type: 'boxplot',
+          name: 'Distribution',
+          data: boxData,
+          // Tell ECharts that value[0] is the x position
+          encode: { x: 0, y: [1, 2, 3, 4, 5] },
+          boxWidth: ['18%', '28%'],
+          z: 5,
+        },
+        {
+          type: 'scatter',
+          name: 'Laps',
+          data: scatterData,
+          symbolSize: 6,
+          itemStyle: { borderColor: 'rgba(255,255,255,0.8)', borderWidth: 0.5 },
+          encode: { x: 0, y: 1 },
+          z: 10,
+        },
+      ],
     }
-    return { traces, xPositions, xLabels }
   }, [data, selected])
 
-  const yTickConfig = useMemo(() => {
-    if (!data) return { tickvals: [], ticktext: [] }
-    const allTimes: number[] = []
-    for (const d of Object.values(data.drivers)) {
-      for (const l of d.laps) {
-        if (!l.deleted && l.lap_time_ms != null) allTimes.push(l.lap_time_ms / 1000)
-      }
-    }
-    if (allTimes.length === 0) return { tickvals: [], ticktext: [] }
-    const minT = Math.min(...allTimes)
-    const maxT = Math.max(...allTimes)
-    const tickInterval = 5
-    const startTick = Math.ceil(minT / tickInterval) * tickInterval
-    const tickvals: number[] = []
-    const ticktext: string[] = []
-    for (let t = startTick; t <= maxT; t += tickInterval) {
-      tickvals.push(t)
-      const mins = Math.floor(t / 60)
-      const secs = (t % 60).toFixed(3).padStart(6, '0')
-      ticktext.push(`${mins}:${secs}`)
-    }
-    return { tickvals, ticktext }
-  }, [data])
 
   const stats = useMemo(() => {
     if (!data) return []
@@ -212,10 +261,6 @@ export default function LapTimeDistribution({
       </div>
     )
   }
-
-  const xRange = xPositions.length > 0
-    ? [Math.min(...xPositions) - 1.5, Math.max(...xPositions) + 1.5]
-    : [-2, 2]
 
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(19,35,61,0.04)' }}>
@@ -266,47 +311,11 @@ export default function LapTimeDistribution({
           </div>
         )}
 
-        {traces.length > 0 ? (
-          <Plot
-            data={traces}
-            layout={{
-              autosize: true,
-              height: 400,
-              margin: { l: 56, r: 18, t: 14, b: 52, pad: 0 },
-              paper_bgcolor: 'transparent',
-              plot_bgcolor: 'transparent',
-              font: { family: 'JetBrains Mono, monospace', size: 10, color: C.textDim },
-              xaxis: {
-                title: { text: '' },
-                tickfont: { size: 12, color: C.textBright, family: 'JetBrains Mono, monospace' },
-                tickvals: xPositions,
-                ticktext: xLabels,
-                linecolor: 'transparent',
-                gridcolor: 'transparent',
-                zeroline: false,
-                range: xRange,
-              },
-              yaxis: {
-                title: { text: '', standoff: 8, font: { size: 9, color: C.textDim, family: 'Inter, sans-serif' } },
-                tickfont: { size: 9, color: C.textDim, family: 'JetBrains Mono, monospace' },
-                tickvals: yTickConfig.tickvals,
-                ticktext: yTickConfig.ticktext,
-                linecolor: C.border,
-                gridcolor: '#EEF1F6',
-                zeroline: false,
-                autorange: 'reversed',
-              },
-              hovermode: 'closest',
-              dragmode: false,
-              showlegend: false,
-            }}
-            config={{
-              displayModeBar: false,
-              responsive: true,
-              staticPlot: false,
-            }}
-            style={{ width: '100%' }}
-            useResizeHandler
+        {chartOption ? (
+          <ReactECharts
+            option={chartOption}
+            style={{ height: 400, width: '100%' }}
+            opts={{ renderer: 'svg' }}
           />
         ) : (
           <div style={{ padding: '40px 20px', textAlign: 'center', fontSize: 11, color: C.textDim, fontFamily: 'Inter, sans-serif' }}>
