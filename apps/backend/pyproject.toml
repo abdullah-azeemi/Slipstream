@@ -18,6 +18,7 @@ dependencies = [
     "pyarrow>=16.0",
     "lancedb>=0.17",
     "pyjwt[crypto]>=2.11.0",
+    "gunicorn>=22.0",
 ]
 
 [build-system]

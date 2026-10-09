@@ -1,18 +1,45 @@
+# Everything not needed to build the backend image.
+
+# VCS / CI
 .git
 .github
+.gitignore
+
+# Python
 .venv
-.pytest_cache
-.mypy_cache
-.ruff_cache
-.next
-node_modules
-apps/frontend/node_modules
-apps/frontend/.next
-fastf1_cache
-ml_models
-mlruns
 __pycache__
+**/__pycache__
 *.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Frontend (built and deployed separately on Vercel)
+apps/frontend
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Runtime state that must never be baked into the image
+lancedb/
+fastf1_cache/
+ml_models/
+mlruns/
+telemetry_artifacts/
+*.pkl
+*.joblib
 *.log
+
+# Local infra
+infra
+
+# Docs / agent files
+docs
+*.md
+
+# OS / editor
 .DS_Store
-notes.md
+.vscode
+.idea

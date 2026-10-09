@@ -1,0 +1,53 @@
+# Fly.io config for the Pitwall API.
+# Deploy:  fly launch --no-deploy  (first time, to create the app + volume)
+#          fly deploy
+# Secrets are set out-of-band:  fly secrets set DATABASE_URL=... SECRET_KEY=...
+
+app = "pitwall-api"
+primary_region = "sin"   # change to the closest region (e.g. "bom" for Mumbai)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  FLASK_ENV = "production"
+  # Heavy ingestion + training runs on the GitHub Actions cron, not here.
+  AUTO_INGEST_ENABLED = "false"
+  AUTO_INGEST_ON_STARTUP = "false"
+  # Keep Neon's 0.5 GB free tier small: raw lap traces go to R2, DB keeps metadata.
+  TELEMETRY_STORAGE_MODE = "files"
+  TELEMETRY_ARTIFACT_BACKEND = "r2"
+  TELEMETRY_ARTIFACT_BUCKET = "pitwall-telemetry"
+  # Persistent-volume paths (see [[mounts]]).
+  ML_MODELS_DIR = "/data/ml_models"
+  RACE_VECTOR_INDEX_DIR = "/data/lancedb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/health"
+
+# Persistent disk shared across restarts. Holds trained models + the LanceDB
+# agent-memory index (user data). Telemetry artifacts live in R2, not here.
+[[mounts]]
+  source = "pitwall_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
