@@ -29,7 +29,7 @@ def race_predictions(session_key: int):
 
     try:
         from ml.features import compute_weekend_inputs_used
-        from ml.predict import predict_race, explain_prediction
+        from ml.predict import predict_race, explain_prediction, ModelUnavailableError
         from ml.model_store import global_metadata_path, gp_metadata_path, load_metadata
     except ImportError:
         return jsonify({"error": "ML package not available — check uv workspace"}), 503
@@ -37,6 +37,10 @@ def race_predictions(session_key: int):
     try:
         predictions  = predict_race(session_key)
         explanations = explain_prediction(session_key)
+    except ModelUnavailableError as exc:
+        from ml.predict import schedule_training
+        schedule_training()
+        return jsonify({"error": str(exc), "retraining": True}), 503
     except FileNotFoundError:
         return jsonify({"error": "Model training did not produce a readable model file"}), 503
     except Exception as e:

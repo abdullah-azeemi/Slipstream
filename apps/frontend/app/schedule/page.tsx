@@ -123,7 +123,7 @@ export default async function SchedulePage() {
     fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 60 } })
       .then(response => response.ok ? response.json() as Promise<NextRaceResponse> : null)
       .catch(() => null),
-    fetch(`${BASE}/api/v1/schedule/2026`, { next: { revalidate: 60 } })
+    fetch(`${BASE}/api/v1/schedule/current`, { next: { revalidate: 60 } })
       .then(response => response.ok ? response.json() as Promise<ScheduleResponse> : null)
       .catch(() => null),
   ])

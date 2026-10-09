@@ -6,12 +6,18 @@ On your laptop they come from .env — in production from real environment varia
 The variable names match exactly what's in .env.example.
 """
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_DATABASE_URL = "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall"
 
 
 class Settings(BaseSettings):
+    # Runtime environment: development | staging | production | testing
+    flask_env: str = "development"
+
     # Database
-    database_url: str = "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall"
+    database_url: str = _DEV_DATABASE_URL
 
     # Kafka
     kafka_bootstrap_servers: str = "localhost:9092"
@@ -42,6 +48,14 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",  # ignore unknown env vars instead of crashing
     )
+
+    @model_validator(mode="after")
+    def _reject_insecure_production_defaults(self) -> "Settings":
+        if self.flask_env.lower() == "production" and self.database_url == _DEV_DATABASE_URL:
+            raise ValueError(
+                "DATABASE_URL must be set in production (refusing the localhost default)"
+            )
+        return self
 
 
 # Single instance used across the whole package

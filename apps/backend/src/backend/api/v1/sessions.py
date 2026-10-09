@@ -1,9 +1,14 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
+from datetime import datetime, timezone
 from backend import extensions
 
 sessions_bp = Blueprint("sessions", __name__)
+
+
+def _current_year() -> int:
+    return datetime.now(timezone.utc).year
 
 
 def _is_missing_table_error(exc: ProgrammingError) -> bool:
@@ -274,13 +279,13 @@ def driver_standings():
     Official driver championship standings via FastF1 → Jolpica-F1 API.
     Uses FastF1's caching so repeat calls are instant.
 
-    Query param: ?year=2026 (default: current year)
+    Query param: ?year=<year> (default: current year)
     """
     import fastf1
     from fastf1.ergast import Ergast
     import os
 
-    year = request.args.get("year", 2026, type=int)
+    year = request.args.get("year", _current_year(), type=int)
 
     cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
     try:
@@ -330,13 +335,13 @@ def driver_standings():
 def constructor_standings():
     """
     Official constructor championship standings via FastF1 → Jolpica-F1 API.
-    Query param: ?year=2026
+    Query param: ?year=<year> (default: current year)
     """
     import fastf1
     from fastf1.ergast import Ergast
     import os
 
-    year = request.args.get("year", 2026, type=int)
+    year = request.args.get("year", _current_year(), type=int)
 
     cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
     try:

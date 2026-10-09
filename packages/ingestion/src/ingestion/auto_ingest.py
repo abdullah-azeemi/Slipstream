@@ -13,7 +13,6 @@ Run on a schedule (cron example — every hour):
 from __future__ import annotations
 
 import os
-import subprocess
 from datetime import datetime, timezone
 
 import structlog
@@ -198,41 +197,25 @@ def session_has_completed(year: int, event: dict, session_type: str) -> bool:
 
 def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
     """
-    Run the ingest_session script for a single session.
-    Returns True if successful.
+    Ingest a single session in-process. Returns True if successful.
     """
     session_name = CLI_SESSION_MAP.get(session_type, session_type)
 
-    # Strip " Grand Prix" suffix for the CLI argument
+    # Strip " Grand Prix" suffix for the FastF1 lookup
     gp_short = gp_name.replace(" Grand Prix", "").replace(" ePrix", "")
 
-    log.info("ingest.starting",
+    log.info("ingest.start",
              year=year, gp=gp_short, session=session_name)
 
     try:
-        result = subprocess.run(
-            [
-                "uv", "run", "python", "-m", "ingestion.ingest_session",
-                "--year",    str(year),
-                "--gp",      gp_short,
-                "--session", session_name,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=600,   # 10 min max per session
-        )
+        from ingestion.ingest_session import ingest_session as run_ingest
+        session_key = run_ingest(year, gp_short, session_name)
 
-        if result.returncode == 0:
-            log.info("ingest.success", year=year, gp=gp_short, session=session_name)
+        if session_key is not None:
+            log.info("ingest.success", year=year, gp=gp_short, session=session_name, session_key=session_key)
             return True
-        else:
-            log.error("ingest.failed",
-                      year=year, gp=gp_short, session=session_name,
-                      stderr=result.stderr[-500:] if result.stderr else "")
-            return False
-
-    except subprocess.TimeoutExpired:
-        log.error("ingest.timeout", year=year, gp=gp_short, session=session_name)
+        log.error("ingest.failed",
+                  year=year, gp=gp_short, session=session_name)
         return False
     except Exception as e:
         log.error("ingest.error", year=year, gp=gp_short, session=session_name, error=str(e))
@@ -308,10 +291,8 @@ def run_once() -> bool:
             # Retrain ML model if new race weekends were added
             log.info("auto_ingest.retraining_model")
             try:
-                subprocess.run(
-                    ["uv", "run", "python", "-m", "ml.train"],
-                    capture_output=True, text=True, timeout=300,
-                )
+                from ml.train import main as train_main
+                train_main()
                 log.info("auto_ingest.model_retrained")
             except Exception as e:
                 log.warning("auto_ingest.retrain_failed", error=str(e))

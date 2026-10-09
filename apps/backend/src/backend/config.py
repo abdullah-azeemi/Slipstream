@@ -1,21 +1,31 @@
 """
 Backend configuration via pydantic-settings.
-Reads from environment variables. Falls back to .env file locally.
+
+Every value is read from the environment first (then a local .env file).
+In production (FLASK_ENV=production) missing secrets or a localhost
+DATABASE_URL fail fast instead of silently using insecure defaults.
 """
 
 from __future__ import annotations
 from typing import Literal
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_SECRET_KEY = "dev-secret-change-in-production"
+_DEV_DATABASE_URL = "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall"
 
 
 class Settings(BaseSettings):
+    # Runtime environment: development | staging | production | testing
+    flask_env: str = "development"
+
     # Flask
-    secret_key: str = "dev-secret-change-in-production"
+    secret_key: str = _DEV_SECRET_KEY
     debug: bool = False
     testing: bool = False
 
     # Database — Railway injects DATABASE_URL as postgres:// so we normalise it
-    database_url: str = "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall"
+    database_url: str = _DEV_DATABASE_URL
 
     # Redis + Kafka — optional, not required for core app
     redis_url: str = "redis://localhost:6379/0"
@@ -52,8 +62,6 @@ class Settings(BaseSettings):
     clerk_issuer: str = ""
     clerk_admin_user_ids: str = ""
 
-    race_vector_index_dir: str = "./lancedb"
-    race_vector_table: str = "race_intelligence_events"
     memory_vector_table: str = "user_memory_snippets"  
 
     auto_ingest_enabled: bool = True
@@ -65,6 +73,19 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def _reject_insecure_production_defaults(self) -> "Settings":
+        if self.flask_env.lower() == "production":
+            if self.database_url == _DEV_DATABASE_URL:
+                raise ValueError(
+                    "DATABASE_URL must be set in production (refusing the localhost default)"
+                )
+            if self.secret_key == _DEV_SECRET_KEY:
+                raise ValueError(
+                    "SECRET_KEY must be set in production (refusing the dev default)"
+                )
+        return self
 
     @property
     def db_url(self) -> str:

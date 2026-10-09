@@ -27,6 +27,10 @@ log       = structlog.get_logger()
 _train_lock = threading.Lock()
 
 
+class ModelUnavailableError(RuntimeError):
+    """Raised when no trained model exists and inference cannot proceed."""
+
+
 def ensure_model_available(gp_name: str | None = None) -> None:
     model_path = gp_model_path(gp_name) if gp_name else GLOBAL_MODEL_PATH
     if gp_name and not model_path.exists() and GLOBAL_MODEL_PATH.exists():
@@ -34,17 +38,30 @@ def ensure_model_available(gp_name: str | None = None) -> None:
     if model_path.exists():
         return
 
-    with _train_lock:
-        model_path = gp_model_path(gp_name) if gp_name else GLOBAL_MODEL_PATH
-        if gp_name and not model_path.exists() and GLOBAL_MODEL_PATH.exists():
-            return
-        if model_path.exists():
-            return
+    raise ModelUnavailableError(
+        f"No trained model found at {model_path}. "
+        "Training has been queued in the background — retry shortly."
+    )
 
-        log.info("model.train_on_demand.start", gp_name=gp_name)
-        from ml.train import main as train_main
-        train_main()
-        log.info("model.train_on_demand.done", gp_name=gp_name)
+
+def schedule_training() -> None:
+    """Kick off model training on a background thread.
+
+    Never blocks the caller (the HTTP request). The module-level lock keeps
+    concurrent workers from training simultaneously.
+    """
+
+    def _worker() -> None:
+        with _train_lock:
+            log.info("model.async_train.start")
+            try:
+                from ml.train import main as train_main
+                train_main()
+                log.info("model.async_train.done")
+            except Exception as e:
+                log.warning("model.async_train.failed", error=str(e))
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def load_model(gp_name: str | None = None):
@@ -71,11 +88,10 @@ def _predict_with_current_features(model, X, gp_name: str | None):
         if "feature" not in message and "shape" not in message and "columns" not in message:
             raise
         log.warning("model.feature_mismatch_retrain", gp_name=gp_name, error=str(e))
-        with _train_lock:
-            from ml.train import main as train_main
-            train_main()
-        model = load_model(gp_name)
-        return model.predict(X), model
+        raise ModelUnavailableError(
+            f"Stored model is stale for current features: {e}. "
+            "Training has been queued in the background — retry shortly."
+        )
 
 
 def predict_race(quali_session_key: int, n_simulations: int = 1000) -> list[dict]:

@@ -301,15 +301,6 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     if not isinstance(payload, dict):
         raise types.LLMError(f"router returned non-object JSON: {text[:200]}", code="router_unparseable")
 
-    text, usage = _chat(messages, model=settings.openrouter_routing_model, temperature=0.0)
-
-    try:
-        payload = json.loads(text)
-    except (json.JSONDecodeError, TypeError) as exc:
-        raise types.LLMError(f"router returned unparseable response: {text[:200]}", code="router_unparseable") from exc
-    if not isinstance(payload, dict):
-        raise types.LLMError(f"router returned non-object JSON: {text[:200]}", code="router_unparseable")
-
     semantic_cache.set(question, payload)
     cost = usage.get("cost_estimate_usd", 0.0)
     routed = parse_routed_question(payload, question)

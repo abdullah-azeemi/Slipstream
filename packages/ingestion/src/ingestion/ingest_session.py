@@ -59,6 +59,95 @@ def extract_weather(session) -> dict:
         return {}
 
 
+def ingest_session(
+    year: int, gp: str, session: str, skip_telemetry: bool = False
+) -> int | None:
+    """Ingest a single FastF1 session in-process.
+
+    Returns the new session_key on success, or None if the ingest failed.
+    Callable directly so auto_ingest does not need to shell out to `uv`.
+    """
+    fastf1_session = SESSION_MAP.get(session.upper(), session)
+
+    log.info(
+        "ingest.start",
+        year=year,
+        gp=gp,
+        session=session,
+        fastf1_name=fastf1_session,
+    )
+
+    try:
+        session_obj = fetch_session(year, gp, fastf1_session)
+        session_info = extract_session_info(session_obj)
+        session_key = upsert_session(session_info)
+
+        weather = extract_weather(session_obj)
+        if weather:
+            update_session_weather(session_key, **weather)
+            log.info(
+                "ingest.weather_stored",
+                track_temp=weather.get("track_temp"),
+                air_temp=weather.get("air_temp"),
+            )
+
+        drivers = extract_drivers(session_obj, session_key)
+        load_drivers(drivers)
+
+        laps = extract_laps(session_obj, session_key)
+        lap_count = load_laps(laps, session_key)
+
+        tel_count = 0
+        TELEMETRY_SESSIONS = {"Q", "SQ", "R"}  # Q selected laps; R full-lap artifacts
+        if not skip_telemetry and session.upper() in TELEMETRY_SESSIONS:
+            tel = extract_telemetry(
+                session_obj,
+                session_key,
+                all_drivers=True,
+                all_laps=session.upper() == "R",
+            )
+            tel_count = load_telemetry(tel, session_key)
+        elif not skip_telemetry and session.upper() not in TELEMETRY_SESSIONS:
+            log.info(
+                "telemetry.skipped",
+                reason="non-qualifying session — telemetry not stored by design",
+                session=session,
+            )
+
+        rc_events = extract_race_control(session_obj, session_key)
+        rc_count = load_race_control(rc_events, session_key)
+
+        wx_events = extract_weather_events(session_obj, session_key)
+        wx_count = load_weather_events(wx_events, session_key)
+
+        radio_rows = fetch_team_radio(session_key)
+        for r in radio_rows:
+            r["lap_number"] = _lap_for_timestamp(
+                _lap_start_times(session_obj, driver_number=r["driver_number"]), r["date"]
+            )
+        radio_count = load_team_radio(radio_rows, session_key)
+
+        log.info(
+            "ingest.done",
+            session_key=session_key,
+            drivers=len(drivers),
+            laps=lap_count,
+            telemetry=tel_count,
+            weather=bool(weather),
+            race_control=rc_count,
+            weather_events=wx_count,
+            team_radio=radio_count,
+        )
+        return session_key
+    except Exception as exc:
+        log.error(
+            "ingest.failed",
+            year=year, gp=gp, session=session,
+            error=str(exc), exc_info=True,
+        )
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--year", type=int, required=True)
@@ -69,69 +158,7 @@ def main():
     parser.add_argument("--skip-telemetry", action="store_true")
     args = parser.parse_args()
 
-    fastf1_session = SESSION_MAP.get(args.session.upper(), args.session)
-
-    log.info(
-        "ingest.start",
-        year=args.year,
-        gp=args.gp,
-        session=args.session,
-        fastf1_name=fastf1_session,
-    )
-
-    session = fetch_session(args.year, args.gp, fastf1_session)
-    session_info = extract_session_info(session)
-    session_key = upsert_session(session_info)
-
-    # Weather
-    weather = extract_weather(session)
-    if weather:
-        update_session_weather(session_key, **weather)
-        log.info(
-            "ingest.weather_stored",
-            track_temp=weather.get("track_temp"),
-            air_temp=weather.get("air_temp"),
-        )
-
-    drivers = extract_drivers(session, session_key)
-    load_drivers(drivers)
-
-    laps = extract_laps(session, session_key)
-    lap_count = load_laps(laps, session_key)
-
-    tel_count = 0
-    TELEMETRY_SESSIONS = {"Q", "SQ", "R"}  # Q selected laps; R full-lap artifacts
-    if not args.skip_telemetry and args.session.upper() in TELEMETRY_SESSIONS:
-        tel = extract_telemetry(
-            session,
-            session_key,
-            all_drivers=True,
-            all_laps=args.session.upper() == "R",
-        )
-        tel_count = load_telemetry(tel, session_key)
-    elif not args.skip_telemetry and args.session.upper() not in TELEMETRY_SESSIONS:
-        log.info(
-            "telemetry.skipped",
-            reason="non-qualifying session — telemetry not stored by design",
-            session=args.session,
-        )
-
-    rc_events = extract_race_control(session, session_key)
-    rc_count = load_race_control(rc_events, session_key)
-
-    wx_events = extract_weather_events(session, session_key)
-    wx_count = load_weather_events(wx_events, session_key)
-
-    radio_rows = fetch_team_radio(session_key)
-    for r in radio_rows:
-        r["lap_number"] = _lap_for_timestamp(
-            _lap_start_times(session, driver_number=r["driver_number"]), r["date"]
-        )
-    radio_count = load_team_radio(radio_rows, session_key)
-
-    print(
-        f"\n✅  session={session_key}  drivers={len(drivers)} laps={lap_count}  telemetry={tel_count}  weather={'yes' if weather else 'no'}, race_control={rc_count}, weather_events={wx_count}, team_radio={radio_count}"
-    )
+    ingest_session(args.year, args.gp, args.session, skip_telemetry=args.skip_telemetry)
 
 
 if __name__ == "__main__":
