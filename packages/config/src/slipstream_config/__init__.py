@@ -23,7 +23,7 @@ class CommonSettings(BaseSettings):
     # Runtime environment: development | staging | production | testing
     flask_env: str = "development"
 
-    # Database — Railway injects DATABASE_URL as postgres:// so we normalise it
+    # Normalize provider-specific Postgres URL schemes for SQLAlchemy.
     database_url: str = DEV_DATABASE_URL
 
     # Redis + Kafka — optional, not required for the core app
@@ -72,7 +72,7 @@ class CommonSettings(BaseSettings):
     def db_url(self) -> str:
         """
         Normalise DATABASE_URL for SQLAlchemy.
-        Railway provides postgres:// but SQLAlchemy needs postgresql+psycopg://
+        Convert common PostgreSQL URL schemes to the SQLAlchemy psycopg driver.
         """
         url = self.database_url
         if url.startswith("postgres://"):

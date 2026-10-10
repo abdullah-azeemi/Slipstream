@@ -98,7 +98,7 @@ def purge_practice_sessions(current_year: int, current_gp: str):
     Policy:
     - Keep FP1/FP2/FP3 for the current GP in the current season
     - Keep FP1/FP2/FP3 for the same GP from the previous season
-    - Purge all other practice sessions to stay within Railway storage limits
+    - Purge older practice sessions to keep hosted database storage bounded
     """
     from sqlalchemy import text
 
