@@ -1,6 +1,7 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { auth } from '@clerk/nextjs/server'
 import {
   Trophy,
   Clock,
@@ -16,11 +17,12 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ── Data fetchers ─────────────────────────────────────────────────────────────
 
-async function fetchStandings(year: number) {
+async function fetchStandings(year: number, token?: string) {
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
   try {
     const [d, c] = await Promise.all([
-      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
-      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { next: { revalidate: 300 } }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/drivers?year=${year}`, { headers, next: { revalidate: 300 } }).then(r => r.json()),
+      fetch(`${BASE}/api/v1/standings/constructors?year=${year}`, { headers, next: { revalidate: 300 } }).then(r => r.json()),
     ])
     return { drivers: d.standings ?? [], constructors: c.standings ?? [], round: d.round ?? 13 }
   } catch {
@@ -45,10 +47,10 @@ async function fetchDriverImages() {
   }
 }
 
-async function fetchLastFinishedSession() {
+async function fetchLastFinishedSession(year: number) {
   try {
     const now = new Date().toISOString()
-    const sessions = await fetch('https://api.openf1.org/v1/sessions?year=2026').then(r => r.json())
+    const sessions = await fetch(`https://api.openf1.org/v1/sessions?year=${year}`).then(r => r.json())
     if (!Array.isArray(sessions)) return null
     return sessions.filter(s => s.date_end < now && !s.is_cancelled).slice(-1)[0] ?? null
   } catch { return null }
@@ -56,12 +58,14 @@ async function fetchLastFinishedSession() {
 
 export default async function DashboardPage() {
   const currentYear = new Date().getFullYear()
+  const { getToken } = await auth()
+  const token = (await getToken()) ?? undefined
 
   const [standings, nextRace, dData, lastSession] = await Promise.all([
-    fetchStandings(currentYear),
+    fetchStandings(currentYear, token),
     fetch(`${BASE}/api/v1/schedule/next-race`, { next: { revalidate: 300 } }).then(r => r.json()).catch(() => null),
     fetchDriverImages(),
-    fetchLastFinishedSession()
+    fetchLastFinishedSession(currentYear)
   ])
 
   const { acronymMap: driverImages } = dData
@@ -75,7 +79,7 @@ export default async function DashboardPage() {
 
   const roundNum = heroRace?.round ?? 14
   const raceTitle = heroRace?.event_name ? `Round ${roundNum}: ${heroRace.event_name}` : 'Round 14: Spanish Grand Prix'
-  const circuitSubtitle = heroRace?.circuit ? `${heroRace.circuit} • September 13, 2026. High-speed aerodynamic balance meets relentless tyre thermal management.` : 'Circuit de Barcelona-Catalunya • September 13, 2026. High-speed aerodynamic balance meets relentless tyre thermal management.'
+  const circuitSubtitle = heroRace?.circuit ? `${heroRace.circuit} • September 13, ${currentYear}. High-speed aerodynamic balance meets relentless tyre thermal management.` : `Circuit de Barcelona-Catalunya • September 13, ${currentYear}. High-speed aerodynamic balance meets relentless tyre thermal management.`
 
   return (
     <div style={{ background: '#FFFFFF', color: '#111827', width: '100%', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
@@ -216,34 +220,49 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <p className="dash-subtitle" style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 640, marginBottom: 56 }}>
+        <p className="dash-subtitle" style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 640, marginBottom: 24 }}>
           This comprehensive grand prix telemetry pipeline strips away unnecessary noise, isolating pure thermal degradation, apex delta, and aero slip efficiency across every sector.
         </p>
       </main>
 
+      <style>{`
+        @keyframes ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .ticker-container {
+          overflow: hidden;
+          white-space: nowrap;
+          width: 100%;
+        }
+        .ticker-track {
+          display: inline-flex;
+          align-items: center;
+          gap: 48px;
+          animation: ticker 30s linear infinite;
+        }
+      `}</style>
       {/* ── CONSTRUCTORS MARQUEE BAND ───────────────────────────────────────── */}
       <section className="partners-band" style={{
         background: '#FAFAFA',
         borderTop: '1px solid #F3F4F6',
         borderBottom: '1px solid #F3F4F6',
-        padding: '20px 5vw',
-        marginBottom: 64,
+        padding: '20px 0',
+        marginBottom: 32,
       }}>
-        <div className="partners-grid" style={{
-          maxWidth: 1040,
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 24,
-          flexWrap: 'wrap',
-          opacity: 0.6,
-        }}>
-          {['MERCEDES-AMG F1', 'SCUDERIA FERRARI', 'MCLAREN FORMULA 1', 'ORACLE RED BULL RACING', 'ASTON MARTIN ARAMCO', 'ALPINE F1'].map((team, i) => (
-            <span key={i} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#374151' }}>
-              {team}
-            </span>
-          ))}
+        <div className="ticker-container">
+          <div className="ticker-track" style={{ opacity: 0.6 }}>
+            {/* Duplicate array to create seamless loop */}
+            {[...Array(2)].map((_, i) => (
+              <React.Fragment key={i}>
+                {['MERCEDES-AMG F1', 'SCUDERIA FERRARI', 'MCLAREN FORMULA 1', 'ORACLE RED BULL RACING', 'ASTON MARTIN ARAMCO', 'ALPINE F1', 'WILLIAMS RACING', 'VISA CASH APP RB', 'KICK SAUBER', 'HAAS F1 TEAM'].map((team, j) => (
+                  <span key={j} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#374151' }}>
+                    {team}
+                  </span>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -353,7 +372,7 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          © 2026 Motorsport Platform. Built with intention.
+          © 2026 Pitwall AI. Engineered for precision.
         </div>
       </footer>
 

@@ -23,6 +23,13 @@ os.environ["DATABASE_URL"] = (
 
 from backend import create_app  # noqa: E402
 from backend.config import settings  # noqa: E402
+from backend import auth as backend_auth  # noqa: E402
+
+# Product APIs (agent, sessions, telemetry, predictions) are Clerk-protected.
+# The suite stubs the verifier so any non-empty bearer token is accepted; the
+# dedicated 401 tests override this per-test. The shared `client` fixture sends
+# a bearer token by default so feature tests do not need to attach one.
+backend_auth.verify_session_token = lambda token: "test-clerk-user"  # type: ignore[assignment]
 
 
 # ── SQL to create all tables needed by tests ──────────────────────────────────
@@ -299,8 +306,12 @@ def client(app):
     """
     Flask test client — makes HTTP requests without running a real server.
     Use this in tests: client.get("/health")
+    The client carries a stub bearer token so Clerk-protected product APIs
+    are reachable; `app.test_client()` gives an unauthenticated client.
     """
-    return app.test_client()
+    test_client = app.test_client()
+    test_client.environ_base["HTTP_AUTHORIZATION"] = "Bearer test-token"
+    return test_client
 
 
 @pytest.fixture(scope="session")

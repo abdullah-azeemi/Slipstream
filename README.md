@@ -35,6 +35,41 @@ XGBoost model trained on 461 rows across 5 seasons. FLAML AutoML feature selecti
 
 **Statistically validated:** Permutation test p=0.000 confirms features carry genuine predictive signal. SHAP analysis: grid position (35%), sector gaps (17%), team/driver context (15%). Grid position matters 2x more for frontrunners (SHAP=4.22) vs midfield (1.86).
 
+### AI Pitwall Copilot (Autonomous Race Engineer)
+Conversational F1 intelligence agent capable of answering complex telemetry, stint pace, degradation, and strategy questions using dynamic tool orchestration.
+
+- **Semantic Cache & Cost Control**: Fast vector lookup with high similarity thresholds avoids redundant LLM inferences and cuts token cost.
+- **Dynamic DAG Planning**: Generates targeted execution graphs with multi-worker parallel tool invocations.
+- **Critic & Fact Verification**: Verifies lap times, speed deltas, and telemetry citations against database truth before synthesizing answers.
+- **User Memory**: Vectorized persistent memory backed by LanceDB for personalized context across chat sessions.
+
+```mermaid
+flowchart TD
+    User["User Query (Chat UI)"] --> Auth["Clerk JWT & Rate Limiter"]
+    Auth --> Cache{"Semantic Cache Check"}
+    Cache -- "Hit" --> CachedResponse["Cached Response (Instant & Free)"]
+    Cache -- "Miss" --> Router["Intent Classifier & Router"]
+
+    Router --> Planner["DAG Planner (Template / LLM)"]
+    Planner --> Circuit["Circuit Breaker Guard"]
+
+    subgraph Execution ["Parallel Tool Execution Engine"]
+        direction TB
+        T1["Resolve Session & Driver Context"]
+        T2["Telemetry Inspector (Speed, Throttle, Brake)"]
+        T3["Stint Degradation & Tyre Scanner"]
+        T4["Pit Stop & Undercut Analysis"]
+        T5["Race Control, Weather & Team Radio"]
+    end
+
+    Circuit --> Execution
+    Execution --> Critic["Critic Node (Verify Evidence & Claims)"]
+    Critic --> Synthesis["Synthesis Node (LLM Streaming)"]
+
+    Synthesis --> Memory[("LanceDB User Memory")]
+    Synthesis --> Output["Structured Response + Telemetry Visuals"]
+```
+
 ### Championship Standings
 Live driver and constructor standings from the official Jolpica F1 API. No ingestion needed.
 
@@ -43,13 +78,14 @@ Live driver and constructor standings from the official Jolpica F1 API. No inges
 ## Stack
 
 ```
-Frontend    Next.js 14 (App Router) — inline styles, Space Grotesk/Inter/JetBrains Mono
-Backend     Flask 3 + SQLAlchemy + FastF1 (circuit ground truth)
-Database    TimescaleDB (PostgreSQL 15) + Redis
+Frontend    Next.js 14 (App Router) — Space Grotesk/Inter/JetBrains Mono
+Backend     Flask 3 + SQLAlchemy 2 + FastF1 (circuit ground truth)
+Agent / AI  OpenRouter (GPT-4o-mini) + LanceDB (Vector Index) + Semantic Cache
+Database    Neon Serverless Postgres / TimescaleDB (PostgreSQL 16) + Redis
 ML          FLAML AutoML + XGBoost + SHAP + scipy (statistical validation)
 Data        FastF1 + Jolpica (official F1 standings)
-Streaming   Apache Kafka (infrastructure ready)
-Infra       Docker Compose — zero paid services
+Cloud / VM  Fly.io (Scale-to-zero compute) + Cloudflare R2 (Telemetry Artifacts)
+Ingestion   Automated weekly GitHub Actions cron
 Package mgr uv workspaces (Python monorepo)
 ```
 
@@ -196,14 +232,31 @@ lsof -ti:8000 | xargs kill -9   # kill stuck port
 
 ---
 
+## Production Deployment (Fly.io + Neon)
+
+Pitwall backend runs on [Fly.io](https://fly.io) with auto-scaling to zero machines to eliminate idle cloud costs.
+
+1. **Deploy API**:
+   ```bash
+   fly launch --no-deploy
+   fly volumes create pitwall_data --region sin --size 1
+   fly secrets set DATABASE_URL="postgresql://..." SECRET_KEY="..."
+   fly deploy
+   ```
+2. **Automated Ingestion & Training**:
+   Background ingestion and ML training run on a weekly schedule via GitHub Actions (`.github/workflows/ingest.yml`), keeping compute costs at \$0 during off-peak days.
+
+---
+
 ## Roadmap
 
+- [x] LLM Agent with dynamic DAG planning & verified citations
+- [x] Production migration to Fly.io (scale-to-zero compute)
+- [x] Dynamic season & schedule APIs
 - [ ] Gap to leader + undercut analysis (race panels)
 - [ ] ML Phase 3 — circuit stratification experiment
 - [ ] Probability calibration — Brier score
-- [ ] LLM commentary on insight JSON
-- [ ] Auto-ingest new 2026 race weekends
-- [ ] Live mode via OpenF1 + Kafka
+- [ ] Live telemetry streaming mode via OpenF1
 
 ---
 

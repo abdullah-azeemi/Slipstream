@@ -12,6 +12,7 @@ import {
   Search,
 } from 'lucide-react'
 import { getSessionOverviewRoute, getSessionTelemetryRoute } from '@/lib/session-routing'
+import { authHeaders } from '@/lib/auth-token'
 import { sessionTypeLabel } from '@/lib/utils'
 import type { Session } from '@/types/f1'
 
@@ -171,7 +172,7 @@ export default function SessionsPage() {
   }, [])
 
   useEffect(() => {
-    fetch(`${BASE}/api/v1/sessions`)
+    fetch(`${BASE}/api/v1/sessions`, { headers: authHeaders() })
       .then(r => r.json())
       .then((data: ResultSession[] | { error?: string }) => {
         const rows = Array.isArray(data) ? data : []

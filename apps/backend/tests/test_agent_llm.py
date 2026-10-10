@@ -290,6 +290,54 @@ def test_route_question_sets_compute_flag(monkeypatch):
     assert routed.intent_category == "descriptive"
 
 
+def test_route_question_cache_miss_calls_client_exactly_once(monkeypatch):
+    """T1.1: a routing cache miss must perform exactly one client call."""
+    _set_key(monkeypatch)
+    calls = []
+
+    def counting_post(messages, model, temperature):
+        calls.append({"messages": messages, "model": model, "temperature": temperature})
+        return _fake_payload(
+            '{"intent": "pit_stop_speed_delta", "driver": "Sainz", '
+            '"year": 2026, "gp_name": "Monaco", "laps_window": 3}'
+        )
+
+    monkeypatch.setattr(llm, "_post", counting_post)
+    routed, cost = llm.route_question("On which lap did Sainz pit in Monaco 2026?")
+    assert len(calls) == 1
+    assert routed.intent is types.Intent.PIT_STOP_SPEED_DELTA
+    assert cost > 0
+
+
+def test_route_question_cache_hit_skips_client_call(monkeypatch):
+    """T1.1: a routing cache hit must perform zero client calls."""
+    _set_key(monkeypatch)
+    calls = []
+
+    def counting_post(messages, model, temperature):
+        calls.append(model)
+        return _fake_payload('{"intent": "unsupported"}')
+
+    monkeypatch.setattr(llm, "_post", counting_post)
+    monkeypatch.setattr(
+        llm.semantic_cache,
+        "get",
+        lambda q: {
+            "intent": "pit_stop_speed_delta",
+            "driver": "Verstappen",
+            "year": 2026,
+            "gp_name": "Monaco",
+            "laps_window": 3,
+        },
+    )
+    routed, cost = llm.route_question(
+        "What was the average speed after his stop in Monaco 2026?"
+    )
+    assert calls == []
+    assert routed.intent is types.Intent.PIT_STOP_SPEED_DELTA
+    assert cost == 0.0
+
+
 def test_route_question_cache_hit_keeps_local_flags(monkeypatch):
     """BUG 2: entity parse is cached, but the local flags must survive."""
     _set_key(monkeypatch)

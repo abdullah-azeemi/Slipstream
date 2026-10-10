@@ -1,3 +1,4 @@
+import { getAuthToken } from '@/lib/auth-token'
 import type {
   Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus
 } from '@/types/f1'
@@ -11,9 +12,13 @@ class APIError extends Error {
   }
 }
 
-async function get<T>(path: string, serverOnly = false): Promise<T> {
+async function get<T>(path: string, serverOnly = false, token?: string): Promise<T> {
+  const bearer = token ?? getAuthToken()
   const options: RequestInit = {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+    },
     // Only add next.revalidate in server context
     ...(serverOnly ? { next: { revalidate: 60 } } : { cache: 'no-store' }),
   }
@@ -30,8 +35,8 @@ export const api = {
     get: () => get<HealthStatus>('/health'),
   },
   sessions: {
-    list: (server = false) => get<Session[]>('/api/v1/sessions', server),
-    get: (key: number, server = false) => get<Session>(`/api/v1/sessions/${key}`, server),
+    list: (server = false, token?: string) => get<Session[]>('/api/v1/sessions', server, token),
+    get: (key: number, server = false, token?: string) => get<Session>(`/api/v1/sessions/${key}`, server, token),
   },
   laps: {
     list: (key: number, driver?: number) =>
@@ -143,6 +148,18 @@ export const agentApi = {
       },
     })
     if (!res.ok) throw new Error(`Failed to fetch usage (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').UsageInfo>
+  },
+
+  getLimits: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/limits`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch usage limits (${res.status})`)
     return res.json() as Promise<import('@/types/agent').UsageInfo>
   },
 

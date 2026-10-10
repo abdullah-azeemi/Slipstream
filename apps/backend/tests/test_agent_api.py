@@ -480,8 +480,8 @@ def test_agent_query_daily_limit_allows_then_blocks(client, db_engine, monkeypat
         _cleanup(db_engine)
 
 
-def test_agent_query_rejects_missing_token(client):
-    resp = client.post("/api/v1/agent/query", json={"question": "Who won?"})
+def test_agent_query_rejects_missing_token(app):
+    resp = app.test_client().post("/api/v1/agent/query", json={"question": "Who won?"})
     assert resp.status_code == 401
     assert "bearer" in resp.get_json()["error"].lower()
 

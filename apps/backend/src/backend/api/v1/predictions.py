@@ -1,12 +1,21 @@
 """
 ML race predictions API.
-Requires the model to be trained first: uv run python -m ml.train
+Requires the model to be trained first by a one-shot job:
+    uv run python -m ml.train        # or the Celery worker task
+A missing model returns a fast 503 with `{ "error": "model_unavailable" }`.
+The API never triggers training itself.
 """
 from flask import Blueprint, jsonify, redirect, url_for
 from sqlalchemy import text
-from backend import extensions
+from backend import auth, extensions
 
 predictions_bp = Blueprint("predictions", __name__)
+
+
+@predictions_bp.before_request
+def require_clerk_session():
+    """Clerk-protected product API: reject requests without a valid JWT."""
+    return auth.require_api_auth()
 
 
 @predictions_bp.get("/sessions/<int:session_key>/predictions")
@@ -38,9 +47,10 @@ def race_predictions(session_key: int):
         predictions  = predict_race(session_key)
         explanations = explain_prediction(session_key)
     except ModelUnavailableError as exc:
-        from ml.predict import schedule_training
-        schedule_training()
-        return jsonify({"error": str(exc), "retraining": True}), 503
+        return jsonify({
+            "error": "model_unavailable",
+            "detail": str(exc),
+        }), 503
     except FileNotFoundError:
         return jsonify({"error": "Model training did not produce a readable model file"}), 503
     except Exception as e:

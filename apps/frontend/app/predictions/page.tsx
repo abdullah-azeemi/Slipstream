@@ -1059,22 +1059,6 @@ export default function PredictionsPage() {
                   textTransform: 'uppercase',
                   cursor: 'pointer',
                 }}>
-                  <Download size={12} />
-                  EXPORT RAW TELEMETRY CSV
-                </button>
-                <button style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#475569',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                }}>
                   <Maximize2 size={12} />
                   EXPAND FULL P20 GRID
                 </button>

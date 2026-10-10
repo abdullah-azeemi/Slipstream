@@ -12,7 +12,7 @@ GET /api/v1/sessions/<key>/telemetry/stats?drivers=44,63
 """
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
-from backend import extensions
+from backend import auth, extensions
 from backend.config import settings
 import gzip
 import io
@@ -20,6 +20,12 @@ import json
 from pathlib import Path
 
 telemetry_bp = Blueprint("telemetry", __name__)
+
+
+@telemetry_bp.before_request
+def require_clerk_session():
+    """Clerk-protected product API: reject requests without a valid JWT."""
+    return auth.require_api_auth()
 
 
 def _r2_client():

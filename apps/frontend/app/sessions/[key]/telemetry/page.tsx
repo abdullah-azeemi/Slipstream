@@ -12,6 +12,7 @@ import {
 } from '@/lib/telemetry-quali'
 import { createHoverClearController } from '@/lib/hover-clear'
 import { teamColour, formatLapTime } from '@/lib/utils'
+import { authHeaders } from '@/lib/auth-token'
 import type { Driver, TelemetrySample } from '@/types/f1'
 import PracticeAnalysis from '@/components/analysis/PracticeAnalysis'
 import BrakingAnalysis from '@/components/analysis/BrakingAnalysis'
@@ -66,7 +67,7 @@ async function fetchTelemetryCompare(
   const query = laps ? `&laps=${laps}` : ''
   const res = await fetch(
     `${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}${query}`,
-    { signal },
+    { signal, headers: authHeaders() },
   )
   if (!res.ok) throw new Error(`telemetry ${res.status}`)
   const data = await res.json()
@@ -1277,7 +1278,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   }
   const theoreticalBest = ['s1_ms', 's2_ms', 's3_ms'].reduce((total, key) => {
     const values = comparisonRows.map(row => row.driver ? sectorTimes.get(row.driver.driver_number)?.[key as 's1_ms' | 's2_ms' | 's3_ms'] ?? null : null).filter((value): value is number => value !== null)
-    return values.length ? total + Math.min(...values) : null
+    return (total !== null && values.length) ? total + Math.min(...values) : null
   }, 0 as number | null)
 
   // Canvas render
@@ -1698,14 +1699,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                         fontFamily: 'JetBrains Mono, monospace',
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
-                          <span style={{ fontSize: 10, color: C.textBright, fontWeight: 800 }}>DISTANCE: {Math.round(tooltipData.dist).toLocaleString()} m</span>
+                          <span style={{ fontSize: 10, color: C.textBright, fontWeight: 800 }}>DISTANCE: {Math.round(tooltipData!.dist).toLocaleString()} m</span>
                           <span style={{ fontSize: 9, color: tooltipData.speedDelta != null && tooltipData.speedDelta >= 0 ? driverData[0]?.colour : driverData[1]?.colour, fontWeight: 800, whiteSpace: 'nowrap' }}>
                             Δ SPEED · {driverData[0]?.abbr}/{driverData[1]?.abbr} {tooltipData.speedDelta == null ? '—' : `${tooltipData.speedDelta >= 0 ? '+' : ''}${tooltipData.speedDelta.toFixed(0)} km/h`}
                           </span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                          {tooltipData.values.map((value, index) => (
-                            <div key={value.abbr} style={{ minWidth: 0, padding: '9px 12px 10px', borderRight: index % 2 === 0 ? `1px solid ${C.border}` : undefined, borderBottom: index < 2 && tooltipData.values.length > 2 ? `1px solid ${C.border}` : undefined }}>
+                          {tooltipData!.values.map((value, index) => (
+                            <div key={value.abbr} style={{ minWidth: 0, padding: '9px 12px 10px', borderRight: index % 2 === 0 ? `1px solid ${C.border}` : undefined, borderBottom: index < 2 && tooltipData!.values.length > 2 ? `1px solid ${C.border}` : undefined }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ width: 8, height: 8, flex: '0 0 auto', borderRadius: '50%', background: value.colour }} /><span style={{ fontSize: 10, fontWeight: 800, color: value.colour }}>{value.abbr}</span></div>
                               <div style={{ color: C.textBright, fontSize: 19, lineHeight: 1.1, fontWeight: 800, whiteSpace: 'nowrap' }}>{Math.round(value.speed)}<span style={{ marginLeft: 4, color: C.textMid, fontSize: 9, fontWeight: 500 }}>km/h</span></div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 8px', marginTop: 8, color: C.textSub, fontSize: 9, lineHeight: 1.3 }}>
@@ -1788,7 +1789,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
                                 const isActive = selectedSegment === seg
-                                const count = qualiSegments.segments[seg]?.length ?? 0
+                                const count = qualiSegments?.segments?.[seg]?.length ?? 0
                                 const sc = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? C.gold : C.red
                                 return (
                                   <button key={seg} disabled={count === 0} onClick={() => setSelectedSegment(seg)} style={{
@@ -1904,7 +1905,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.3fr) minmax(320px, 0.9fr)', gap: 18, alignItems: 'start' }}>
                   <div>
                     {cornerInsights ? (
-                      <CornerInsights data={cornerInsights} driverColours={insightDriverColours} />
+                      <CornerInsights data={cornerInsights!} driverColours={insightDriverColours} />
                     ) : (
                       <InlineMessage
                         title="Driving insights loading"
@@ -1935,7 +1936,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
               subtitle="Primary speed comparison with a compact telemetry snapshot that expands on hover."
               open={openSections.speedTrace}
               onToggle={() => toggleSection('speedTrace')}
-              badge={hoverActive && tooltipData ? `${(tooltipData.dist / 1000).toFixed(3)} km` : undefined}
+              badge={hoverActive && tooltipData ? `${(tooltipData!.dist / 1000).toFixed(3)} km` : undefined}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <Panel>
@@ -1966,14 +1967,14 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                        {tooltipData.values.map(v => (
+                        {tooltipData!.values.map(v => (
                           <div key={v.abbr} style={{ borderRadius: 18, border: `1px solid ${C.border}`, background: `${v.colour}08`, padding: '14px 16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: v.colour }} />
                                 <span style={{ fontSize: 13, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 900, color: C.textBright }}>{v.abbr}</span>
                               </div>
-                              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{(tooltipData.dist / 1000).toFixed(3)} km</span>
+                              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{(tooltipData!.dist / 1000).toFixed(3)} km</span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                               {[
@@ -2007,7 +2008,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                 ) : telemetryError ? (
                   <InlineMessage
                     title="Telemetry unavailable"
-                    detail={telemetryError}
+                    detail={telemetryError ?? ""}
                   />
                 ) : telemetryReady ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2111,7 +2112,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       right={
                         <div style={{ display: 'flex', gap: 6 }}>
                           {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
-                            const count = qualiSegments.segments[seg]?.length ?? 0
+                            const count = qualiSegments?.segments?.[seg]?.length ?? 0
                             const isA = activeSegment === seg
                             const sc = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? C.gold : C.red
                             return (
@@ -2130,7 +2131,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     />
                     <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
                       {(() => {
-                        const entries = qualiSegments.segments[activeSegment] ?? []
+                        const entries = qualiSegments?.segments?.[activeSegment] ?? []
                         const sc = activeSegment === 'Q1' ? '#3671C6' : activeSegment === 'Q2' ? C.gold : C.red
                         const cutoff = qualifyingAdvancePosition
                         return (

@@ -1,9 +1,10 @@
-import { clerkMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-// Provides auth context to server components (layouts, pages, routes).
-// Protection lives in app/agent/layout.tsx via auth.protect() — the
-// resource-based pattern Clerk recommends over path matching here.
-export default clerkMiddleware()
+const isPublicRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)'])
+
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) await auth.protect()
+})
 
 export const config = {
   matcher: ['/((?!_next|[^?]*\\.[^?]*$).*)'],

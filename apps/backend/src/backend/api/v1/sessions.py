@@ -2,9 +2,15 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from datetime import datetime, timezone
-from backend import extensions
+from backend import auth, extensions
 
 sessions_bp = Blueprint("sessions", __name__)
+
+
+@sessions_bp.before_request
+def require_clerk_session():
+    """Clerk-protected product API: reject requests without a valid JWT."""
+    return auth.require_api_auth()
 
 
 def _current_year() -> int:

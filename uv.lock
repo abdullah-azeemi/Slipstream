@@ -1763,7 +1763,6 @@ source = { editable = "packages/ml" }
 dependencies = [
     { name = "flaml", extra = ["automl"] },
     { name = "lightgbm" },
-    { name = "mlflow" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
@@ -1778,12 +1777,15 @@ dependencies = [
 explain = [
     { name = "shap" },
 ]
+tracking = [
+    { name = "mlflow" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "flaml", extras = ["automl"], specifier = ">=2.1.0" },
     { name = "lightgbm", specifier = ">=4.0.0" },
-    { name = "mlflow", specifier = ">=2.10.0" },
+    { name = "mlflow", marker = "extra == 'tracking'", specifier = ">=2.10.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1.0" },
@@ -1794,7 +1796,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "xgboost", specifier = ">=2.0.0" },
 ]
-provides-extras = ["explain"]
+provides-extras = ["explain", "tracking"]
 
 [[package]]
 name = "mlflow"
@@ -3528,7 +3530,6 @@ source = { editable = "apps/backend" }
 dependencies = [
     { name = "alembic" },
     { name = "boto3" },
-    { name = "celery", extra = ["redis"] },
     { name = "flask" },
     { name = "flask-cors" },
     { name = "flask-socketio" },
@@ -3548,7 +3549,6 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "boto3", specifier = ">=1.34" },
-    { name = "celery", extras = ["redis"], specifier = ">=5.3" },
     { name = "flask", specifier = ">=3.0" },
     { name = "flask-cors", specifier = ">=6.0.2" },
     { name = "flask-socketio", specifier = ">=5.3" },

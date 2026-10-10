@@ -9,9 +9,10 @@ from contextlib import nullcontext
 import json
 import os
 import pickle
-import tempfile
-
-import mlflow
+try:
+    import mlflow
+except ImportError:
+    mlflow = None
 import numpy as np
 import pandas as pd
 from flaml import AutoML
@@ -190,19 +191,20 @@ def train_gp_models(df: pd.DataFrame) -> dict[str, str]:
 
 
 def main():
-    mlflow_enabled = True
+    mlflow_enabled = mlflow is not None
     mlflow_run = nullcontext()
-    try:
-        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-        mlflow.set_experiment("slipstream-race-prediction")
-        mlflow_run = mlflow.start_run(run_name="slipstream-race-predictor")
-    except Exception as e:
-        mlflow_enabled = False
-        log.warning(
-            "mlflow.unavailable",
-            tracking_uri=settings.mlflow_tracking_uri,
-            error=str(e),
-        )
+    if mlflow_enabled:
+        try:
+            mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+            mlflow.set_experiment("slipstream-race-prediction")
+            mlflow_run = mlflow.start_run(run_name="slipstream-race-predictor")
+        except Exception as e:
+            mlflow_enabled = False
+            log.warning(
+                "mlflow.unavailable",
+                tracking_uri=settings.mlflow_tracking_uri,
+                error=str(e),
+            )
 
     log.info("train.start")
 

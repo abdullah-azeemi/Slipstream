@@ -130,9 +130,12 @@ export interface ConversationDetail {
 }
 
 export interface UsageInfo {
-  used: number,
-  limit: number,
+  used: number
+  limit: number
   remaining: number
+  cost_usd_today?: number
+  cost_limit_usd?: number
+  remaining_cost_usd?: number
 }
 export interface AdminStats {
   total_runs: number

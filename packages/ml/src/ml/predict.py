@@ -9,7 +9,6 @@ noise added to simulate race uncertainty (crashes, strategy, weather).
 """
 from __future__ import annotations
 import pickle
-import threading
 import numpy as np
 import structlog
 from sqlalchemy import text
@@ -24,7 +23,6 @@ from ml.model_store import GLOBAL_MODEL_PATH, gp_model_path
 from ml.validation import compute_stream_attribution, feature_stream_for, stream_label
 
 log       = structlog.get_logger()
-_train_lock = threading.Lock()
 
 
 class ModelUnavailableError(RuntimeError):
@@ -39,29 +37,9 @@ def ensure_model_available(gp_name: str | None = None) -> None:
         return
 
     raise ModelUnavailableError(
-        f"No trained model found at {model_path}. "
-        "Training has been queued in the background — retry shortly."
+        f"No trained model found at {model_path}. Run the one-shot training "
+        "job (`python -m ml.train`) or the worker task before requesting predictions."
     )
-
-
-def schedule_training() -> None:
-    """Kick off model training on a background thread.
-
-    Never blocks the caller (the HTTP request). The module-level lock keeps
-    concurrent workers from training simultaneously.
-    """
-
-    def _worker() -> None:
-        with _train_lock:
-            log.info("model.async_train.start")
-            try:
-                from ml.train import main as train_main
-                train_main()
-                log.info("model.async_train.done")
-            except Exception as e:
-                log.warning("model.async_train.failed", error=str(e))
-
-    threading.Thread(target=_worker, daemon=True).start()
 
 
 def load_model(gp_name: str | None = None):
@@ -90,7 +68,8 @@ def _predict_with_current_features(model, X, gp_name: str | None):
         log.warning("model.feature_mismatch_retrain", gp_name=gp_name, error=str(e))
         raise ModelUnavailableError(
             f"Stored model is stale for current features: {e}. "
-            "Training has been queued in the background — retry shortly."
+            "Run the one-shot training job (`python -m ml.train`) or the worker "
+            "task to produce a model that matches the current feature schema."
         )
 
 

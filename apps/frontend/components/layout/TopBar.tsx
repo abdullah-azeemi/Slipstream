@@ -4,6 +4,8 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
+
 export default function TopBar() {
   const pathname = usePathname()
 
@@ -12,6 +14,7 @@ export default function TopBar() {
     { label: 'Sessions', href: '/sessions' },
     { label: 'Schedule', href: '/schedule' },
     { label: 'Predictions', href: '/predictions' },
+    { label: 'Agent', href: '/agent' },
   ]
 
   return (
@@ -58,29 +61,51 @@ export default function TopBar() {
 
         {/* Right CTA */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/dashboard" className="hidden-xs" style={{
-            fontSize: 13,
-            fontWeight: 500,
-            color: '#111827',
-            textDecoration: 'none',
-          }}>
-            Sign In
-          </Link>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: '#111827',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+              }}>
+                Sign In
+              </button>
+            </SignInButton>
 
-          <Link href="/dashboard" className="get-started-btn" style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '8px 18px',
-            background: '#000000',
-            color: '#FFFFFF',
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: 9999,
-            textDecoration: 'none',
-            transition: 'opacity 150ms ease',
-          }}>
-            Get Started
-          </Link>
+            <SignInButton mode="modal">
+              <button className="get-started-btn" style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '8px 18px',
+                background: '#000000',
+                color: '#FFFFFF',
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 9999,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'opacity 150ms ease',
+              }}>
+                Get Started
+              </button>
+            </SignInButton>
+          </SignedOut>
+
+          <SignedIn>
+            <Link href="/dashboard" style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#111827',
+              textDecoration: 'none',
+              marginRight: 16,
+            }}>
+              Dashboard
+            </Link>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
         </div>
       </div>
     </header>

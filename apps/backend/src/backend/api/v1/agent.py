@@ -172,17 +172,7 @@ def _maybe_store_insight(answer, clerk_user_id: str, run_id: int | None) -> None
 @agent_bp.before_request
 def require_clerk_session():
     """Reject the request before the view unless a valid Clerk token is present."""
-    if request.method == "OPTIONS":
-        return None  # CORS preflight never carries credentials
-    header = request.headers.get("Authorization", "")
-    if not header.startswith("Bearer "):
-        return jsonify({"error": "Missing bearer token"}), 401
-    try:
-        g.clerk_user_id = auth.verify_session_token(header.removeprefix("Bearer "))
-    except auth.ClerkAuthError as exc:
-        log.info("agent.auth_rejected", reason=str(exc))
-        return jsonify({"error": f"Invalid token: {exc}"}), 401
-    return None
+    return auth.require_api_auth()
 
 
 @agent_bp.post("/agent/query")
@@ -314,6 +304,12 @@ def get_usage():
     """Returns the authenticated users daily usage summary"""
     summary = persistence.get_usage_summary(g.clerk_user_id)
     return jsonify(summary)
+
+
+@agent_bp.get("/agent/admin/limits")
+def get_limits():
+    """Return the current authenticated user's daily agent allowance."""
+    return jsonify(persistence.get_usage_summary(g.clerk_user_id))
 
 
 @agent_bp.delete("/agent/memory")

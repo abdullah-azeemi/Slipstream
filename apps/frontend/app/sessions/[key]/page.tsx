@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { auth } from '@clerk/nextjs/server'
 
 import CardSection from '@/components/race/CardSection'
 import RacePacePanel from '@/components/race/RacePacePanel'
@@ -115,9 +116,10 @@ const eyebrow = {
   color: '#9CA3AF',
 } as const
 
-async function fetchJson<T>(path: string, revalidateSeconds = 60): Promise<T | null> {
+async function fetchJson<T>(path: string, revalidateSeconds = 60, token?: string): Promise<T | null> {
   try {
-    const response = await fetch(`${BASE}${path}`, { next: { revalidate: revalidateSeconds } })
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    const response = await fetch(`${BASE}${path}`, { headers, next: { revalidate: revalidateSeconds } })
     if (!response.ok) return null
     return response.json() as Promise<T>
   } catch {
@@ -378,9 +380,11 @@ function ClassificationTable({ rows }: { rows: RaceTableRow[] }) {
 export default async function UnifiedRacePage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params
   const sessionKey = Number(key)
+  const { getToken } = await auth()
+  const token = (await getToken()) ?? undefined
   const [sessionsRes, results, stintPace, fastestLaps] = await Promise.all([
-    fetchJson<LocalSession[]>('/api/v1/sessions'),
-    fetchJson<RaceResult[]>(`/api/v1/sessions/${sessionKey}/race-results`, 120),
+    fetchJson<LocalSession[]>('/api/v1/sessions', 60, token),
+    fetchJson<RaceResult[]>(`/api/v1/sessions/${sessionKey}/race-results`, 120, token),
     fetchJson<StintPace[]>(`/api/v1/sessions/${sessionKey}/analysis/stint-pace`, 120),
     fetchJson<FastestLapRow[]>(`/api/v1/sessions/${sessionKey}/analysis/fastest-lap`, 120),
   ])
@@ -485,7 +489,7 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ maxWidth: 760 }}>
             <div style={{ ...eyebrow, marginBottom: 11 }}>Formula 1 {weekend.year} — Round {String(round).padStart(2, '0')}</div>
-            <h1 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(2.4rem, 6vw, 4.2rem)', lineHeight: 1.05, color: '#111827', letterSpacing: '-0.02em' }}>
+            <h1 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(1.8rem, 4vw, 3rem)', lineHeight: 1.05, color: '#111827', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {circuitName}
             </h1>
             <p style={{ margin: '16px 0 0', fontFamily: SERIF, fontStyle: 'italic', fontSize: 'clamp(1.05rem, 2.4vw, 1.5rem)', lineHeight: 1.5, color: '#6B7280', maxWidth: 620 }}>

@@ -178,6 +178,12 @@ main {
 .fade-up-2 { animation: fadeUp 500ms 120ms ease both; }
 .fade-up-3 { animation: fadeUp 500ms 180ms ease both; }
 
+.auth-grid { background-image: linear-gradient(rgba(148,163,184,.18) 1px,transparent 1px), linear-gradient(90deg,rgba(148,163,184,.18) 1px,transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom,black,transparent 75%); }
+.auth-track { animation: authTrackDrift 7s ease-in-out infinite; }
+.auth-car { animation: authCarRace 3.8s ease-in-out infinite; }
+@keyframes authTrackDrift { 50% { transform: translateX(-50%) scale(1.04); opacity: .72; } }
+@keyframes authCarRace { 50% { transform: translateX(18px) translateY(-4px); } }
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }

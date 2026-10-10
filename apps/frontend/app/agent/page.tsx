@@ -1,7 +1,7 @@
 /* eslint-disable */
 'use client'
 
-import { useAuth, UserButton } from '@clerk/nextjs'
+import { useAuth, useUser, UserButton } from '@clerk/nextjs'
 import {
   Bot,
   Braces,
@@ -170,6 +170,15 @@ function applyNodeEvent(
 
 export default function AgentPage() {
   const { getToken } = useAuth()
+  const { user } = useUser()
+  const strategistName = user?.fullName ?? user?.firstName ?? 'Strategist'
+  const strategistInitials = strategistName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
 
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState<ChatTurn[]>([])
@@ -240,7 +249,7 @@ export default function AgentPage() {
   }, [getToken])
 
   useEffect(() => {
-    agentApi.getUsage(getToken).then(setUsage).catch(() => {})
+    agentApi.getLimits(getToken).then(setUsage).catch(() => {})
   }, [getToken])
 
   useEffect(() => {
@@ -417,7 +426,7 @@ export default function AgentPage() {
         setConversationId(reply.conversation_id)
         agentApi.listConversations(getToken).then(setConversations).catch(() => {})
       }
-      agentApi.getUsage(getToken).then(setUsage).catch(() => {})
+      agentApi.getLimits(getToken).then(setUsage).catch(() => {})
       agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
       agentApi.getFeedbackStats(getToken).then(setFeedbackStats).catch(() => {})
     } catch (err) {
@@ -522,12 +531,28 @@ export default function AgentPage() {
         </div>
       </div>
 
+      <div className="mx-5 mb-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+          <span>Credits</span>
+          <span className="text-slate-700">{usage ? `${usage.used} / ${usage.limit}` : 'Loading...'}</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-label="Daily prompt credits used">
+          <div
+            className="h-full rounded-full bg-rose-500 transition-all duration-500"
+            style={{ width: `${usage && usage.limit > 0 ? Math.min(100, (usage.used / usage.limit) * 100) : 0}%` }}
+          />
+        </div>
+        <div className="mt-1.5 text-[10px] text-slate-400">
+          {usage ? `${usage.remaining} prompts remaining today` : 'Daily prompt allowance'}
+        </div>
+      </div>
+
       <div className="p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center text-white text-[10px] font-bold">CS</div>
+            <UserButton appearance={{ elements: { avatarBox: 'h-8 w-8' } }} afterSignOutUrl="/" />
             <div>
-               <div className="text-xs font-bold text-black">Chief Strategist</div>
-               <div className="text-[10px] text-slate-400 font-mono mt-0.5">Telemetry Unit 01</div>
+               <div className="max-w-[150px] truncate text-xs font-bold text-black">{strategistName}</div>
+               <div className="text-[10px] text-slate-400 font-mono mt-0.5">Strategy desk</div>
             </div>
          </div>
          <Radio className="w-4 h-4 text-slate-300" />
@@ -579,15 +604,6 @@ export default function AgentPage() {
               <div className="text-xs text-slate-500 font-medium hidden sm:block">2026 Monaco Grand Prix</div>
            </div>
            <div className="flex items-center gap-3">
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50/50">
-                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                 FIA Feed 12ms
-              </div>
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white shadow-sm">
-                 <Database className="w-3.5 h-3.5 text-rose-500" />
-                 Telemetry Hybrid Engine v2.4
-                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-1" />
-              </div>
               <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-50 shadow-sm transition-colors">
                  <Download className="w-3.5 h-3.5" />
                  <span className="hidden sm:inline">Export Stint Data</span>
@@ -609,7 +625,7 @@ export default function AgentPage() {
                  
                  <h1 className="text-[44px] text-center mb-5 text-black tracking-tight leading-tight">
                     <span className="font-serif text-slate-700">Hello, </span>
-                    <span className="font-serif italic text-slate-800">Chief Strategist</span>
+                    <span className="font-serif italic text-slate-800">{strategistName}</span>
                     <br />
                     <span className="font-medium text-slate-900">How can the pit wall assist you today?</span>
                  </h1>
@@ -672,11 +688,11 @@ export default function AgentPage() {
                   <div className="flex justify-end">
                     <div className="max-w-[85%] border border-slate-200 bg-white rounded-2xl rounded-tr-sm px-6 py-5 shadow-sm flex flex-col gap-3">
                       <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                        <span>CHIEF_STRATEGIST · {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                        <span>{strategistName.toUpperCase()} · {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
                       </div>
                       <p className="text-[14px] font-medium leading-relaxed text-slate-800">{turn.question}</p>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4 mt-2">CS</div>
+                    <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4 mt-2">{strategistInitials}</div>
                   </div>
 
                   {/* Agent Response */}
@@ -731,7 +747,7 @@ export default function AgentPage() {
                       <div className="w-2 h-2 rounded-full bg-rose-500 animate-bounce delay-75"></div>
                       <div className="w-2 h-2 rounded-full bg-rose-500 animate-bounce delay-150"></div>
                    </div>
-                   <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4">CS</div>
+                   <div className="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-bold shrink-0 ml-4">{strategistInitials}</div>
                 </div>
               )}
             </div>
