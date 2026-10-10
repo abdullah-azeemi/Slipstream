@@ -39,6 +39,5 @@ Thumbs.db
 .idea/
 
 # Agent files
-docs/agent
-docs/agent-architecture-v3.md
-docs/plan.md
+.claude/
+.ruff_cache/
