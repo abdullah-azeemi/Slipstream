@@ -300,6 +300,54 @@ CREATE INDEX IF NOT EXISTS idx_race_control_session_lap
     ON race_control_events (session_key, lap_number);
 CREATE INDEX IF NOT EXISTS idx_race_control_session_driver
     ON race_control_events (session_key, driver_number);
+
+CREATE TABLE IF NOT EXISTS strategy_documents (
+    id                  SERIAL PRIMARY KEY,
+    source_type         TEXT NOT NULL,
+    title               TEXT NOT NULL,
+    r2_key              TEXT,
+    source_url          TEXT,
+    sha256              TEXT NOT NULL,
+    mime_type           TEXT,
+    season              INTEGER,
+    session_key         INTEGER REFERENCES sessions(session_key),
+    driver_number       INTEGER,
+    team_name           TEXT,
+    published_at        TIMESTAMPTZ,
+    permission_status   TEXT NOT NULL DEFAULT 'pending',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_strategy_documents_sha256 UNIQUE (sha256)
+);
+
+CREATE TABLE IF NOT EXISTS strategy_document_chunks (
+    id                  SERIAL PRIMARY KEY,
+    document_id         INTEGER NOT NULL REFERENCES strategy_documents(id) ON DELETE CASCADE,
+    chunk_index         INTEGER NOT NULL,
+    text                TEXT NOT NULL,
+    page_number         INTEGER,
+    lap_from            INTEGER,
+    lap_to              INTEGER,
+    timestamp_from_ms   BIGINT,
+    timestamp_to_ms     BIGINT,
+    token_count         INTEGER,
+    vector_id           TEXT,
+    index_status        TEXT NOT NULL DEFAULT 'pending',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_strategy_chunk_document_index UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_documents_session
+    ON strategy_documents (session_key);
+CREATE INDEX IF NOT EXISTS idx_strategy_documents_season
+    ON strategy_documents (season);
+CREATE INDEX IF NOT EXISTS idx_strategy_documents_source_type
+    ON strategy_documents (source_type);
+CREATE INDEX IF NOT EXISTS idx_strategy_documents_permission
+    ON strategy_documents (permission_status);
+CREATE INDEX IF NOT EXISTS idx_strategy_chunks_document
+    ON strategy_document_chunks (document_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_chunks_index_status
+    ON strategy_document_chunks (index_status);
 """
 
 
@@ -349,6 +397,8 @@ def _create_tables(db_engine):
     with db_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS agent_memory_snippets CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS user_preferences CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS strategy_document_chunks CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS strategy_documents CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_runs CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_messages CASCADE;"))

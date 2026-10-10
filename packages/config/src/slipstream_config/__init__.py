@@ -45,6 +45,12 @@ class CommonSettings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
 
+    # Strategy documents (Task 7): original files/transcripts live outside
+    # Postgres; only metadata + chunks are stored in the database.
+    strategy_document_dir: str = "./strategy_documents"
+    strategy_document_backend: str = "local"
+    strategy_document_bucket: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
