@@ -29,6 +29,8 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      new_sessions: ${{ steps.auto-ingest.outputs.new_sessions }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       # Raw lap traces -> R2; Postgres keeps only metadata (Neon free tier).
@@ -57,10 +59,12 @@ jobs:
         run: uv run alembic -c apps/backend/alembic.ini upgrade head
 
       - name: Ingest completed sessions
+        id: auto-ingest
         run: uv run python -m ingestion.auto_ingest
 
   train:
     needs: ingest
+    if: needs.ingest.outputs.new_sessions == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:

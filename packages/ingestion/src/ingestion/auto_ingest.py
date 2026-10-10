@@ -1,5 +1,5 @@
 """
-Auto-ingest new 2026 race weekend sessions.
+Auto-ingest completed race weekend sessions for the current season.
 
 Checks the FastF1 event schedule for the current season, finds sessions
 that have completed but aren't in our DB yet, and ingests them.
@@ -13,6 +13,7 @@ Run on a schedule (cron example — every hour):
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 import structlog
@@ -257,28 +258,27 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
 def run_once() -> bool:
     current_year = datetime.now(timezone.utc).year
     engine = create_engine(settings.db_url)
+    lock_conn = engine.connect()
     lock_acquired = False
 
-    with engine.connect() as conn:
+    try:
         lock_acquired = bool(
-            conn.execute(
+            lock_conn.execute(
                 text("SELECT pg_try_advisory_lock(:lock_id)"),
                 {"lock_id": AUTO_INGEST_LOCK_ID},
             ).scalar()
         )
 
-    if not lock_acquired:
-        log.info("auto_ingest.skip_locked")
-        return False
+        if not lock_acquired:
+            log.info("auto_ingest.skip_locked")
+            return False
 
-    ingested = get_ingested_sessions(engine)
-    try:
+        ingested = get_ingested_sessions(engine)
         log.info("auto_ingest.start", year=current_year, already_ingested=len(ingested))
 
         schedule = get_fastf1_schedule(current_year)
         if not schedule:
-            log.warning("auto_ingest.no_schedule")
-            return False
+            raise RuntimeError(f"No FastF1 event schedule available for {current_year}")
 
         new_sessions = 0
         failed = 0
@@ -315,6 +315,9 @@ def run_once() -> bool:
             total_in_db=len(ingested),
         )
 
+        if failed:
+            raise RuntimeError(f"Failed to ingest {failed} completed session(s)")
+
         if new_sessions > 0:
             if latest_gp_ingested:
                 deleted = purge_practice_sessions(
@@ -325,27 +328,26 @@ def run_once() -> bool:
                     gp=latest_gp_ingested,
                     deleted=deleted,
                 )
-            # Retrain ML model if new race weekends were added
-            log.info("auto_ingest.retraining_model")
-            try:
-                from ml.train import main as train_main
-
-                train_main()
-                log.info("auto_ingest.model_retrained")
-            except Exception as e:
-                log.warning("auto_ingest.retrain_failed", error=str(e))
 
         return new_sessions > 0
     finally:
-        with engine.connect() as conn:
-            conn.execute(
-                text("SELECT pg_advisory_unlock(:lock_id)"),
-                {"lock_id": AUTO_INGEST_LOCK_ID},
-            )
+        try:
+            if lock_acquired:
+                lock_conn.execute(
+                    text("SELECT pg_advisory_unlock(:lock_id)"),
+                    {"lock_id": AUTO_INGEST_LOCK_ID},
+                )
+        finally:
+            lock_conn.close()
+            engine.dispose()
 
 
 def main():
-    run_once()
+    new_sessions = run_once()
+    output_file = os.environ.get("GITHUB_OUTPUT")
+    if output_file:
+        with open(output_file, "a", encoding="utf-8") as output:
+            output.write(f"new_sessions={'true' if new_sessions else 'false'}\n")
 
 
 if __name__ == "__main__":
