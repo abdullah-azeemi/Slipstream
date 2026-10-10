@@ -6,7 +6,7 @@ No real tools, no LLM, no DB. This is the contract for the binding layer.
 
 import pytest
 
-from backend.agent import types
+from backend.agent import orchestrator, types
 from backend.agent.binding import BindError, bind_params, resolve_ref
 from backend.agent.planner import PlannerDAGNode
 
@@ -106,3 +106,13 @@ def test_missing_ref_with_no_fallback_raises(monkeypatch):
     )
     with pytest.raises(BindError):
         bind_params(node, {"n1": {}}, types.ToolName.RESOLVE_SESSION)
+
+
+def test_every_tool_has_a_binder():
+    """Every dispatchable tool must have a parameter binder.
+
+    Prevents regressions like the missing ``@_register`` on ``_bind_gap``,
+    which made POSITION_GAP_TRACKING nodes raise ``KeyError`` at bind time.
+    """
+    missing = set(orchestrator._TOOLS) - set(orchestrator._BINDERS)
+    assert not missing, f"tools without a binder: {sorted(t.value for t in missing)}"

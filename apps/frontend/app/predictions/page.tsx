@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Box,
   Activity,
-  Download,
   Maximize2,
   ChevronDown
 } from 'lucide-react'

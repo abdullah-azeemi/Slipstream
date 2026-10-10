@@ -549,7 +549,7 @@ export default function AgentPage() {
 
       <div className="p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
          <div className="flex items-center gap-3">
-            <UserButton appearance={{ elements: { avatarBox: 'h-8 w-8' } }} afterSignOutUrl="/" />
+            <UserButton appearance={{ elements: { avatarBox: 'h-8 w-8' } }} />
             <div>
                <div className="max-w-[150px] truncate text-xs font-bold text-black">{strategistName}</div>
                <div className="text-[10px] text-slate-400 font-mono mt-0.5">Strategy desk</div>

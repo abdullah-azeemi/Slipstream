@@ -171,6 +171,7 @@ def _bind_telemetry(params, env):
         compare_lap_numbers=params.get("compare_lap_numbers") or (),
     )
 
+
 @_register(types.ToolName.DRIVER_STYLE_COMPARE)
 def _bind_driver_style(params, env):
     return types.DriverStyleCompareInput(
@@ -179,6 +180,8 @@ def _bind_driver_style(params, env):
         year=int(params.get("year") or 0),
     )
 
+
+@_register(types.ToolName.GAP_POSITION_SNAPSHOT)
 def _bind_gap(params, env):
     target_lap = params.get("target_lap") or env["routed"].target_lap
     if target_lap is None and env.get("pits") and env["pits"].pit_stops:
@@ -388,7 +391,9 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
 
     if routed.intent is types.Intent.DRIVER_STYLE_COMPARISON:
         if not routed.driver_name:
-            raise types.PlanValidationError("driver_style_comparison requires a driver_name")
+            raise types.PlanValidationError(
+                "driver_style_comparison requires a driver_name"
+            )
         nodes = [
             types.DAGNode(
                 id="style",
@@ -677,7 +682,9 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
         nodes.append(_verify_node(depends_on=("session", "driver", "driver_cmp")))
 
     if len(nodes) > MAX_DAG_NODES:
-        raise types.DataError(f"plan exceeds MAX_DAG_NODES={MAX_DAG_NODES}: got {len(nodes)} nodes")
+        raise types.DataError(
+            f"plan exceeds MAX_DAG_NODES={MAX_DAG_NODES}: got {len(nodes)} nodes"
+        )
 
     edges = tuple(
         types.DAGEdge(source=dep, target=node.id)
@@ -686,6 +693,7 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     )
 
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
+
 
 def build_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
     """Build the tool-plan DAG using the deterministic template planner.
@@ -723,7 +731,9 @@ def topo_sort(dag: types.ExecutionDAG) -> tuple[str, ...]:
 
     return tuple(order)
 
+
 _RETRYABLE_DELAYS_MS: tuple[int, int, int] = (200, 400, 800)
+
 
 def _retry_transient(fn: Callable[[], Any]) -> Any:
     """Run fn, retrying ONLY on types.RetryableError with capped backoff.
@@ -1109,6 +1119,7 @@ def _compose(
     _emit(progress, type="stage", stage="compose", status="ok", label="Answer composed")
     return answer
 
+
 def _run_agentic(
     question: str,
     routed: types.RoutedQuestion,
@@ -1128,10 +1139,16 @@ def _run_agentic(
         registry=planner.TOOL_REGISTRY,
         memory_snippets=memory_snippets,
     )
-    tool_results = {k: v for k, v in env.items() if k != "routed" and not (isinstance(v, dict) and v == {"error": v.get("error")})}
+    tool_results = {
+        k: v
+        for k, v in env.items()
+        if k != "routed"
+        and not (isinstance(v, dict) and v == {"error": v.get("error")})
+    }
     if not tool_results:
         return None
     return env
+
 
 def _compose_agentic(
     question: str,
@@ -1143,7 +1160,13 @@ def _compose_agentic(
     """Build an AgentAnswer from an agentic-loop evidence env."""
     from backend.agent import tools
 
-    _emit(progress, type="stage", stage="compose", status="running", label="Verifying agent-collected evidence")
+    _emit(
+        progress,
+        type="stage",
+        stage="compose",
+        status="running",
+        label="Verifying agent-collected evidence",
+    )
 
     refusals: list[str] = []
     session = _first_result(env, "session_key", types.ResolvedSession)
@@ -1154,28 +1177,40 @@ def _compose_agentic(
     verify = None
     if session is not None and driver is not None:
         try:
-            verify = tools.verify_evidence(types.VerifyEvidenceInput(
-                session_key=session.session_key,
-                driver_number=driver.driver_number,
-                required_laps=(),
-            ))
+            verify = tools.verify_evidence(
+                types.VerifyEvidenceInput(
+                    session_key=session.session_key,
+                    driver_number=driver.driver_number,
+                    required_laps=(),
+                )
+            )
             if not verify.passed and verify.refusal_reason:
                 refusals.append(verify.refusal_reason)
         except Exception as exc:  # verify itself failed -> refuse, don't crash
             refusals.append(f"evidence verification failed: {exc}")
 
-    _emit(progress, type="stage", stage="compose", status="ok", label="Agentic answer prepared")
+    _emit(
+        progress,
+        type="stage",
+        stage="compose",
+        status="ok",
+        label="Agentic answer prepared",
+    )
 
     if refusals:
         return types.AgentAnswer(
-            question=question, intent=routed.intent,
-            answer="I could not fully answer that question. " + " ".join(refusals)
-                    + " No numbers were invented from missing data.",
-            refusals=tuple(refusals), evidence=verify,
+            question=question,
+            intent=routed.intent,
+            answer="I could not fully answer that question. "
+            + " ".join(refusals)
+            + " No numbers were invented from missing data.",
+            refusals=tuple(refusals),
+            evidence=verify,
         )
 
     evidence_payload = {
-        nid: asdict(val) for nid, val in env.items()
+        nid: asdict(val)
+        for nid, val in env.items()
         if nid != "routed" and hasattr(val, "__dataclass_fields__")
     }
     answer_text = ""
@@ -1190,13 +1225,21 @@ def _compose_agentic(
             complexity=routed.complexity,
         )
     except types.LLMError:
-        answer_text = "I have gathered evidence but could not compose a narrative answer."
+        answer_text = (
+            "I have gathered evidence but could not compose a narrative answer."
+        )
 
     return types.AgentAnswer(
-        question=question, intent=routed.intent, answer=answer_text,
-        session=session, driver=driver, evidence=verify, cost_usd=cost,
+        question=question,
+        intent=routed.intent,
+        answer=answer_text,
+        session=session,
+        driver=driver,
+        evidence=verify,
+        cost_usd=cost,
         sources=_first_result(env, "hits", types.SearchStrategySourcesResult),
     )
+
 
 def _first_result(env: dict[str, Any], attr: str, cls: type) -> Any:
     """Return the first env value that is an instance of cls, else None."""
@@ -1204,6 +1247,7 @@ def _first_result(env: dict[str, Any], attr: str, cls: type) -> Any:
         if isinstance(val, cls):
             return val
     return None
+
 
 def _clarify(
     question: str, routed: types.RoutedQuestion, missing: str, text: str, refusal: str
@@ -1306,7 +1350,11 @@ def _run_data_availability(
         answer_text = "\n".join(lines)
 
     _emit(
-        progress, type="stage", stage="compose", status="ok", label="Catalog answer ready"
+        progress,
+        type="stage",
+        stage="compose",
+        status="ok",
+        label="Catalog answer ready",
     )
     return types.AgentAnswer(
         question=question,
@@ -1398,7 +1446,11 @@ def _run_strategy_sources(
             compose_cost = 0.0
 
     _emit(
-        progress, type="stage", stage="compose", status="ok", label="Source answer ready"
+        progress,
+        type="stage",
+        stage="compose",
+        status="ok",
+        label="Source answer ready",
     )
     return types.AgentAnswer(
         question=question,
@@ -1413,7 +1465,12 @@ def _run_strategy_sources(
     )
 
 
-def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None, clerk_user_id: str | None = None) -> types.AgentAnswer:
+def run(
+    question: str,
+    progress: ProgressCallback | None = None,
+    context: dict[str, Any] | None = None,
+    clerk_user_id: str | None = None,
+) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     if circuit_breaker.breaker.is_open():
         _emit(
@@ -1429,7 +1486,7 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
             answer="The AI service is temporarily unavailable. Try again in a few minutes.",
             refusals=("llm_provider_unavailable",),
         )
-    
+
     try:
         routed, routing_cost = llm.route_question(question)
     except types.LLMError as exc:
@@ -1473,8 +1530,13 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
         fav = memory.get_preference(clerk_user_id, "favorite_driver")
         if fav:
             routed = replace(routed, driver_name=fav)
-            _emit(progress, type="stage", stage="route", status="ok",
-                  label=f"Resolved driver from memory: {fav}")
+            _emit(
+                progress,
+                type="stage",
+                stage="route",
+                status="ok",
+                label=f"Resolved driver from memory: {fav}",
+            )
 
     if clerk_user_id:
         memory.maybe_store_preference(question, routed, clerk_user_id)
@@ -1515,23 +1577,30 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
                 text="Which second driver should I compare against?",
                 refusal="missing_compare_driver",
             )
-        
+
     env: dict | None = None
     if settings.agent_planner_mode == "llm":
         env = _run_agentic(question, routed, progress, memory_snippets=memory_snippets)
         if env is not None:
-            return _compose_agentic(question, routed, env, progress, memory_snippets=memory_snippets)
-        
+            return _compose_agentic(
+                question, routed, env, progress, memory_snippets=memory_snippets
+            )
+
     try:
         dag = build_dag(routed)
     except types.DataError:
         return _clarify(
-            question, routed, missing="race", text="That question needs too many steps. Ask me something more focused.",
-            refusal="plan_too_large")
+            question,
+            routed,
+            missing="race",
+            text="That question needs too many steps. Ask me something more focused.",
+            refusal="plan_too_large",
+        )
 
     from backend.agent.planner import prune_dag
+
     dag = prune_dag(dag, routed)
-    
+
     _emit(
         progress,
         type="dag_init",
@@ -1552,52 +1621,59 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
     compute_result: str | None = None
 
     if routed.requires_compute:
-        _emit(progress, event="node_start", tool="compute_node")
+        _emit(progress, type="node_start", tool_name="compute_node")
         data_csv = _serialise_evidence_as_csv(env)
         compute_inp = compute_node.ComputeInput(query=question, data_csv=data_csv)
 
         for attempt in range(MAX_RETRIES):
             out = compute_node.run(compute_inp)
             if not out.success:
-                break  
+                break
 
-            _emit(progress, event="node_start", tool="critic_node")
-            eval_result = critic_node.run(critic_node.CriticInput(user_query=question, compute_result=out.result))
+            _emit(progress, type="node_start", tool_name="critic_node")
+            eval_result = critic_node.run(
+                critic_node.CriticInput(user_query=question, compute_result=out.result)
+            )
 
             if eval_result.is_logically_sound:
                 compute_result = out.result
-                _emit(progress, event="node_done", tool="critic_node")
+                _emit(progress, type="node_done", tool_name="critic_node")
                 break
 
-            _emit(progress, event="self_correcting", tool="compute_node", attempt=attempt + 1)
+            _emit(
+                progress,
+                type="self_correcting",
+                tool_name="compute_node",
+                attempt=attempt + 1,
+            )
             compute_inp = compute_node.ComputeInput(
                 query=question,
                 data_csv=data_csv,
                 error_feedback=eval_result.error_feedback or "",
             )
 
-        _emit(progress, event="node_done", tool="compute_node")
+        _emit(progress, type="node_done", tool_name="compute_node")
 
-    _emit(progress, event="node_start", tool="synthesizer")
-    try:
-        synth_inp = synthesis_node.SynthesisInput(
-            user_query=question,
-            tool_evidence=_serialise_evidence_as_text(env),
-            compute_result=compute_result,
-        )
-        synthesis_chunks: list[str] = []
-        for chunk in synthesis_node.stream(synth_inp):
-            _emit(progress, event="synthesis_chunk", chunk=chunk)
-            synthesis_chunks.append(chunk)
-        final_synthesis = "".join(synthesis_chunks).strip()
-        if final_synthesis:
-            answer = replace(answer, answer=final_synthesis)
-    except types.LLMError:
-        pass
-    except Exception:
-        pass
-    finally:
-        _emit(progress, event="node_done", tool="synthesizer")
+        _emit(progress, type="node_start", tool_name="synthesizer")
+        try:
+            synth_inp = synthesis_node.SynthesisInput(
+                user_query=question,
+                tool_evidence=_serialise_evidence_as_text(env),
+                compute_result=compute_result,
+            )
+            synthesis_chunks: list[str] = []
+            for chunk in synthesis_node.stream(synth_inp):
+                _emit(progress, type="synthesis_chunk", chunk=chunk)
+                synthesis_chunks.append(chunk)
+            final_synthesis = "".join(synthesis_chunks).strip()
+            if final_synthesis:
+                answer = replace(answer, answer=final_synthesis)
+        except types.LLMError:
+            pass
+        except Exception:
+            pass
+        finally:
+            _emit(progress, type="node_done", tool_name="synthesizer")
 
     return replace(
         answer,

@@ -13,7 +13,6 @@ from collections.abc import Generator
 from backend.agent import types
 from backend.config import settings
 from backend.agent import circuit_breaker
-from backend.agent import semantic_cache
 from backend.agent import intent_classifier
 from backend.agent.semantic_cache import cache as semantic_cache
 
@@ -62,8 +61,9 @@ Rules:
 """
 _MAX_COMPOSITION_CHARS = 4000
 
+
 def validate_composition(text: str) -> str:
-    """Post-LLM validation of the composer's answer 
+    """Post-LLM validation of the composer's answer
     The system prompt forbids raw dumps and invented numbers, which we
     cannot check mechanically -- halllucination needs ground truth. What
     we CAN reject is structurally broken output, so the caller hits the
@@ -74,10 +74,16 @@ def validate_composition(text: str) -> str:
     if not cleaned:
         raise types.LLMError("composer returned an empty answer", code="composer_empty")
     if len(cleaned) > _MAX_COMPOSITION_CHARS:
-        raise types.LLMError(f"composer answer exceeds {_MAX_COMPOSITION_CHARS} chars", code="composer_too_long")
+        raise types.LLMError(
+            f"composer answer exceeds {_MAX_COMPOSITION_CHARS} chars",
+            code="composer_too_long",
+        )
     if "```" in cleaned:
-        raise types.LLMError("composer returned a code block, not prose", code="composer_code_block")
+        raise types.LLMError(
+            "composer returned a code block, not prose", code="composer_code_block"
+        )
     return cleaned
+
 
 def _estimate_cost(model: str, usage: dict) -> float:
     """Rough USD cost for one call. Prefers OpenRouter's own cost if present."""
@@ -184,9 +190,13 @@ def _coerce_year(value) -> int | None:
     try:
         year = int(value)
     except (TypeError, ValueError) as exc:
-        raise types.LLMError(f"router returned bad year: {value!r}", code="router_bad_year") from exc
+        raise types.LLMError(
+            f"router returned bad year: {value!r}", code="router_bad_year"
+        ) from exc
     if year < 1950:
-        raise types.LLMError(f"router returned impossible year: {year}", code="router_bad_year")
+        raise types.LLMError(
+            f"router returned impossible year: {year}", code="router_bad_year"
+        )
     return year
 
 
@@ -197,7 +207,9 @@ def _coerce_window(value) -> int:
     try:
         window = int(value)
     except (TypeError, ValueError) as exc:
-        raise types.LLMError(f"router returned bad laps_window: {value!r}", code="router_bad_window") from exc
+        raise types.LLMError(
+            f"router returned bad laps_window: {value!r}", code="router_bad_window"
+        ) from exc
     return max(1, min(window, 10))
 
 
@@ -226,9 +238,22 @@ def _coerce_compare_driver(value) -> str | None:
     """The second driver is just a name like the primary one"""
     return _clean_str(value)
 
-_COMPLEXITY_VERBS = ("compare", "differs", "why", "how", "affect", "impact", "correlat", "worsen", "improve", "explain")
+
+_COMPLEXITY_VERBS = (
+    "compare",
+    "differs",
+    "why",
+    "how",
+    "affect",
+    "impact",
+    "correlat",
+    "worsen",
+    "improve",
+    "explain",
+)
 
 _COMPLEXITY_CONJUNCTIONS = (" and ", " vs ", " versus ", " over ", " then ")
+
 
 def _score_complexity(question: str, routed: types.RoutedQuestion) -> int:
     score = 1
@@ -251,6 +276,7 @@ def _score_complexity(question: str, routed: types.RoutedQuestion) -> int:
 
     return max(1, min(score, 5))
 
+
 def parse_routed_question(payload: dict, question: str) -> types.RoutedQuestion:
     """Validate a router JSON payload into a RoutedQuestion (T3.3).
 
@@ -261,13 +287,18 @@ def parse_routed_question(payload: dict, question: str) -> types.RoutedQuestion:
 
     intent_value = payload.get("intent")
     if intent_value not in {member.value for member in types.Intent}:
-        raise types.LLMError(f"router returned unknown intent: {intent_value}", code="router_unknown_intent")
+        raise types.LLMError(
+            f"router returned unknown intent: {intent_value}",
+            code="router_unknown_intent",
+        )
 
     routed = types.RoutedQuestion(
         intent=types.Intent(intent_value),
         question=question,
         driver_name=_clean_str(payload.get("driver")),
-        compare_driver_name=_coerce_compare_driver(payload.get("compare_driver") or payload.get("compare_driver_name")),
+        compare_driver_name=_coerce_compare_driver(
+            payload.get("compare_driver") or payload.get("compare_driver_name")
+        ),
         gp_name=_clean_str(payload.get("gp_name")),
         year=_coerce_year(payload.get("year")),
         laps_window=_coerce_window(payload.get("laps_window")),
@@ -276,9 +307,10 @@ def parse_routed_question(payload: dict, question: str) -> types.RoutedQuestion:
     )
     return dataclasses.replace(routed, complexity=_score_complexity(question, routed))
 
+
 def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     """Classify a question and extract its entities with the cheap routing model
-    
+
     Two classifiers run here, deliberately:
       1. intent_classifier.classify_intent -- deterministic, free, runs on EVERY question INCLUDING cache hits
       2. The LLM router -- precise entity extraction, only on a cache miss.
@@ -300,16 +332,24 @@ def route_question(question: str) -> tuple[types.RoutedQuestion, float]:
     try:
         payload = json.loads(text)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise types.LLMError(f"router returned unparseable response: {text[:200]}", code="router_unparseable") from exc
+        raise types.LLMError(
+            f"router returned unparseable response: {text[:200]}",
+            code="router_unparseable",
+        ) from exc
     if not isinstance(payload, dict):
-        raise types.LLMError(f"router returned non-object JSON: {text[:200]}", code="router_unparseable")
+        raise types.LLMError(
+            f"router returned non-object JSON: {text[:200]}", code="router_unparseable"
+        )
 
     semantic_cache.set(question, payload)
     cost = usage.get("cost_estimate_usd", 0.0)
     routed = parse_routed_question(payload, question)
     return _apply_local_flags(routed, local), cost
 
-def _apply_local_flags(routed: types.RoutedQuestion, local: intent_classifier.IntentClassification) -> types.RoutedQuestion:
+
+def _apply_local_flags(
+    routed: types.RoutedQuestion, local: intent_classifier.IntentClassification
+) -> types.RoutedQuestion:
     """Overlay the deterministic local signals on the LLM's entity parse
 
     The LLM router owns ENTITY fields (driver, lap, gp, year). The local
@@ -325,18 +365,23 @@ def _apply_local_flags(routed: types.RoutedQuestion, local: intent_classifier.In
         suggested_tools=local.suggested_tools,
     )
 
-_CAPABLE_INTENTS = frozenset({
-    types.Intent.TELEMETRY_COMPARISON,
-    types.Intent.WEATHER_CORRELATION,
-    types.Intent.TYRE_DEGRADATION_ANALYSIS,
-    types.Intent.DRIVER_STYLE_COMPARISON,
-    types.Intent.STRATEGY_ANALYSIS,
-})
+
+_CAPABLE_INTENTS = frozenset(
+    {
+        types.Intent.TELEMETRY_COMPARISON,
+        types.Intent.WEATHER_CORRELATION,
+        types.Intent.TYRE_DEGRADATION_ANALYSIS,
+        types.Intent.DRIVER_STYLE_COMPARISON,
+        types.Intent.STRATEGY_ANALYSIS,
+    }
+)
 
 _ANALYTICAL_COMPLEXITY_FLOOR = 3
 
 
-def select_model(intent: types.Intent | None, complexity: int, requires_compute: bool = False) -> str:
+def select_model(
+    intent: types.Intent | None, complexity: int, requires_compute: bool = False
+) -> str:
     """Pick the model for an intent+complexity+compute_need triple
 
     Priority order:
@@ -346,7 +391,11 @@ def select_model(intent: types.Intent | None, complexity: int, requires_compute:
     """
     if requires_compute:
         return settings.openrouter_capable_model
-    if intent is not None and intent in _CAPABLE_INTENTS and complexity >= _ANALYTICAL_COMPLEXITY_FLOOR:
+    if (
+        intent is not None
+        and intent in _CAPABLE_INTENTS
+        and complexity >= _ANALYTICAL_COMPLEXITY_FLOOR
+    ):
         return settings.openrouter_capable_model
     return settings.openrouter_final_model
 
@@ -386,7 +435,11 @@ def compose_answer(
             ),
         },
     ]
-    text, usage = _chat(messages, model=select_model(intent, complexity, requires_compute), temperature=0.2)
+    text, usage = _chat(
+        messages,
+        model=select_model(intent, complexity, requires_compute),
+        temperature=0.2,
+    )
     cost = usage.get("cost_estimate_usd", 0.0)
     return validate_composition(text), cost
 
@@ -454,7 +507,7 @@ def _stream_chunks(
                 line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line.startswith("data:"):
                     continue
-                payload = line[len("data:"):].strip()
+                payload = line[len("data:") :].strip()
                 if not payload or payload == "[DONE]":
                     continue
                 try:
