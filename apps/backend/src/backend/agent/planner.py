@@ -151,6 +151,36 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         types.DriverStyleCompareInput,
         "Returns archetypes and field-size percentile traits for the primary and secondary driver.",
     ),
+    "list_available_sessions": ToolSpec.from_dataclass(
+        "list_available_sessions",
+        "List stored sessions, optionally filtered by year/GP/country/session type. Use for 'what data do you have' questions.",
+        types.ListAvailableSessionsInput,
+        "Returns a list of sessions with session_key, year, gp_name, session_type.",
+    ),
+    "search_sessions": ToolSpec.from_dataclass(
+        "search_sessions",
+        "Free-text lookup of stored sessions by partial GP/country/session name (SQL match, not semantic).",
+        types.SearchSessionsInput,
+        "Returns a list of matching sessions with session_key, year, gp_name, session_type.",
+    ),
+    "describe_session_coverage": ToolSpec.from_dataclass(
+        "describe_session_coverage",
+        "Report exactly which datasets (laps, telemetry, weather, race control, radio, documents) exist for a session.",
+        types.DescribeSessionCoverageInput,
+        "Returns per-dataset presence booleans and counts for one session.",
+    ),
+    "estimate_pit_loss": ToolSpec.from_dataclass(
+        "estimate_pit_loss",
+        "Measure observed pit loss (in+out lap vs clean laps) grouped by track condition for a session.",
+        types.EstimatePitLossInput,
+        "Returns per-condition pit-loss estimates (samples, mean/min/max ms).",
+    ),
+    "compare_strategy_scenarios": ToolSpec.from_dataclass(
+        "compare_strategy_scenarios",
+        "Compare stay-out vs pit-now scenario costs from measured pit loss and degradation. Deterministic, no probabilities.",
+        types.CompareStrategyScenariosInput,
+        "Returns named scenarios with projected deltas, assumptions, and risks.",
+    ),
     "verify_evidence": ToolSpec.from_dataclass(
         "verify_evidence",
         "Terminal node: verify all required evidence exists before answering.",

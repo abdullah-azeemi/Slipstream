@@ -24,6 +24,8 @@ class Intent(str, Enum):
     TEAM_RADIO = "team_radio"
     WEATHER_CORRELATION = "weather_correlation"
     DRIVER_STYLE_COMPARISON = "driver_style_comparison"
+    DATA_AVAILABILITY = "data_availability"
+    STRATEGY_ANALYSIS = "strategy_analysis"
     UNSUPPORTED = "unsupported"
 
 
@@ -52,6 +54,11 @@ class ToolName(str, Enum):
     FETCH_RADIO_MESSAGES = "fetch_radio_messages"
     FETCH_WEATHER_WINDOW = "fetch_weather_window"
     DRIVER_STYLE_COMPARE = "driver_style_compare"
+    LIST_AVAILABLE_SESSIONS = "list_available_sessions"
+    DESCRIBE_SESSION_COVERAGE = "describe_session_coverage"
+    SEARCH_SESSIONS = "search_sessions"
+    ESTIMATE_PIT_LOSS = "estimate_pit_loss"
+    COMPARE_STRATEGY_SCENARIOS = "compare_strategy_scenarios"
 
 
 @dataclass(frozen=True)
@@ -391,6 +398,149 @@ class DriverStyleResult:
     driver_style: DriverStyleResult | None = None
 
 
+# -- Exact Data Catalog (Task 5): availability answers come from PostgreSQL,
+# -- never from vector search.
+
+
+@dataclass(frozen=True)
+class ListAvailableSessionsInput:
+    """Optional filters for cataloguing which sessions exist."""
+
+    year: int | None = None
+    gp_name: str | None = None
+    country: str | None = None
+    session_type: SessionType | None = None
+    limit: int = 50
+
+
+@dataclass(frozen=True)
+class SessionCatalogEntry:
+    """One row of the session catalog."""
+
+    session_key: int
+    year: int
+    gp_name: str
+    country: str | None
+    session_type: str
+    session_name: str | None = None
+    date_start: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionCatalogResult:
+    """A filtered list of sessions. Shared by list_available_sessions and search_sessions."""
+
+    sessions: tuple[SessionCatalogEntry, ...]
+    total: int
+    query: str = ""
+
+
+@dataclass(frozen=True)
+class DescribeSessionCoverageInput:
+    session_key: int
+
+
+@dataclass(frozen=True)
+class SessionCoverage:
+    """Explicit booleans/counts for what data a session actually has."""
+
+    session_key: int
+    has_laps: bool
+    lap_count: int
+    driver_count: int
+    has_telemetry: bool
+    telemetry_artifact_count: int
+    has_weather: bool
+    weather_sample_count: int
+    has_race_control: bool
+    race_control_count: int
+    has_radio: bool
+    radio_clip_count: int
+    has_indexed_documents: bool
+    indexed_document_count: int
+    has_rainfall: bool
+
+
+@dataclass(frozen=True)
+class DescribeSessionCoverageResult:
+    coverage: SessionCoverage
+
+
+@dataclass(frozen=True)
+class SearchSessionsInput:
+    """Free-text plus optional structured filters. Uses SQL ILIKE, not RAG."""
+
+    query: str = ""
+    year: int | None = None
+    session_type: SessionType | None = None
+    limit: int = 20
+
+
+# -- Deterministic strategy analysis (Task 6).
+
+
+@dataclass(frozen=True)
+class EstimatePitLossInput:
+    session_key: int
+    driver_number: int | None = None
+
+
+@dataclass(frozen=True)
+class PitLossEstimate:
+    """Pit-loss samples grouped by track condition (green/vsc/sc/...)."""
+
+    condition: str
+    sample_count: int
+    mean_pit_loss_ms: int | None
+    min_pit_loss_ms: int | None
+    max_pit_loss_ms: int | None
+
+
+@dataclass(frozen=True)
+class EstimatePitLossResult:
+    session_key: int
+    estimates: tuple[PitLossEstimate, ...]
+    baseline_clean_lap_ms: int | None
+    assumption: str
+
+
+@dataclass(frozen=True)
+class CompareStrategyScenariosInput:
+    session_key: int
+    driver_number: int
+    current_lap: int | None = None
+
+
+@dataclass(frozen=True)
+class StrategyScenario:
+    """One named candidate strategy with its deterministic cost and caveats."""
+
+    name: str
+    label: str
+    projected_delta_ms: int | None
+    assumptions: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CompareStrategyScenariosResult:
+    session_key: int
+    driver_number: int
+    current_lap: int | None
+    total_laps: int | None
+    remaining_laps: int | None
+    compound: str | None
+    degradation_slope_ms_per_lap: float | None
+    pit_loss_green_ms: int | None
+    pit_loss_vsc_ms: int | None
+    pit_loss_sc_ms: int | None
+    rain_in_session: bool
+    safety_car_periods: int
+    scenarios: tuple[StrategyScenario, ...]
+    assumptions: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class RoutedQuestion:
     """Entities the LLM Router extracted form the raw question"""
@@ -615,3 +765,6 @@ class AgentAnswer:
     race_control: RaceControlWindowResult | None = None
     team_radio: RadioWindowResult | None = None
     weather: WeatherWindowResult | None = None
+    catalog: SessionCatalogResult | None = None
+    coverage: SessionCoverage | None = None
+    strategy: CompareStrategyScenariosResult | None = None

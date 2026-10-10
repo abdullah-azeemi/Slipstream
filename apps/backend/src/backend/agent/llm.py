@@ -37,6 +37,8 @@ Allowed Intents:
     - "team_radio" : the question asks what a driver's engineer/team said on the radio, or wants a radio clip / message inside the car.
     - "weather_correlation" : the question asks about rain, wet/dry conditions, track or air temperature, humidity, or wind during a session.
     - "driver_style_comparison" : the question compares two drivers' driving styles, braking, aggression, or top-speed traits across a season. Sets "compare_driver" for the second driver.
+    - "data_availability" : the question asks which races/sessions or which datasets (telemetry, weather, radio, race control, documents) we actually have. Never a racing analysis itself.
+    - "strategy_analysis" : the question asks about pit strategy, undercut/overcut choices, staying out vs pitting, or the cost of a pit stop. Do NOT set "compare_driver".
     - "unsupported" : everything else (other sports, live timing etc)
 
 Field Rules:
@@ -327,6 +329,7 @@ _CAPABLE_INTENTS = frozenset({
     types.Intent.WEATHER_CORRELATION,
     types.Intent.TYRE_DEGRADATION_ANALYSIS,
     types.Intent.DRIVER_STYLE_COMPARISON,
+    types.Intent.STRATEGY_ANALYSIS,
 })
 
 _ANALYTICAL_COMPLEXITY_FLOOR = 3

@@ -43,6 +43,11 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.FETCH_RADIO_MESSAGES: tools.fetch_radio_messages,
     types.ToolName.FETCH_WEATHER_WINDOW: tools.fetch_weather_window,
     types.ToolName.DRIVER_STYLE_COMPARE: tools.driver_style_compare,
+    types.ToolName.LIST_AVAILABLE_SESSIONS: tools.list_available_sessions,
+    types.ToolName.DESCRIBE_SESSION_COVERAGE: tools.describe_session_coverage,
+    types.ToolName.SEARCH_SESSIONS: tools.search_sessions,
+    types.ToolName.ESTIMATE_PIT_LOSS: tools.estimate_pit_loss,
+    types.ToolName.COMPARE_STRATEGY_SCENARIOS: tools.compare_strategy_scenarios,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -238,6 +243,81 @@ def _bind_weather(params, env):
     )
 
 
+def _session_type_param(value: Any, routed: types.RoutedQuestion | None) -> Any:
+    if isinstance(value, types.SessionType):
+        return value
+    if isinstance(value, str):
+        try:
+            return types.SessionType(value)
+        except ValueError:
+            pass
+    return routed.session_type if routed is not None else None
+
+
+@_register(types.ToolName.LIST_AVAILABLE_SESSIONS)
+def _bind_list_sessions(params, env):
+    routed = env.get("routed")
+    return types.ListAvailableSessionsInput(
+        year=params.get("year", routed.year if routed else None),
+        gp_name=params.get("gp_name", routed.gp_name if routed else None),
+        country=params.get("country"),
+        session_type=_session_type_param(params.get("session_type"), routed),
+        limit=int(params.get("limit", 50)),
+    )
+
+
+@_register(types.ToolName.SEARCH_SESSIONS)
+def _bind_search_sessions(params, env):
+    routed = env.get("routed")
+    query = params.get("query") or (routed.gp_name if routed else "") or ""
+    return types.SearchSessionsInput(
+        query=query,
+        year=params.get("year", routed.year if routed else None),
+        session_type=_session_type_param(params.get("session_type"), routed),
+        limit=int(params.get("limit", 20)),
+    )
+
+
+@_register(types.ToolName.DESCRIBE_SESSION_COVERAGE)
+def _bind_coverage(params, env):
+    session_key = params.get("session_key")
+    if session_key is None and "session" in env:
+        session_key = env["session"].session_key
+    if session_key is None:
+        catalog = env.get("catalog")
+        if catalog is not None and getattr(catalog, "sessions", ()):
+            session_key = catalog.sessions[0].session_key
+    if session_key is None:
+        raise types.DataError("describe_session_coverage requires a resolved session")
+    return types.DescribeSessionCoverageInput(session_key=int(session_key))
+
+
+@_register(types.ToolName.ESTIMATE_PIT_LOSS)
+def _bind_estimate_pit_loss(params, env):
+    session_key = params.get("session_key")
+    if session_key is None:
+        session_key = env["session"].session_key
+    driver_number = params.get("driver_number")
+    if driver_number is None and "driver" in env:
+        driver_number = env["driver"].driver_number
+    return types.EstimatePitLossInput(
+        session_key=int(session_key), driver_number=driver_number
+    )
+
+
+@_register(types.ToolName.COMPARE_STRATEGY_SCENARIOS)
+def _bind_strategy(params, env):
+    routed = env.get("routed")
+    current_lap = params.get("current_lap")
+    if current_lap is None and routed is not None:
+        current_lap = routed.target_lap
+    return types.CompareStrategyScenariosInput(
+        session_key=params.get("session_key") or env["session"].session_key,
+        driver_number=params.get("driver_number") or env["driver"].driver_number,
+        current_lap=current_lap,
+    )
+
+
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:
     """Clean laps around a pitstop (pit in / pit out laps excluded)"""
     before = tuple(range(stop.pit_in_lap - laps_window, stop.pit_in_lap))
@@ -295,6 +375,37 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
                     "year": routed.year or 0,
                 },
             )
+        ]
+        return types.ExecutionDAG(nodes=tuple(nodes), edges=tuple())
+
+    if routed.intent is types.Intent.DATA_AVAILABILITY:
+        if routed.gp_name:
+            catalog_node = types.DAGNode(
+                id="catalog",
+                tool_name=types.ToolName.SEARCH_SESSIONS,
+                label="Search Sessions",
+                description="Find stored sessions matching the requested race",
+                depends_on=(),
+                input_params={"query": routed.gp_name, "year": routed.year},
+            )
+        else:
+            catalog_node = types.DAGNode(
+                id="catalog",
+                tool_name=types.ToolName.LIST_AVAILABLE_SESSIONS,
+                label="List Available Sessions",
+                description="List the sessions we actually hold in Postgres",
+                depends_on=(),
+                input_params={"year": routed.year},
+            )
+        nodes = [
+            catalog_node,
+            types.DAGNode(
+                id="coverage",
+                tool_name=types.ToolName.DESCRIBE_SESSION_COVERAGE,
+                label="Describe Session Coverage",
+                description="Report exactly which datasets exist for the matched session",
+                depends_on=("catalog",),
+            ),
         ]
         return types.ExecutionDAG(nodes=tuple(nodes), edges=tuple())
 
@@ -480,6 +591,19 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
             )
         )
         nodes.append(_verify_node(depends_on=("qlaps", "telemetry")))
+
+    elif routed.intent is types.Intent.STRATEGY_ANALYSIS:
+        nodes.append(
+            types.DAGNode(
+                id="strategy",
+                tool_name=types.ToolName.COMPARE_STRATEGY_SCENARIOS,
+                label="Compare Strategy Scenarios",
+                description="Measured pit loss + degradation against stay-out baseline",
+                depends_on=("session", "driver"),
+                input_params={"current_lap": routed.target_lap},
+            )
+        )
+        nodes.append(_verify_node(depends_on=("session", "driver")))
 
     else:  # The telemetry comparison
         nodes.append(
@@ -852,7 +976,25 @@ def _compose(
     elif routed.intent is types.Intent.DRIVER_STYLE_COMPARISON:
         style = outputs["style"]
         fallback_lines.append(style.summary)
-        
+
+    elif routed.intent is types.Intent.STRATEGY_ANALYSIS:
+        strat = outputs["strategy"]
+        fallback_lines.append(
+            f"Deterministic strategy comparison at lap {strat.current_lap} "
+            f"({strat.remaining_laps if strat.remaining_laps is not None else '?'} laps remaining)."
+        )
+        for scenario in strat.scenarios:
+            delta = (
+                f"{scenario.projected_delta_ms:+d} ms"
+                if scenario.projected_delta_ms is not None
+                else "not costed"
+            )
+            fallback_lines.append(f"- {scenario.label}: {delta} vs staying out.")
+        if strat.assumptions:
+            fallback_lines.append("Assumptions: " + "; ".join(strat.assumptions))
+        if strat.notes:
+            fallback_lines.append("Notes: " + "; ".join(strat.notes))
+
     else:
         telemetry = outputs["telemetry"]
         fallback_lines.append(
@@ -894,6 +1036,7 @@ def _compose(
         race_control=outputs.get("rc"),
         team_radio=outputs.get("radio"),
         weather=outputs.get("weather"),
+        strategy=outputs.get("strategy"),
         trace=trace,
         cost_usd=compose_cost,
     )
@@ -1014,6 +1157,102 @@ def _clarify(
     )
 
 
+def _run_data_availability(
+    question: str,
+    routed: types.RoutedQuestion,
+    progress: ProgressCallback | None = None,
+) -> types.AgentAnswer:
+    """Answer 'what data do you have?' from the exact catalog.
+
+    This path never touches the vector store: availability is a fact about
+    Postgres, so we list/search sessions and report coverage deterministically.
+    """
+    _emit(
+        progress,
+        type="stage",
+        stage="route",
+        status="ok",
+        label="Checking the exact data catalog",
+    )
+    try:
+        dag = build_dag(routed)
+    except types.DataError as exc:
+        return types.AgentAnswer(
+            question=question,
+            intent=routed.intent,
+            answer="I could not build a catalog lookup for that request.",
+            refusals=(str(exc),),
+            routing_context=agent_context.routed_to_context(routed),
+        )
+
+    _emit(
+        progress,
+        type="dag_init",
+        status="ok",
+        nodes=[asdict(n) for n in dag.nodes],
+        edges=[asdict(e) for e in dag.edges],
+        label="Catalog graph prepared",
+    )
+    trace, outputs, failed_ids = _execute_dag(dag, routed, progress)
+
+    catalog = outputs.get("catalog")
+    coverage_result = outputs.get("coverage")
+    coverage = coverage_result.coverage if coverage_result is not None else None
+
+    refusals: list[str] = []
+    if failed_ids:
+        refusals.append("one or more catalog steps failed")
+
+    if catalog is None:
+        answer_text = "I could not look up the data catalog right now."
+    elif catalog.total == 0:
+        where = f" '{routed.gp_name}'" if routed.gp_name else ""
+        answer_text = (
+            f"I do not hold any stored session{where}"
+            + (f" for {routed.year}" if routed.year else "")
+            + ". I will not guess; try a different race or year."
+        )
+    else:
+        lines = [f"I hold {catalog.total} matching session(s):"]
+        for entry in catalog.sessions[:20]:
+            lines.append(
+                f"- {entry.year} {entry.gp_name} ({entry.session_type}) "
+                f"[session {entry.session_key}]"
+            )
+        if coverage is not None:
+            datasets = (
+                ("laps", coverage.has_laps),
+                ("telemetry", coverage.has_telemetry),
+                ("weather", coverage.has_weather),
+                ("race control", coverage.has_race_control),
+                ("team radio", coverage.has_radio),
+                ("indexed documents", coverage.has_indexed_documents),
+            )
+            present = [name for name, flag in datasets if flag]
+            missing = [name for name, flag in datasets if not flag]
+            lines.append(
+                f"For session {coverage.session_key}: available data = "
+                + (", ".join(present) if present else "none")
+                + (f"; not available = {', '.join(missing)}" if missing else "")
+                + "."
+            )
+        answer_text = "\n".join(lines)
+
+    _emit(
+        progress, type="stage", stage="compose", status="ok", label="Catalog answer ready"
+    )
+    return types.AgentAnswer(
+        question=question,
+        intent=routed.intent,
+        answer=answer_text,
+        catalog=catalog,
+        coverage=coverage,
+        refusals=tuple(refusals),
+        trace=trace,
+        routing_context=agent_context.routed_to_context(routed),
+    )
+
+
 def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None, clerk_user_id: str | None = None) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     if circuit_breaker.breaker.is_open():
@@ -1062,6 +1301,9 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
             refusals=("unsupported question",),
             routing_context=agent_context.routed_to_context(routed),
         )
+
+    if routed.intent is types.Intent.DATA_AVAILABILITY:
+        return _run_data_availability(question, routed, progress)
 
     memory_snippets: list[dict] = []
     if clerk_user_id and not routed.driver_name:

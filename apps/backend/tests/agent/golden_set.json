@@ -1,5 +1,5 @@
 {
-  "_comment": "T0.1 -- Golden evaluation set. Every planner change (hardcoded or LLM) is checked against these before shipping. expected_intent + expected_tools reflect what the CURRENT hardcoded build_dag() in orchestrator.py does. min_evidence_fields lists the output-dataclass fields that verify_evidence / compose needs present to produce a grounded answer. covered_intents: 9 non-UNSUPPORTED, each with 3+ entries, plus multi-intent questions that T1.1 is meant to newly handle.",
+  "_comment": "T0.1 -- Golden evaluation set. Every planner change (hardcoded or LLM) is checked against these before shipping. expected_intent + expected_tools reflect what the CURRENT hardcoded build_dag() in orchestrator.py does. min_evidence_fields lists the output-dataclass fields that verify_evidence / compose needs present to produce a grounded answer. covered_intents: 11 non-UNSUPPORTED, each with 3+ entries, plus multi-intent questions that T1.1 is meant to newly handle.",
   "questions": [
     {
       "question": "Why did Hamilton pit so early at Monaco in 2026?",
@@ -299,6 +299,46 @@
       "expected_intent": "driver_style_comparison",
       "expected_tools": ["driver_style_compare"],
       "min_evidence_fields": ["driver_style"]
+    },
+    {
+      "question": "Which races do you have telemetry for in 2026?",
+      "expected_intent": "data_availability",
+      "routed_params": {"gp_name": null},
+      "expected_tools": ["list_available_sessions", "describe_session_coverage"],
+      "min_evidence_fields": ["sessions"]
+    },
+    {
+      "question": "Do you have data for the Monaco Grand Prix?",
+      "expected_intent": "data_availability",
+      "expected_tools": ["search_sessions", "describe_session_coverage"],
+      "min_evidence_fields": ["sessions", "coverage"]
+    },
+    {
+      "question": "What sessions are available for Silverstone?",
+      "expected_intent": "data_availability",
+      "routed_params": {"gp_name": "Silverstone"},
+      "expected_tools": ["search_sessions", "describe_session_coverage"],
+      "min_evidence_fields": ["sessions", "coverage"]
+    },
+    {
+      "question": "Should Hamilton pit now or stay out at Monaco?",
+      "expected_intent": "strategy_analysis",
+      "expected_tools": ["resolve_session", "resolve_driver", "compare_strategy_scenarios", "verify_evidence"],
+      "min_evidence_fields": ["session_key", "driver_number", "strategy"]
+    },
+    {
+      "question": "What is the pit loss at Silverstone for Hamilton?",
+      "expected_intent": "strategy_analysis",
+      "routed_params": {"gp_name": "Silverstone"},
+      "expected_tools": ["resolve_session", "resolve_driver", "compare_strategy_scenarios", "verify_evidence"],
+      "min_evidence_fields": ["session_key", "driver_number", "strategy"]
+    },
+    {
+      "question": "Was it worth pitting early? Compare the strategy scenarios for Hamilton at Spa.",
+      "expected_intent": "strategy_analysis",
+      "routed_params": {"gp_name": "Spa"},
+      "expected_tools": ["resolve_session", "resolve_driver", "compare_strategy_scenarios", "verify_evidence"],
+      "min_evidence_fields": ["session_key", "driver_number", "strategy"]
     }
   ]
 }

@@ -20,8 +20,10 @@ from sqlalchemy import text
 
 from backend import extensions
 from backend.config import settings
-from backend.agent import types
+from backend.agent import strategy, types
 import statistics
+
+_MAX_CATALOG_LIMIT = 200
 
 
 def resolve_session(inp: types.ResolveSessionInput) -> types.ResolvedSession:
@@ -1463,4 +1465,400 @@ def driver_style_compare(inp: types.DriverStyleCompareInput) -> types.DriverStyl
         driver=primary,
         compare=compare,
         summary=_build_style_summary(primary, compare),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 5 -- Exact Data Catalog. These answer "what data do you have?" straight
+# from PostgreSQL. Availability questions must never fall through to RAG.
+# ---------------------------------------------------------------------------
+
+
+def _catalog_entry(row) -> types.SessionCatalogEntry:
+    return types.SessionCatalogEntry(
+        session_key=row["session_key"],
+        year=row["year"],
+        gp_name=row["gp_name"],
+        country=row["country"],
+        session_type=row["session_type"],
+        session_name=row["session_name"],
+        date_start=str(row["date_start"]) if row["date_start"] is not None else None,
+    )
+
+
+def list_available_sessions(
+    inp: types.ListAvailableSessionsInput,
+) -> types.SessionCatalogResult:
+    """List stored sessions, optionally filtered by year/GP/country/session type."""
+    limit = max(1, min(int(inp.limit), _MAX_CATALOG_LIMIT))
+    sql = """
+        SELECT session_key, year, gp_name, country, session_type, session_name, date_start
+        FROM sessions
+        WHERE 1 = 1
+    """
+    binds: dict = {}
+    if inp.year is not None:
+        sql += " AND year = :year"
+        binds["year"] = inp.year
+    if inp.gp_name:
+        sql += " AND (gp_name ILIKE :gp OR country ILIKE :gp)"
+        binds["gp"] = f"%{inp.gp_name.strip()}%"
+    if inp.country:
+        sql += " AND country ILIKE :country"
+        binds["country"] = f"%{inp.country.strip()}%"
+    if inp.session_type is not None:
+        sql += " AND session_type = :stype"
+        binds["stype"] = inp.session_type.value
+    sql += " ORDER BY year DESC, date_start DESC NULLS LAST LIMIT :lim"
+    binds["lim"] = limit
+
+    with extensions.engine.connect() as conn:
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    entries = tuple(_catalog_entry(r) for r in rows)
+    return types.SessionCatalogResult(sessions=entries, total=len(entries))
+
+
+def search_sessions(inp: types.SearchSessionsInput) -> types.SessionCatalogResult:
+    """Free-text session lookup by GP/country/session name via SQL ILIKE.
+
+    This is the deterministic fallback for partial race names. It never calls the
+    vector store: availability is a fact about Postgres, not a semantic match.
+    """
+    limit = max(1, min(int(inp.limit), _MAX_CATALOG_LIMIT))
+    term = inp.query.strip()
+    sql = """
+        SELECT session_key, year, gp_name, country, session_type, session_name, date_start
+        FROM sessions
+        WHERE 1 = 1
+    """
+    binds: dict = {}
+    if term:
+        sql += " AND (gp_name ILIKE :q OR country ILIKE :q OR session_name ILIKE :q)"
+        binds["q"] = f"%{term}%"
+    if inp.year is not None:
+        sql += " AND year = :year"
+        binds["year"] = inp.year
+    if inp.session_type is not None:
+        sql += " AND session_type = :stype"
+        binds["stype"] = inp.session_type.value
+    sql += " ORDER BY year DESC, date_start DESC NULLS LAST LIMIT :lim"
+    binds["lim"] = limit
+
+    with extensions.engine.connect() as conn:
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    entries = tuple(_catalog_entry(r) for r in rows)
+    return types.SessionCatalogResult(sessions=entries, total=len(entries), query=term)
+
+
+def _scalar(conn, sql: str, binds: dict) -> int:
+    return int(conn.execute(text(sql), binds).scalar() or 0)
+
+
+def describe_session_coverage(
+    inp: types.DescribeSessionCoverageInput,
+) -> types.DescribeSessionCoverageResult:
+    """Report exactly which datasets exist for a session (counts, not guesses)."""
+    binds = {"sk": inp.session_key}
+    with extensions.engine.connect() as conn:
+        session_row = (
+            conn.execute(
+                text("SELECT rainfall FROM sessions WHERE session_key = :sk"), binds
+            )
+            .mappings()
+            .first()
+        )
+        if session_row is None:
+            raise types.NotFoundError(f"Session {inp.session_key} not found")
+
+        lap_stats = (
+            conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS laps, COUNT(DISTINCT driver_number) AS drivers
+                    FROM lap_times
+                    WHERE session_key = :sk AND deleted = FALSE
+                    """
+                ),
+                binds,
+            )
+            .mappings()
+            .first()
+        )
+        lap_count = int(lap_stats["laps"] or 0)
+        driver_count = int(lap_stats["drivers"] or 0)
+        telemetry_count = _scalar(
+            conn,
+            "SELECT COUNT(*) FROM telemetry_artifacts WHERE session_key = :sk",
+            binds,
+        )
+        weather_count = _scalar(
+            conn, "SELECT COUNT(*) FROM weather_events WHERE session_key = :sk", binds
+        )
+        weather_rain = _scalar(
+            conn,
+            "SELECT COUNT(*) FROM weather_events WHERE session_key = :sk AND rainfall IS TRUE",
+            binds,
+        )
+        race_control_count = _scalar(
+            conn,
+            "SELECT COUNT(*) FROM race_control_events WHERE session_key = :sk",
+            binds,
+        )
+        radio_count = _scalar(
+            conn, "SELECT COUNT(*) FROM team_radio WHERE session_key = :sk", binds
+        )
+        has_docs_table = conn.execute(
+            text("SELECT to_regclass('public.strategy_documents')")
+        ).scalar()
+        indexed_count = (
+            _scalar(
+                conn,
+                "SELECT COUNT(*) FROM strategy_documents WHERE session_key = :sk",
+                binds,
+            )
+            if has_docs_table
+            else 0
+        )
+
+    has_rainfall = bool(session_row["rainfall"]) or weather_rain > 0
+    coverage = types.SessionCoverage(
+        session_key=inp.session_key,
+        has_laps=lap_count > 0,
+        lap_count=lap_count,
+        driver_count=driver_count,
+        has_telemetry=telemetry_count > 0,
+        telemetry_artifact_count=telemetry_count,
+        has_weather=weather_count > 0,
+        weather_sample_count=weather_count,
+        has_race_control=race_control_count > 0,
+        race_control_count=race_control_count,
+        has_radio=radio_count > 0,
+        radio_clip_count=radio_count,
+        has_indexed_documents=indexed_count > 0,
+        indexed_document_count=indexed_count,
+        has_rainfall=has_rainfall,
+    )
+    return types.DescribeSessionCoverageResult(coverage=coverage)
+
+
+# ---------------------------------------------------------------------------
+# Task 6 -- Deterministic strategy analysis. Pit loss is measured from stored
+# lap times; scenarios are a bounded named set. Nothing here is an LLM guess.
+# ---------------------------------------------------------------------------
+
+
+def _flags_by_lap(conn, session_key: int) -> dict[int, list[str]]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT lap_number, flag
+            FROM race_control_events
+            WHERE session_key = :sk AND lap_number IS NOT NULL
+            """
+        ),
+        {"sk": session_key},
+    ).mappings().all()
+    flags: dict[int, list[str]] = {}
+    for r in rows:
+        flags.setdefault(int(r["lap_number"]), []).append(r["flag"] or "")
+    return flags
+
+
+def estimate_pit_loss(inp: types.EstimatePitLossInput) -> types.EstimatePitLossResult:
+    """Measure observed pit loss (in+out lap vs clean laps) grouped by condition."""
+    binds: dict = {"sk": inp.session_key}
+    sql = """
+        SELECT driver_number, lap_number, lap_time_ms, pit_in_time_ms,
+               pit_out_time_ms, compound, stint
+        FROM lap_times
+        WHERE session_key = :sk AND deleted = FALSE
+    """
+    if inp.driver_number is not None:
+        sql += " AND driver_number = :dn"
+        binds["dn"] = inp.driver_number
+    sql += " ORDER BY driver_number ASC, lap_number ASC"
+
+    with extensions.engine.connect() as conn:
+        rows = conn.execute(text(sql), binds).mappings().all()
+        flags_by_lap = _flags_by_lap(conn, inp.session_key)
+
+    if not rows:
+        raise types.NotFoundError(f"No lap data for session {inp.session_key}")
+
+    laps_by_driver: dict[int, list[dict]] = {}
+    for r in rows:
+        laps_by_driver.setdefault(int(r["driver_number"]), []).append(dict(r))
+
+    def _is_green(lap_number: int) -> bool:
+        return strategy.classify_pit_condition(flags_by_lap.get(lap_number, [])) == "green"
+
+    clean_times = [
+        float(r["lap_time_ms"])
+        for r in rows
+        if r["lap_time_ms"] is not None
+        and r["pit_in_time_ms"] is None
+        and r["pit_out_time_ms"] is None
+        and _is_green(int(r["lap_number"]))
+    ]
+    baseline = int(round(statistics.median(clean_times))) if len(clean_times) >= 3 else None
+
+    records: list[tuple[str, int | None]] = []
+    for driver_laps in laps_by_driver.values():
+        by_lap = {int(lap["lap_number"]): lap for lap in driver_laps}
+        for stop in _derive_pit_stops(driver_laps):
+            lap_in = by_lap.get(stop.pit_in_lap)
+            lap_out = by_lap.get(stop.pit_out_lap)
+            if lap_in is None or lap_out is None:
+                continue
+            loss = strategy.pit_loss_ms(
+                lap_in["lap_time_ms"], lap_out["lap_time_ms"], baseline
+            )
+            condition = strategy.classify_pit_condition(
+                flags_by_lap.get(stop.pit_in_lap, [])
+                + flags_by_lap.get(stop.pit_out_lap, [])
+            )
+            records.append((condition, loss))
+
+    estimates = strategy.summarize_pit_losses(records)
+    assumption = (
+        f"pit loss = (in-lap + out-lap) - 2 x clean-lap median"
+        f" ({baseline} ms); measured from {len(clean_times)} clean green laps"
+        if baseline is not None
+        else "not enough clean green laps to establish a baseline; pit loss unavailable"
+    )
+    return types.EstimatePitLossResult(
+        session_key=inp.session_key,
+        estimates=estimates,
+        baseline_clean_lap_ms=baseline,
+        assumption=assumption,
+    )
+
+
+def _pit_loss_for(
+    estimates: tuple[types.PitLossEstimate, ...], condition: str
+) -> int | None:
+    for est in estimates:
+        if est.condition == condition:
+            return est.mean_pit_loss_ms
+    return None
+
+
+def compare_strategy_scenarios(
+    inp: types.CompareStrategyScenariosInput,
+) -> types.CompareStrategyScenariosResult:
+    """Compare stay-out vs pit-now scenarios using measured degradation + pit loss."""
+    pit = estimate_pit_loss(
+        types.EstimatePitLossInput(
+            session_key=inp.session_key, driver_number=inp.driver_number
+        )
+    )
+    stints = stint_degradation_scanner(
+        types.StintDegradationInput(
+            session_key=inp.session_key, driver_number=inp.driver_number
+        )
+    )
+    race_control = fetch_race_control_window(
+        types.RaceControlWindowInput(session_key=inp.session_key)
+    )
+    weather = fetch_weather_window(
+        types.WeatherWindowInput(session_key=inp.session_key)
+    )
+
+    with extensions.engine.connect() as conn:
+        lap_rows = conn.execute(
+            text(
+                """
+                SELECT lap_number, stint, compound
+                FROM lap_times
+                WHERE session_key = :sk AND driver_number = :dn AND deleted = FALSE
+                ORDER BY lap_number ASC
+                """
+            ),
+            {"sk": inp.session_key, "dn": inp.driver_number},
+        ).mappings().all()
+        total_laps = conn.execute(
+            text("SELECT MAX(lap_number) FROM lap_times WHERE session_key = :sk"),
+            {"sk": inp.session_key},
+        ).scalar()
+
+    if not lap_rows:
+        raise types.NotFoundError(
+            f"Driver {inp.driver_number} has no laps in session {inp.session_key}"
+        )
+
+    driver_laps = [dict(r) for r in lap_rows]
+    current_lap = inp.current_lap or max(int(r["lap_number"]) for r in driver_laps)
+    total_laps = int(total_laps) if total_laps is not None else None
+    remaining_laps = (
+        max(total_laps - current_lap, 0)
+        if total_laps is not None and current_lap is not None
+        else None
+    )
+
+    active = next(
+        (
+            s
+            for s in stints.stints
+            if s.start_lap <= current_lap <= s.end_lap
+        ),
+        stints.stints[-1] if stints.stints else None,
+    )
+    compound = active.compound if active else None
+    slope = active.degradation_slope_ms_per_lap if active else None
+
+    pit_green = _pit_loss_for(pit.estimates, "green")
+    pit_vsc = _pit_loss_for(pit.estimates, "vsc")
+    pit_sc = _pit_loss_for(pit.estimates, "sc")
+
+    scenarios, assumptions, notes = strategy.build_scenarios(
+        current_lap=current_lap,
+        total_laps=total_laps,
+        remaining_laps=remaining_laps,
+        compound=compound,
+        degradation_slope_ms_per_lap=slope,
+        pit_loss_green_ms=pit_green,
+        pit_loss_vsc_ms=pit_vsc,
+        pit_loss_sc_ms=pit_sc,
+        rain_in_session=weather.rainfall_laps > 0,
+        safety_car_periods=race_control.safety_car_periods,
+    )
+
+    assumptions.insert(0, pit.assumption)
+    try:
+        gap = gap_and_position_snapshot(
+            types.GapPositionInput(
+                session_key=inp.session_key,
+                driver_number=inp.driver_number,
+                target_lap=current_lap,
+            )
+        )
+        if gap.car_behind_gap_ms is not None:
+            notes.append(
+                f"car behind ({gap.car_behind_number}) is "
+                f"{gap.car_behind_gap_ms} ms back at lap {gap.lap_number}: "
+                f"undercut exposure."
+            )
+        else:
+            notes.append("no car directly behind at the target lap (traffic-free).")
+    except types.AgentError:
+        notes.append("track-position context unavailable at the target lap.")
+
+    return types.CompareStrategyScenariosResult(
+        session_key=inp.session_key,
+        driver_number=inp.driver_number,
+        current_lap=current_lap,
+        total_laps=total_laps,
+        remaining_laps=remaining_laps,
+        compound=compound,
+        degradation_slope_ms_per_lap=slope,
+        pit_loss_green_ms=pit_green,
+        pit_loss_vsc_ms=pit_vsc,
+        pit_loss_sc_ms=pit_sc,
+        rain_in_session=weather.rainfall_laps > 0,
+        safety_car_periods=race_control.safety_car_periods,
+        scenarios=tuple(scenarios),
+        assumptions=tuple(assumptions),
+        notes=tuple(notes),
     )
