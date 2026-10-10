@@ -48,6 +48,7 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.SEARCH_SESSIONS: tools.search_sessions,
     types.ToolName.ESTIMATE_PIT_LOSS: tools.estimate_pit_loss,
     types.ToolName.COMPARE_STRATEGY_SCENARIOS: tools.compare_strategy_scenarios,
+    types.ToolName.SEARCH_STRATEGY_SOURCES: tools.search_strategy_sources,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -318,6 +319,32 @@ def _bind_strategy(params, env):
     )
 
 
+@_register(types.ToolName.SEARCH_STRATEGY_SOURCES)
+def _bind_search_strategy_sources(params, env):
+    routed = env.get("routed")
+    raw_types = params.get("source_types") or params.get("source_type") or ()
+    if isinstance(raw_types, str):
+        raw_types = (raw_types,)
+    session_key = params.get("session_key")
+    if session_key is None and "session" in env:
+        session_key = env["session"].session_key
+    driver_number = params.get("driver_number")
+    if driver_number is None and "driver" in env:
+        driver_number = env["driver"].driver_number
+    year = params.get("year")
+    if year is None and routed is not None:
+        year = routed.year
+    query = params.get("query") or (routed.question if routed is not None else "")
+    return types.SearchStrategySourcesInput(
+        query=query,
+        source_types=tuple(str(s) for s in raw_types),
+        year=year,
+        session_key=session_key,
+        driver_number=driver_number,
+        limit=int(params.get("limit", 6)),
+    )
+
+
 def _pit_laps(stop: types.PitStop, laps_window: int) -> tuple[int, ...]:
     """Clean laps around a pitstop (pit in / pit out laps excluded)"""
     before = tuple(range(stop.pit_in_lap - laps_window, stop.pit_in_lap))
@@ -407,6 +434,21 @@ def _build_template_dag(routed: types.RoutedQuestion) -> types.ExecutionDAG:
                 depends_on=("catalog",),
             ),
         ]
+        return types.ExecutionDAG(nodes=tuple(nodes), edges=tuple())
+
+    if routed.intent is types.Intent.STRATEGY_SOURCES:
+        source_node = types.DAGNode(
+            id="sources",
+            tool_name=types.ToolName.SEARCH_STRATEGY_SOURCES,
+            label="Search Strategy Sources",
+            description="Retrieve approved regulation/briefing/radio chunks",
+            depends_on=("session",) if (routed.gp_name and routed.year) else (),
+            input_params={"query": routed.question},
+        )
+        if routed.gp_name and routed.year:
+            nodes = [_session_node(routed), source_node]
+        else:
+            nodes = [source_node]
         return types.ExecutionDAG(nodes=tuple(nodes), edges=tuple())
 
     nodes: list[types.DAGNode] = [_session_node(routed), _driver_node(routed)]
@@ -860,6 +902,7 @@ def _compose(
             pit_stop=pit_stop,
             speed_window=None,
             evidence=verify,
+            sources=outputs.get("sources"),
             trace=trace,
         )
         _emit(
@@ -995,6 +1038,28 @@ def _compose(
         if strat.notes:
             fallback_lines.append("Notes: " + "; ".join(strat.notes))
 
+    elif routed.intent is types.Intent.STRATEGY_SOURCES:
+        sources = outputs.get("sources")
+        if sources is not None and sources.hits:
+            fallback_lines.append(
+                f"I found {len(sources.hits)} approved source(s) for that question:"
+            )
+            for hit in sources.hits:
+                citation = hit.title
+                if hit.page_number is not None:
+                    citation += f", p.{hit.page_number}"
+                if hit.timestamp_from_ms is not None:
+                    citation += f", t={hit.timestamp_from_ms}ms"
+                fallback_lines.append(f"- {citation}: {hit.excerpt}")
+        elif sources is not None and sources.degraded:
+            fallback_lines.append(
+                "I could not reach the document store, so no sources were retrieved."
+            )
+        else:
+            fallback_lines.append(
+                "I did not find an approved source covering that question."
+            )
+
     else:
         telemetry = outputs["telemetry"]
         fallback_lines.append(
@@ -1037,6 +1102,7 @@ def _compose(
         team_radio=outputs.get("radio"),
         weather=outputs.get("weather"),
         strategy=outputs.get("strategy"),
+        sources=outputs.get("sources"),
         trace=trace,
         cost_usd=compose_cost,
     )
@@ -1129,6 +1195,7 @@ def _compose_agentic(
     return types.AgentAnswer(
         question=question, intent=routed.intent, answer=answer_text,
         session=session, driver=driver, evidence=verify, cost_usd=cost,
+        sources=_first_result(env, "hits", types.SearchStrategySourcesResult),
     )
 
 def _first_result(env: dict[str, Any], attr: str, cls: type) -> Any:
@@ -1253,6 +1320,99 @@ def _run_data_availability(
     )
 
 
+def _run_strategy_sources(
+    question: str,
+    routed: types.RoutedQuestion,
+    progress: ProgressCallback | None = None,
+) -> types.AgentAnswer:
+    """Answer a qualitative question from approved strategy sources.
+
+    Retrieval here is optional: if the vector store is unavailable we degrade
+    gracefully instead of failing the request.
+    """
+    _emit(
+        progress,
+        type="stage",
+        stage="route",
+        status="ok",
+        label="Searching approved strategy sources",
+    )
+    try:
+        dag = build_dag(routed)
+    except types.DataError as exc:
+        return types.AgentAnswer(
+            question=question,
+            intent=routed.intent,
+            answer="I could not build a source lookup for that request.",
+            refusals=(str(exc),),
+            routing_context=agent_context.routed_to_context(routed),
+        )
+
+    _emit(
+        progress,
+        type="dag_init",
+        status="ok",
+        nodes=[asdict(n) for n in dag.nodes],
+        edges=[asdict(e) for e in dag.edges],
+        label="Source retrieval graph prepared",
+    )
+    trace, outputs, failed_ids = _execute_dag(dag, routed, progress)
+
+    sources = outputs.get("sources")
+    refusals: list[str] = []
+    if failed_ids:
+        refusals.append("one or more source retrieval steps failed")
+
+    lines: list[str] = []
+    if sources is not None and sources.hits:
+        lines.append(
+            f"I found {len(sources.hits)} approved source(s) for that question:"
+        )
+        for hit in sources.hits:
+            citation = hit.title
+            if hit.page_number is not None:
+                citation += f", p.{hit.page_number}"
+            if hit.timestamp_from_ms is not None:
+                citation += f", t={hit.timestamp_from_ms}ms"
+            lines.append(f"- {citation}: {hit.excerpt}")
+    elif sources is not None and sources.degraded:
+        lines.append(
+            "I could not reach the document store right now, so I retrieved no sources."
+        )
+    else:
+        lines.append("I did not find an approved source covering that question.")
+
+    answer_text = "\n".join(lines)
+    compose_cost = 0.0
+    if sources is not None and sources.hits:
+        try:
+            composed, compose_cost = llm.compose_answer(
+                question,
+                {str(hit.chunk_id): asdict(hit) for hit in sources.hits},
+                intent=routed.intent,
+                complexity=routed.complexity,
+            )
+            if composed:
+                answer_text = composed
+        except types.LLMError:
+            compose_cost = 0.0
+
+    _emit(
+        progress, type="stage", stage="compose", status="ok", label="Source answer ready"
+    )
+    return types.AgentAnswer(
+        question=question,
+        intent=routed.intent,
+        answer=answer_text,
+        refusals=tuple(refusals),
+        session=outputs.get("session"),
+        sources=sources,
+        trace=trace,
+        cost_usd=compose_cost,
+        routing_context=agent_context.routed_to_context(routed),
+    )
+
+
 def run(question: str, progress: ProgressCallback | None = None, context: dict[str, Any] | None = None, clerk_user_id: str | None = None) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     if circuit_breaker.breaker.is_open():
@@ -1304,6 +1464,9 @@ def run(question: str, progress: ProgressCallback | None = None, context: dict[s
 
     if routed.intent is types.Intent.DATA_AVAILABILITY:
         return _run_data_availability(question, routed, progress)
+
+    if routed.intent is types.Intent.STRATEGY_SOURCES:
+        return _run_strategy_sources(question, routed, progress)
 
     memory_snippets: list[dict] = []
     if clerk_user_id and not routed.driver_name:

@@ -26,6 +26,7 @@ class Intent(str, Enum):
     DRIVER_STYLE_COMPARISON = "driver_style_comparison"
     DATA_AVAILABILITY = "data_availability"
     STRATEGY_ANALYSIS = "strategy_analysis"
+    STRATEGY_SOURCES = "strategy_sources"
     UNSUPPORTED = "unsupported"
 
 
@@ -59,6 +60,7 @@ class ToolName(str, Enum):
     SEARCH_SESSIONS = "search_sessions"
     ESTIMATE_PIT_LOSS = "estimate_pit_loss"
     COMPARE_STRATEGY_SCENARIOS = "compare_strategy_scenarios"
+    SEARCH_STRATEGY_SOURCES = "search_strategy_sources"
 
 
 @dataclass(frozen=True)
@@ -541,6 +543,51 @@ class CompareStrategyScenariosResult:
     notes: tuple[str, ...] = ()
 
 
+# -- RAG over strategy sources (Task 8).
+
+
+@dataclass(frozen=True)
+class SearchStrategySourcesInput:
+    """Semantic search over approved strategy documents.
+
+    Metadata filters (source types, year, session, driver) are applied before
+    ranking. This tool answers qualitative questions (regulations, briefings,
+    radio wording) and never availability or numeric telemetry alone.
+    """
+
+    query: str
+    source_types: tuple[str, ...] = ()
+    year: int | None = None
+    session_key: int | None = None
+    driver_number: int | None = None
+    limit: int = 6
+
+
+@dataclass(frozen=True)
+class StrategySourceHit:
+    """One cited source chunk, with everything the UI needs to link it."""
+
+    document_id: int
+    chunk_id: int
+    title: str
+    source_type: str
+    excerpt: str
+    source_url: str | None = None
+    r2_key: str | None = None
+    page_number: int | None = None
+    timestamp_from_ms: int | None = None
+    timestamp_to_ms: int | None = None
+    score: float = 0.0
+
+
+@dataclass(frozen=True)
+class SearchStrategySourcesResult:
+    query: str
+    hits: tuple[StrategySourceHit, ...] = ()
+    degraded: bool = False
+    note: str | None = None
+
+
 @dataclass(frozen=True)
 class RoutedQuestion:
     """Entities the LLM Router extracted form the raw question"""
@@ -768,3 +815,4 @@ class AgentAnswer:
     catalog: SessionCatalogResult | None = None
     coverage: SessionCoverage | None = None
     strategy: CompareStrategyScenariosResult | None = None
+    sources: SearchStrategySourcesResult | None = None

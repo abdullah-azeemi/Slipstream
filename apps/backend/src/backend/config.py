@@ -25,6 +25,24 @@ class Settings(CommonSettings):
     race_vector_index_dir: str = "./lancedb"
     race_vector_table: str = "race_intelligence_events"
 
+    # Task 8 -- Cloudflare Vectorize retrieval for strategy documents.
+    # When the account/token/index are unset the vector adapter falls back to a
+    # local LanceDB table (development only); production uses Vectorize.
+    cloudflare_account_id: str = ""
+    cloudflare_vectorize_api_token: str = ""
+    cloudflare_vectorize_index: str = ""
+    strategy_vector_table: str = "strategy_document_chunks"
+    strategy_retrieval_limit: int = 6
+
+    # Embedding provider (OpenAI-compatible). Without a key a deterministic
+    # local hash embedding of the configured dimension is used for dev/tests.
+    embedding_provider: str = "openai"
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    embedding_timeout_seconds: int = 30
+
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_routing_model: str = "openai/gpt-4o-mini"

@@ -1,5 +1,5 @@
 {
-  "_comment": "T0.1 -- Golden evaluation set. Every planner change (hardcoded or LLM) is checked against these before shipping. expected_intent + expected_tools reflect what the CURRENT hardcoded build_dag() in orchestrator.py does. min_evidence_fields lists the output-dataclass fields that verify_evidence / compose needs present to produce a grounded answer. covered_intents: 11 non-UNSUPPORTED, each with 3+ entries, plus multi-intent questions that T1.1 is meant to newly handle.",
+  "_comment": "T0.1 -- Golden evaluation set. Every planner change (hardcoded or LLM) is checked against these before shipping. expected_intent + expected_tools reflect what the CURRENT hardcoded build_dag() in orchestrator.py does. min_evidence_fields lists the output-dataclass fields that verify_evidence / compose needs present to produce a grounded answer. covered_intents: 12 non-UNSUPPORTED, each with 3+ entries, plus multi-intent questions that T1.1 is meant to newly handle.",
   "questions": [
     {
       "question": "Why did Hamilton pit so early at Monaco in 2026?",
@@ -339,6 +339,27 @@
       "routed_params": {"gp_name": "Spa"},
       "expected_tools": ["resolve_session", "resolve_driver", "compare_strategy_scenarios", "verify_evidence"],
       "min_evidence_fields": ["session_key", "driver_number", "strategy"]
+    },
+    {
+      "question": "What do the FIA regulations say about tyre usage rules?",
+      "expected_intent": "strategy_sources",
+      "routed_params": {"gp_name": null, "year": null},
+      "expected_tools": ["search_strategy_sources"],
+      "min_evidence_fields": ["sources"]
+    },
+    {
+      "question": "Quote the race director notes about safety car procedures at Monza.",
+      "expected_intent": "strategy_sources",
+      "routed_params": {"gp_name": "Monza"},
+      "expected_tools": ["search_strategy_sources"],
+      "min_evidence_fields": ["sources"]
+    },
+    {
+      "question": "What did the team radio transcript say about pitting at Spa?",
+      "expected_intent": "strategy_sources",
+      "routed_params": {"gp_name": "Spa"},
+      "expected_tools": ["search_strategy_sources"],
+      "min_evidence_fields": ["sources"]
     }
   ]
 }

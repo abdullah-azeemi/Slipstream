@@ -39,6 +39,7 @@ Allowed Intents:
     - "driver_style_comparison" : the question compares two drivers' driving styles, braking, aggression, or top-speed traits across a season. Sets "compare_driver" for the second driver.
     - "data_availability" : the question asks which races/sessions or which datasets (telemetry, weather, radio, race control, documents) we actually have. Never a racing analysis itself.
     - "strategy_analysis" : the question asks about pit strategy, undercut/overcut choices, staying out vs pitting, or the cost of a pit stop. Do NOT set "compare_driver".
+    - "strategy_sources" : the question asks what regulations, race-director notes, approved briefings, or a team-radio transcript SAY (qualitative wording). Never for data availability or numeric telemetry.
     - "unsupported" : everything else (other sports, live timing etc)
 
 Field Rules:

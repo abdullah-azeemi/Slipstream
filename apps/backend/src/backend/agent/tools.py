@@ -19,11 +19,14 @@ import botocore
 from sqlalchemy import text
 
 from backend import extensions
+from backend import strategy_documents, vector_store
 from backend.config import settings
 from backend.agent import strategy, types
 import statistics
 
 _MAX_CATALOG_LIMIT = 200
+_MAX_SOURCE_LIMIT = 50
+_SOURCE_EXCERPT_CHARS = 320
 
 
 def resolve_session(inp: types.ResolveSessionInput) -> types.ResolvedSession:
@@ -1862,3 +1865,76 @@ def compare_strategy_scenarios(
         assumptions=tuple(assumptions),
         notes=tuple(notes),
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 8 -- RAG over approved strategy documents. Qualitative sources only:
+# this tool never answers availability and never supplies numeric telemetry.
+# ---------------------------------------------------------------------------
+
+
+def _source_excerpt(text: str) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= _SOURCE_EXCERPT_CHARS:
+        return cleaned
+    return cleaned[: _SOURCE_EXCERPT_CHARS - 1].rstrip() + "\u2026"
+
+
+def search_strategy_sources(
+    inp: types.SearchStrategySourcesInput,
+) -> types.SearchStrategySourcesResult:
+    """Retrieve approved document chunks for a qualitative question."""
+    query = inp.query.strip()
+    if not query:
+        raise types.DataError("search_strategy_sources requires a query")
+
+    limit = max(1, min(int(inp.limit), _MAX_SOURCE_LIMIT))
+    source_types = [s for s in inp.source_types if s] or None
+
+    try:
+        hits = vector_store.search(
+            query,
+            source_types=source_types,
+            year=inp.year,
+            session_key=inp.session_key,
+            driver_number=inp.driver_number,
+            limit=limit,
+        )
+    except vector_store.VectorStoreError as exc:
+        # Retrieval failure must never block deterministic answers elsewhere.
+        return types.SearchStrategySourcesResult(
+            query=query,
+            hits=(),
+            degraded=True,
+            note=f"source retrieval unavailable: {exc}",
+        )
+
+    if not hits:
+        return types.SearchStrategySourcesResult(query=query, hits=())
+
+    records = {
+        record.chunk_id: record
+        for record in strategy_documents.hydrate_chunks([h.chunk_id for h in hits])
+    }
+    sources: list[types.StrategySourceHit] = []
+    for hit in hits:
+        record = records.get(hit.chunk_id)
+        if record is None:
+            # Missing or no longer approved -> never display it.
+            continue
+        sources.append(
+            types.StrategySourceHit(
+                document_id=record.document_id,
+                chunk_id=record.chunk_id,
+                title=record.title,
+                source_type=record.source_type,
+                excerpt=_source_excerpt(record.text),
+                source_url=record.source_url,
+                r2_key=record.r2_key,
+                page_number=record.page_number,
+                timestamp_from_ms=record.timestamp_from_ms,
+                timestamp_to_ms=record.timestamp_to_ms,
+                score=hit.score,
+            )
+        )
+    return types.SearchStrategySourcesResult(query=query, hits=tuple(sources))

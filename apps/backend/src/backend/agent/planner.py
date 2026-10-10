@@ -181,6 +181,12 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         types.CompareStrategyScenariosInput,
         "Returns named scenarios with projected deltas, assumptions, and risks.",
     ),
+    "search_strategy_sources": ToolSpec.from_dataclass(
+        "search_strategy_sources",
+        "Semantic search over APPROVED strategy documents (regulations, briefings, radio transcripts). Qualitative sources only; never data availability or numeric telemetry.",
+        types.SearchStrategySourcesInput,
+        "Returns cited source chunks with title, excerpt, page/timestamp and score.",
+    ),
     "verify_evidence": ToolSpec.from_dataclass(
         "verify_evidence",
         "Terminal node: verify all required evidence exists before answering.",
