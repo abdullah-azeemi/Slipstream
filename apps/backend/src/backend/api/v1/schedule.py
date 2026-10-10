@@ -3,6 +3,7 @@ schedule.py — /api/v1/schedule/*
 Serves the F1 calendar for any season with session times.
 FastF1 schedules are cached in memory per requested year.
 """
+
 from __future__ import annotations
 
 import logging
@@ -110,6 +111,7 @@ def _load_schedule(year: int) -> list[dict]:
             if s_date is not None and str(s_date) != "NaT":
                 try:
                     import pandas as pd
+
                     ts = pd.Timestamp(s_date)
                     if ts.tzinfo is None:
                         ts = ts.tz_localize("UTC")
@@ -178,21 +180,25 @@ def _find_next_session(races: list[dict]) -> tuple[dict | None, dict | None]:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @lru_cache(maxsize=8)
 def _load_results(year: int) -> dict[int, list[str]]:
     """Fetch Top 3 finishers for all rounds of the season."""
     log.info(f"Loading {year} race results from Ergast...")
     try:
         from fastf1.ergast import Ergast
+
         ergast = Ergast()
         # Get all race results for the season
-        results = ergast.get_race_results(season=year, result_type='raw')
-        
+        results = ergast.get_race_results(season=year, result_type="raw")
+
         round_results = {}
         for round_data in results:
             r_num = int(round_data.get("round", 0))
             drivers = round_data.get("Results", [])[:3]
-            round_results[r_num] = [d.get("Driver", {}).get("code", "???") for d in drivers]
+            round_results[r_num] = [
+                d.get("Driver", {}).get("code", "???") for d in drivers
+            ]
         return round_results
     except Exception as e:
         log.warning(f"Failed to load race results: {e}")
@@ -216,6 +222,7 @@ def next_race():
         for race in races:
             try:
                 from datetime import datetime as dt
+
                 race_date_str = race["event_date"]
                 race_dt = dt.fromisoformat(str(race_date_str).split(" ")[0])
                 if race_dt.date() > now.date():
@@ -255,6 +262,7 @@ def full_schedule(year: int):
     for race in races:
         try:
             from datetime import datetime as dt
+
             race_dt = dt.fromisoformat(str(race["event_date"]).split(" ")[0])
             if race_dt.date() < now.date():
                 status = "past"

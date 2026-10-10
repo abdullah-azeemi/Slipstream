@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from backend.agent import orchestrator, types  
+from backend.agent import orchestrator, types
 
 
 def _single_node_dag():
@@ -34,15 +34,13 @@ def test_transient_succeeds_on_third_attempt(monkeypatch):
             raise types.RetryableError("blip")
         return SimpleNamespace(session_key=1)
 
-    monkeypatch.setitem(
-        orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, flaky_tool
-    )
+    monkeypatch.setitem(orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, flaky_tool)
 
     trace, env, failed = orchestrator._execute_dag(_single_node_dag(), _routed())
     assert calls["n"] == 3
     assert failed == set()
-    assert len(trace) == 1         
-    assert trace[0].status == "ok"  
+    assert len(trace) == 1
+    assert trace[0].status == "ok"
 
 
 def test_not_found_error_never_retried(monkeypatch):
@@ -52,10 +50,12 @@ def test_not_found_error_never_retried(monkeypatch):
         calls["n"] += 1
         raise types.NotFoundError("no such session")
 
-    monkeypatch.setitem(orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, missing_data)
+    monkeypatch.setitem(
+        orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, missing_data
+    )
 
     trace, env, failed = orchestrator._execute_dag(_single_node_dag(), _routed())
-    assert calls["n"] == 1         
+    assert calls["n"] == 1
     assert "a" in failed
     assert trace[0].status == "error"
 
@@ -81,9 +81,11 @@ def test_persistent_transient_fails_after_three_attempts(monkeypatch):
         calls["n"] += 1
         raise types.RetryableError("down for good")
 
-    monkeypatch.setitem(orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, always_blip)
+    monkeypatch.setitem(
+        orchestrator._TOOLS, types.ToolName.RESOLVE_SESSION, always_blip
+    )
 
     trace, _, failed = orchestrator._execute_dag(_single_node_dag(), _routed())
-    assert calls["n"] == 3         
+    assert calls["n"] == 3
     assert "a" in failed
     assert trace[0].error == "down for good"

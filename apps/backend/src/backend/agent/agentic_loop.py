@@ -1,4 +1,4 @@
-""" Iterative reasoning loop
+"""Iterative reasoning loop
 It uses the LLM to plan a sequesnce of tools to call and then executes them in order"""
 
 from __future__ import annotations
@@ -15,15 +15,21 @@ logger = logging.getLogger(__name__)
 
 MAX_ROUNDS = 3
 
+
 def _summarize(result: t.Any) -> str:
-    """ Truncate the node's output so the assess-evidence prompt says small"""
+    """Truncate the node's output so the assess-evidence prompt says small"""
     s = str(result)
     return s[:500] + ("..." if len(s) > 500 else "")
 
-def _build_assess_prompt(question: str, evidence: dict[str, t.Any], tool_names: list[str], round_num: int) -> str:
-    """Build the prompt that asks the LLM whether the gathered evidence is sufficient to answer the question or not """
 
-    evidence_summary = {node_id: _summarize(result) for node_id, result in evidence.items()}
+def _build_assess_prompt(
+    question: str, evidence: dict[str, t.Any], tool_names: list[str], round_num: int
+) -> str:
+    """Build the prompt that asks the LLM whether the gathered evidence is sufficient to answer the question or not"""
+
+    evidence_summary = {
+        node_id: _summarize(result) for node_id, result in evidence.items()
+    }
     tools_block = ", ".join(sorted(tool_names))
     return f"""You already gathered this evidence for the question below (round {round_num} of {MAX_ROUNDS}): 
 
@@ -43,7 +49,14 @@ def _build_assess_prompt(question: str, evidence: dict[str, t.Any], tool_names: 
         Do not repeat a tool call that already produced evidence you already have.
         """
 
-def assess_evidence(question: str, evidence: dict[str, t.Any], registry: dict, round_num: int, model: str | None = None) -> t.Optional[planner.PlannerExecutionDAG]:
+
+def assess_evidence(
+    question: str,
+    evidence: dict[str, t.Any],
+    registry: dict,
+    round_num: int,
+    model: str | None = None,
+) -> t.Optional[planner.PlannerExecutionDAG]:
     """Ask the LLM whether the gathered evidence is sufficient to answer the question or not"""
     tool_names = list(registry.keys())
     prompt = _build_assess_prompt(question, evidence, tool_names, round_num)
@@ -53,30 +66,40 @@ def assess_evidence(question: str, evidence: dict[str, t.Any], registry: dict, r
         return None
     return planner.validate_plan(raw, registry, known_node_ids=evidence.keys())
 
-def execute_node(node: PlannerDAGNode, env: dict[str, t.Any], routed: types.RoutedQuestion) -> t.Any:
-   """Execute a single tool node"""
-   from backend.agent.binding import bind_params
-   from backend.agent.orchestrator import _TOOLS
 
-   tool_name_enum = types.ToolName(node.tool)
-   typed_input = bind_params(node, env, tool_name_enum)
-   tool_fn = _TOOLS[tool_name_enum]
-   
-   return tool_fn(typed_input)
+def execute_node(
+    node: PlannerDAGNode, env: dict[str, t.Any], routed: types.RoutedQuestion
+) -> t.Any:
+    """Execute a single tool node"""
+    from backend.agent.binding import bind_params
+    from backend.agent.orchestrator import _TOOLS
+
+    tool_name_enum = types.ToolName(node.tool)
+    typed_input = bind_params(node, env, tool_name_enum)
+    tool_fn = _TOOLS[tool_name_enum]
+
+    return tool_fn(typed_input)
 
 
+def run_agentic_dag(
+    question: str,
+    routed: types.RoutedQuestion,
+    registry: dict,
+    memory_snippets: list[dict] | None = None,
+) -> dict[str, t.Any]:
+    """Plan round 0, execute, assess and repeat upto MAX_ROUNDS
 
-def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict, memory_snippets: list[dict] | None = None) -> dict[str, t.Any]:
-    """ Plan round 0, execute, assess and repeat upto MAX_ROUNDS 
-    
-        Returns the accumulated evidence env, pass this to the existing verify_evidence tool exactly as if it were a single tool call.
+    Returns the accumulated evidence env, pass this to the existing verify_evidence tool exactly as if it were a single tool call.
     """
 
     env: dict[str, t.Any] = {"routed": routed}
     model = llm.select_model(routed.intent, routed.complexity)
 
     try:
-        dag = prune_dag(plan_dag(question, routed, registry, memory_snippets=memory_snippets), routed)
+        dag = prune_dag(
+            plan_dag(question, routed, registry, memory_snippets=memory_snippets),
+            routed,
+        )
 
     except planner.PlanValidationError:
         logger.warning("Round_0 plan validation failed", exc_info=True)
@@ -117,4 +140,3 @@ def run_agentic_dag(question: str, routed: types.RoutedQuestion, registry: dict,
         dag = next_dag
 
     return env
-    

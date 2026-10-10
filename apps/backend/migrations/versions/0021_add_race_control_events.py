@@ -3,6 +3,7 @@
 Revision ID: 0021
 Revises: 0020
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -25,8 +26,12 @@ def upgrade() -> None:
         sa.Column("sector", sa.Integer(), nullable=True),
         sa.Column("lap_number", sa.Integer(), nullable=True),
         sa.Column("message", sa.Text(), nullable=True),
-        sa.Column("recorded_at", sa.TIMESTAMP(timezone=True),
-                  nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "recorded_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
         sa.ForeignKeyConstraint(["session_key"], ["sessions.session_key"]),
     )
     op.create_index(

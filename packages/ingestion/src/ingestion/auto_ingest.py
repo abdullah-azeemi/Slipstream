@@ -10,6 +10,7 @@ Run manually:
 Run on a schedule (cron example — every hour):
     0 * * * * cd /path/to/pitwall && uv run python -m ingestion.auto_ingest >> logs/auto_ingest.log 2>&1
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -64,16 +65,22 @@ SPRINT_EVENT_FORMATS = {"sprint", "sprint_qualifying", "sprint_shootout"}
 def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
     """Return set of (year, gp_name, session_type) already in DB."""
     from sqlalchemy.exc import ProgrammingError
+
     try:
         with engine.connect() as conn:
-            rows = conn.execute(text("""
+            rows = conn.execute(
+                text("""
                 SELECT year, gp_name, session_type FROM sessions
-            """)).fetchall()
+            """)
+            ).fetchall()
         return {(r[0], r[1], r[2]) for r in rows}
     except ProgrammingError as exc:
         # Check if it's an "UndefinedTable" error (table doesn't exist)
         if "undefined_table" in str(exc) or "does not exist" in str(exc):
-            log.warning("auto_ingest.migration_required", error="The 'sessions' table does not exist. Please run 'make migrate'.")
+            log.warning(
+                "auto_ingest.migration_required",
+                error="The 'sessions' table does not exist. Please run 'make migrate'.",
+            )
             return set()
         raise exc
 
@@ -81,7 +88,9 @@ def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
 def purge_practice_sessions(engine, current_year: int, current_gp: str) -> int:
     """Keep only practice sessions for the current GP and same GP from the previous year."""
     with engine.connect() as conn:
-        rows = conn.execute(text("""
+        rows = (
+            conn.execute(
+                text("""
             SELECT session_key
             FROM sessions
             WHERE session_type = ANY(:practice_types)
@@ -90,22 +99,44 @@ def purge_practice_sessions(engine, current_year: int, current_gp: str) -> int:
                 OR
                 (year = :previous_year AND gp_name = :current_gp)
               )
-        """), {
-            "practice_types": ['FP1', 'FP2', 'FP3'],
-            "current_year": current_year,
-            "previous_year": current_year - 1,
-            "current_gp": current_gp,
-        }).scalars().all()
+        """),
+                {
+                    "practice_types": ["FP1", "FP2", "FP3"],
+                    "current_year": current_year,
+                    "previous_year": current_year - 1,
+                    "current_gp": current_gp,
+                },
+            )
+            .scalars()
+            .all()
+        )
 
         session_keys = list(rows)
         if not session_keys:
             return 0
 
-        conn.execute(text("DELETE FROM telemetry WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
-        conn.execute(text("DELETE FROM lap_telemetry_stats WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
-        conn.execute(text("DELETE FROM lap_times WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
-        conn.execute(text("DELETE FROM drivers WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
-        conn.execute(text("DELETE FROM sessions WHERE session_key = ANY(:session_keys)"), {"session_keys": session_keys})
+        conn.execute(
+            text("DELETE FROM telemetry WHERE session_key = ANY(:session_keys)"),
+            {"session_keys": session_keys},
+        )
+        conn.execute(
+            text(
+                "DELETE FROM lap_telemetry_stats WHERE session_key = ANY(:session_keys)"
+            ),
+            {"session_keys": session_keys},
+        )
+        conn.execute(
+            text("DELETE FROM lap_times WHERE session_key = ANY(:session_keys)"),
+            {"session_keys": session_keys},
+        )
+        conn.execute(
+            text("DELETE FROM drivers WHERE session_key = ANY(:session_keys)"),
+            {"session_keys": session_keys},
+        )
+        conn.execute(
+            text("DELETE FROM sessions WHERE session_key = ANY(:session_keys)"),
+            {"session_keys": session_keys},
+        )
         conn.commit()
         return len(session_keys)
 
@@ -121,13 +152,15 @@ def get_fastf1_schedule(year: int) -> list[dict]:
             # Skip pre-season testing
             if event.get("EventFormat") == "testing":
                 continue
-            events.append({
-                "round":      int(event["RoundNumber"]),
-                "gp_name":    str(event["EventName"]),
-                "country":    str(event.get("Country", "")),
-                "date_start": event.get("EventDate"),
-                "event_format": str(event.get("EventFormat", "")).lower(),
-            })
+            events.append(
+                {
+                    "round": int(event["RoundNumber"]),
+                    "gp_name": str(event["EventName"]),
+                    "country": str(event.get("Country", "")),
+                    "date_start": event.get("EventDate"),
+                    "event_format": str(event.get("EventFormat", "")).lower(),
+                }
+            )
         return events
     except Exception as e:
         log.error("schedule.fetch_failed", error=str(e))
@@ -150,6 +183,7 @@ def session_has_completed(year: int, event: dict, session_type: str) -> bool:
 
     try:
         import fastf1
+
         event_obj = fastf1.get_event(year, event["round"])
 
         fastf1_session_name = FASTF1_SESSION_LOOKUP.get(session_type)
@@ -163,6 +197,7 @@ def session_has_completed(year: int, event: dict, session_type: str) -> bool:
         # Ensure timezone aware
         if session_date.tzinfo is None:
             from datetime import timezone as tz
+
             session_date = session_date.replace(tzinfo=tz.utc)
 
         # Session must have ended at least 6 hours ago
@@ -194,21 +229,28 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
     # Strip " Grand Prix" suffix for the FastF1 lookup
     gp_short = gp_name.replace(" Grand Prix", "").replace(" ePrix", "")
 
-    log.info("ingest.start",
-             year=year, gp=gp_short, session=session_name)
+    log.info("ingest.start", year=year, gp=gp_short, session=session_name)
 
     try:
         from ingestion.ingest_session import ingest_session as run_ingest
+
         session_key = run_ingest(year, gp_short, session_name)
 
         if session_key is not None:
-            log.info("ingest.success", year=year, gp=gp_short, session=session_name, session_key=session_key)
+            log.info(
+                "ingest.success",
+                year=year,
+                gp=gp_short,
+                session=session_name,
+                session_key=session_key,
+            )
             return True
-        log.error("ingest.failed",
-                  year=year, gp=gp_short, session=session_name)
+        log.error("ingest.failed", year=year, gp=gp_short, session=session_name)
         return False
     except Exception as e:
-        log.error("ingest.error", year=year, gp=gp_short, session=session_name, error=str(e))
+        log.error(
+            "ingest.error", year=year, gp=gp_short, session=session_name, error=str(e)
+        )
         return False
 
 
@@ -231,9 +273,7 @@ def run_once() -> bool:
 
     ingested = get_ingested_sessions(engine)
     try:
-        log.info("auto_ingest.start",
-                 year=current_year,
-                 already_ingested=len(ingested))
+        log.info("auto_ingest.start", year=current_year, already_ingested=len(ingested))
 
         schedule = get_fastf1_schedule(current_year)
         if not schedule:
@@ -241,7 +281,7 @@ def run_once() -> bool:
             return False
 
         new_sessions = 0
-        failed       = 0
+        failed = 0
         latest_gp_ingested: str | None = None
 
         for event in schedule:
@@ -256,32 +296,40 @@ def run_once() -> bool:
 
                 # Skip if session hasn't completed yet
                 if not session_has_completed(current_year, event, session_type):
-                    log.info("auto_ingest.not_ready",
-                             gp=gp_name, session=session_type)
+                    log.info("auto_ingest.not_ready", gp=gp_name, session=session_type)
                     continue
 
                 # Ingest it
                 success = ingest_session(current_year, gp_name, session_type)
                 if success:
                     new_sessions += 1
-                    ingested.add(key)   # prevent re-attempting in same run
+                    ingested.add(key)  # prevent re-attempting in same run
                     latest_gp_ingested = gp_name
                 else:
                     failed += 1
 
-        log.info("auto_ingest.done",
-                 new_sessions=new_sessions,
-                 failed=failed,
-                 total_in_db=len(ingested))
+        log.info(
+            "auto_ingest.done",
+            new_sessions=new_sessions,
+            failed=failed,
+            total_in_db=len(ingested),
+        )
 
         if new_sessions > 0:
             if latest_gp_ingested:
-                deleted = purge_practice_sessions(engine, current_year, latest_gp_ingested)
-                log.info("auto_ingest.practice_purged", gp=latest_gp_ingested, deleted=deleted)
+                deleted = purge_practice_sessions(
+                    engine, current_year, latest_gp_ingested
+                )
+                log.info(
+                    "auto_ingest.practice_purged",
+                    gp=latest_gp_ingested,
+                    deleted=deleted,
+                )
             # Retrain ML model if new race weekends were added
             log.info("auto_ingest.retraining_model")
             try:
                 from ml.train import main as train_main
+
                 train_main()
                 log.info("auto_ingest.model_retrained")
             except Exception as e:

@@ -14,6 +14,7 @@ def _isolate_cache(monkeypatch):
     a fresh cache so order can never decide outcomes."""
     monkeypatch.setattr(llm, "semantic_cache", SemanticCache())
 
+
 def _fake_payload(content, usage=None):
     return {
         "choices": [{"message": {"content": content}}],
@@ -272,6 +273,7 @@ def test_route_question_bad_window_raises(monkeypatch):
     with pytest.raises(types.LLMError) as exc:
         llm.route_question("q?")
     assert exc.value.code == "router_bad_window"
+
 
 def test_route_question_sets_compute_flag(monkeypatch):
     _set_key(monkeypatch)

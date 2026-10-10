@@ -4,6 +4,7 @@ SQLAlchemy database engine and session factory.
 We use SQLAlchemy Core (not ORM) for inserts — it's faster for bulk
 operations because it doesn't instantiate Python objects per row.
 """
+
 from contextlib import contextmanager
 from typing import Generator
 
@@ -19,7 +20,7 @@ engine = create_engine(
     settings.db_url,
     pool_size=5,
     max_overflow=10,
-    pool_pre_ping=True,   # test connections before using them
+    pool_pre_ping=True,  # test connections before using them
 )
 
 

@@ -13,6 +13,7 @@ down_revision = "0012"
 branch_labels = None
 depends_on = None
 
+
 def upgrade() -> None:
     op.create_table(
         "driver_features",
@@ -22,7 +23,6 @@ def upgrade() -> None:
         sa.Column("full_name", sa.Text(), nullable=False),
         sa.Column("abbreviation", sa.Text(), nullable=False),
         sa.Column("team_name", sa.Text(), nullable=True),
-
         # Race performance
         sa.Column("avg_finish_position", sa.Float(), nullable=True),
         sa.Column("finish_position_stddev", sa.Float(), nullable=True),
@@ -41,9 +41,15 @@ def upgrade() -> None:
         # Wet weather
         sa.Column("wet_pace_delta", sa.Float(), nullable=True),
         # Meta data
-        sa.Column("computed_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
-
-        sa.UniqueConstraint("driver_number", "season", name="uq_driver_features_driver_season"),
+        sa.Column(
+            "computed_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.UniqueConstraint(
+            "driver_number", "season", name="uq_driver_features_driver_season"
+        ),
     )
 
     op.create_index(
@@ -52,7 +58,7 @@ def upgrade() -> None:
         ["season"],
     )
 
+
 def downgrade() -> None:
     op.drop_index("idx_driver_features_season", "driver_features")
     op.drop_table("driver_features")
-    

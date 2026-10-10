@@ -19,15 +19,19 @@ def _current_year() -> int:
 
 
 def _is_missing_table_error(exc: ProgrammingError) -> bool:
-    return "UndefinedTable" in exc.__class__.__name__ or "does not exist" in str(exc.orig)
+    return "UndefinedTable" in exc.__class__.__name__ or "does not exist" in str(
+        exc.orig
+    )
 
 
 def _missing_schema_response():
-    return jsonify({
-        "error": "Database schema is not initialized",
-        "detail": "The backend connected to Postgres, but required Pitwall tables such as sessions do not exist.",
-        "suggested_command": "uv run alembic -c apps/backend/alembic.ini upgrade head",
-    }), 503
+    return jsonify(
+        {
+            "error": "Database schema is not initialized",
+            "detail": "The backend connected to Postgres, but required Pitwall tables such as sessions do not exist.",
+            "suggested_command": "uv run alembic -c apps/backend/alembic.ini upgrade head",
+        }
+    ), 503
 
 
 @sessions_bp.get("/sessions")

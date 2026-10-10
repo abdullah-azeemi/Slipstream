@@ -15,11 +15,13 @@ SYSTEM_PROMPT = (
 
 TIMEOUT_SECONDS = 10
 
+
 @dataclass
 class ComputeInput:
     query: str
     data_csv: str
     error_feedback: str = ""
+
 
 @dataclass
 class ComputeOutput:
@@ -27,13 +29,15 @@ class ComputeOutput:
     result: str
     success: bool
 
+
 def run(inp: ComputeInput) -> ComputeOutput:
-    """ Generate and execute the pandas script to answer the query """
+    """Generate and execute the pandas script to answer the query"""
     prompt = _build_prompt(inp)
     script = llm_client.complete(prompt, system=SYSTEM_PROMPT)
     result, success = _execute(script, inp.data_csv)
 
     return ComputeOutput(script=script, result=result, success=success)
+
 
 def _build_prompt(inp: ComputeInput) -> str:
     parts = [
@@ -43,18 +47,21 @@ def _build_prompt(inp: ComputeInput) -> str:
         "Write a Python script using `df` to answer the query. Print only the answer.",
     ]
     if inp.error_feedback:
-        parts +=  ["", f"PREVIOUS ERROR — fix this: {inp.error_feedback}"]
+        parts += ["", f"PREVIOUS ERROR — fix this: {inp.error_feedback}"]
     return "\n".join(parts)
 
+
 def _execute(script: str, data_csv: str) -> tuple[str, bool]:
-    """ Run the script in the subprocess with the CSV preloaded as 'df' """
-    wrapper = "\n".join([
-        "import pandas as pd, io",
-        f'_csv = """{data_csv}"""',
-        "df = pd.read_csv(io.StringIO(_csv.strip()))",
-        textwrap.dedent(script),
-        "",
-    ])
+    """Run the script in the subprocess with the CSV preloaded as 'df'"""
+    wrapper = "\n".join(
+        [
+            "import pandas as pd, io",
+            f'_csv = """{data_csv}"""',
+            "df = pd.read_csv(io.StringIO(_csv.strip()))",
+            textwrap.dedent(script),
+            "",
+        ]
+    )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(wrapper)

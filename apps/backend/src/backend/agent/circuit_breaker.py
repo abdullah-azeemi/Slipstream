@@ -29,7 +29,11 @@ class BreakerState(str, enum.Enum):
 class CircuitBreaker:
     """Thread-safe state machine keyed on N *consecutive* failures."""
 
-    def __init__(self, failure_threshold: int | None = None, open_timeout_seconds: float | None = None):
+    def __init__(
+        self,
+        failure_threshold: int | None = None,
+        open_timeout_seconds: float | None = None,
+    ):
 
         self._failure_threshold = (
             failure_threshold

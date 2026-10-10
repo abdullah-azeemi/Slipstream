@@ -23,8 +23,8 @@ def test_list_sessions_shape(client, seed_session):
 def test_get_session_returns_correct_data(client, seed_session):
     data = client.get(f"/api/v1/sessions/{seed_session}").get_json()
     assert data["session_key"] == seed_session
-    assert data["gp_name"]     == "Test Grand Prix"
-    assert data["session_type"]== "Q"
+    assert data["gp_name"] == "Test Grand Prix"
+    assert data["session_type"] == "Q"
 
 
 def test_get_session_includes_drivers(client, seed_session):

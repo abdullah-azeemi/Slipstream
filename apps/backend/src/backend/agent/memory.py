@@ -16,7 +16,7 @@ from backend import extensions
 from backend import race_vector_index
 from backend.agent import persistence, types
 
-log = structlog.get_logger()     
+log = structlog.get_logger()
 
 _PREFERENCE_KEYS = ("favorite_driver", "favorite_team")
 
@@ -54,10 +54,14 @@ def set_preference(clerk_user_id: str, key: str, value: str) -> None:
         )
 
 
-_PREF_HINT_RE = re.compile(r"\b(favourite|favorite|my)\b.*\b(driver|team)\b", re.IGNORECASE)
+_PREF_HINT_RE = re.compile(
+    r"\b(favourite|favorite|my)\b.*\b(driver|team)\b", re.IGNORECASE
+)
 
 
-def maybe_store_preference(question: str, routed: types.RoutedQuestion, clerk_user_id: str) -> None:
+def maybe_store_preference(
+    question: str, routed: types.RoutedQuestion, clerk_user_id: str
+) -> None:
     """Rule-based preference capture. The router already extracted the driver
     entity, so this only fires when the SENTENCE expresses a preference --
     'VER is my favourite driver' -> stores favorite_driver=VER, while
@@ -71,7 +75,9 @@ def maybe_store_preference(question: str, routed: types.RoutedQuestion, clerk_us
         set_preference(clerk_user_id, "favorite_driver", routed.driver_name)
 
 
-def store_insight(clerk_user_id: str, session_key: int, summary: str, run_id: int | None = None) -> None:
+def store_insight(
+    clerk_user_id: str, session_key: int, summary: str, run_id: int | None = None
+) -> None:
     """Durable insight. ONLY call after verify_evidence passed -- enforcing
     that belongs to the caller; this function just writes."""
     with extensions.engine.begin() as conn:
@@ -88,8 +94,10 @@ def store_insight(clerk_user_id: str, session_key: int, summary: str, run_id: in
         ).first()
 
     race_vector_index.upsert_snippet(
-        snippet_id=row.id, user_id=user_id,
-        session_key=session_key, summary=summary,
+        snippet_id=row.id,
+        user_id=user_id,
+        session_key=session_key,
+        summary=summary,
     )
 
 

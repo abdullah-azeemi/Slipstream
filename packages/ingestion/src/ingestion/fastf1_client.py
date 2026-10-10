@@ -311,9 +311,8 @@ def extract_weather_events(
         ts: object | None = None
         lap_number: int | None = None
         if t_rel is not None:
-            relative_clock = (
-                not lap_starts
-                or not isinstance(lap_starts[0][1], pd.Timestamp)
+            relative_clock = not lap_starts or not isinstance(
+                lap_starts[0][1], pd.Timestamp
             )
             if not relative_clock:
                 try:

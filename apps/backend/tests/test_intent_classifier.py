@@ -1,4 +1,5 @@
 """DB-free unit tests for the local intent classifier (deterministic)."""
+
 from backend.agent.intent_classifier import classify_intent
 
 

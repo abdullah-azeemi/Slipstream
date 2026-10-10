@@ -565,7 +565,9 @@ def _read_artifact_speed_samples(artifact: types.TelemetryArtifact) -> list[floa
                 Key=artifact.storage_key,
             )
         except client.exceptions.NoSuchKey as exc:
-            raise types.DataError(f"artifact missing in R2: {artifact.storage_key}") from exc
+            raise types.DataError(
+                f"artifact missing in R2: {artifact.storage_key}"
+            ) from exc
         except (botocore.exceptions.BotoCoreError, TimeoutError, socket.timeout) as exc:
             raise types.RetryableError(f"R2 fetch failed (transient): {exc}") from exc
         table = pq.read_table(io.BytesIO(obj["Body"].read()))
@@ -641,7 +643,9 @@ def _read_artifact_speed_and_distance(
                 Key=artifact.storage_key,
             )
         except client.exceptions.NoSuchKey as exc:
-            raise types.DataError(f"artifact missing in R2: {artifact.storage_key}") from exc
+            raise types.DataError(
+                f"artifact missing in R2: {artifact.storage_key}"
+            ) from exc
         except (botocore.exceptions.BotoCoreError, TimeoutError, socket.timeout) as exc:
             raise types.RetryableError(f"R2 fetch failed (transient): {exc}") from exc
         table = pq.read_table(io.BytesIO(obj["Body"].read()))
@@ -1082,7 +1086,9 @@ def _read_artifact_full_channels(artifact: types.TelemetryArtifact) -> list[dict
         )
         return _parquet_rows(pq.read_table(io.BytesIO(obj["Body"].read())))
 
-    raise types.DataError(f"unsupported artifact: {artifact.storage_backend}/{artifact.format}")
+    raise types.DataError(
+        f"unsupported artifact: {artifact.storage_backend}/{artifact.format}"
+    )
 
 
 def _to_sample_point(raw: dict) -> types.TelemetrySamplePoint:
@@ -1171,7 +1177,9 @@ def _compute_trace_stats(
 MAX_LAPS_PER_CALL = 12
 
 
-def telemetry_inspector(inp: types.TelemetryInspectorInput) -> types.TelemetryInspectorResult:
+def telemetry_inspector(
+    inp: types.TelemetryInspectorInput,
+) -> types.TelemetryInspectorResult:
     """Load the full telemetry for (driver, laps)
     Flow: find artifact metadata in Postgres -> read channels from storage -> resample -> compute stats.
     """
@@ -1181,12 +1189,16 @@ def telemetry_inspector(inp: types.TelemetryInspectorInput) -> types.TelemetryIn
     driver_laps: dict[int, list[int]] = {inp.driver_number: list(inp.lap_numbers)}
 
     if inp.compare_driver_number is not None:
-        driver_laps.setdefault(inp.compare_driver_number, []).extend(inp.compare_lap_numbers)
+        driver_laps.setdefault(inp.compare_driver_number, []).extend(
+            inp.compare_lap_numbers
+        )
 
     artifacts_by_key: dict[tuple[int, int], types.TelemetryArtifact] = {}
 
     if sum(len(laps) for laps in driver_laps.values()) > MAX_LAPS_PER_CALL:
-        raise types.DataError(f"telemetry_inspector rejects {sum(len(laps) for laps in driver_laps.values())} laps, cap is {MAX_LAPS_PER_CALL}")
+        raise types.DataError(
+            f"telemetry_inspector rejects {sum(len(laps) for laps in driver_laps.values())} laps, cap is {MAX_LAPS_PER_CALL}"
+        )
 
     for drv_num, laps in driver_laps.items():
         if not laps:
@@ -1331,6 +1343,7 @@ def verify_evidence(inp: types.VerifyEvidenceInput) -> types.VerifyEvidenceResul
 
     return _assess(checks)
 
+
 _TRAIT_FEATURES = (
     "braking_aggression",
     "drs_usage_pct",
@@ -1383,11 +1396,17 @@ def _match_driver(rows, name: str):
         ):
             return row
     for row in rows:
-        if target in str(row["full_name"]).lower() or target in str(row["abbreviation"]).lower():
+        if (
+            target in str(row["full_name"]).lower()
+            or target in str(row["abbreviation"]).lower()
+        ):
             return row
     return None
 
-def _build_style_summary(primary: types.DriverStyleProfile | None, compare: types.DriverStyleProfile | None) -> str:
+
+def _build_style_summary(
+    primary: types.DriverStyleProfile | None, compare: types.DriverStyleProfile | None
+) -> str:
     if primary is None:
         return "Could not find the requested driver in the style model."
     if compare is None:
@@ -1402,7 +1421,10 @@ def _build_style_summary(primary: types.DriverStyleProfile | None, compare: type
     largest = None
     for p in primary.traits:
         c = next((t for t in compare.traits if t.feature == p.feature), None)
-        if c is not None and (largest is None or abs(p.percentile - c.percentile) > abs(largest[0] - largest[1])):
+        if c is not None and (
+            largest is None
+            or abs(p.percentile - c.percentile) > abs(largest[0] - largest[1])
+        ):
             largest = (p.percentile, c.percentile, p.label)
     text = (
         f"{primary.full_name} is a {primary.archetype}; "
@@ -1415,13 +1437,18 @@ def _build_style_summary(primary: types.DriverStyleProfile | None, compare: type
         )
     return text
 
+
 def driver_style_compare(inp: types.DriverStyleCompareInput) -> types.DriverStyleResult:
     """Compare two drivers' PCA/K-Means archetypes + trait percentiles."""
     with extensions.engine.connect() as conn:
         if not inp.year:
-            row = conn.execute(
-                text("SELECT COALESCE(MAX(season), 0) AS s FROM driver_embeddings")
-            ).mappings().all()
+            row = (
+                conn.execute(
+                    text("SELECT COALESCE(MAX(season), 0) AS s FROM driver_embeddings")
+                )
+                .mappings()
+                .all()
+            )
             season = int(row[0]["s"]) if row else 0
         else:
             season = inp.year
@@ -1448,7 +1475,8 @@ def driver_style_compare(inp: types.DriverStyleCompareInput) -> types.DriverStyl
                 types.DriverStyleTrait(
                     feature=feature,
                     label=_TRAIT_LABELS[feature],
-                    percentile=_percentile_rank(value, [r[feature] for r in rows]) or 0.0,
+                    percentile=_percentile_rank(value, [r[feature] for r in rows])
+                    or 0.0,
                     value=float(value),
                 )
             )
@@ -1653,16 +1681,20 @@ def describe_session_coverage(
 
 
 def _flags_by_lap(conn, session_key: int) -> dict[int, list[str]]:
-    rows = conn.execute(
-        text(
-            """
+    rows = (
+        conn.execute(
+            text(
+                """
             SELECT lap_number, flag
             FROM race_control_events
             WHERE session_key = :sk AND lap_number IS NOT NULL
             """
-        ),
-        {"sk": session_key},
-    ).mappings().all()
+            ),
+            {"sk": session_key},
+        )
+        .mappings()
+        .all()
+    )
     flags: dict[int, list[str]] = {}
     for r in rows:
         flags.setdefault(int(r["lap_number"]), []).append(r["flag"] or "")
@@ -1695,7 +1727,9 @@ def estimate_pit_loss(inp: types.EstimatePitLossInput) -> types.EstimatePitLossR
         laps_by_driver.setdefault(int(r["driver_number"]), []).append(dict(r))
 
     def _is_green(lap_number: int) -> bool:
-        return strategy.classify_pit_condition(flags_by_lap.get(lap_number, [])) == "green"
+        return (
+            strategy.classify_pit_condition(flags_by_lap.get(lap_number, [])) == "green"
+        )
 
     clean_times = [
         float(r["lap_time_ms"])
@@ -1705,7 +1739,9 @@ def estimate_pit_loss(inp: types.EstimatePitLossInput) -> types.EstimatePitLossR
         and r["pit_out_time_ms"] is None
         and _is_green(int(r["lap_number"]))
     ]
-    baseline = int(round(statistics.median(clean_times))) if len(clean_times) >= 3 else None
+    baseline = (
+        int(round(statistics.median(clean_times))) if len(clean_times) >= 3 else None
+    )
 
     records: list[tuple[str, int | None]] = []
     for driver_laps in laps_by_driver.values():
@@ -1770,17 +1806,21 @@ def compare_strategy_scenarios(
     )
 
     with extensions.engine.connect() as conn:
-        lap_rows = conn.execute(
-            text(
-                """
+        lap_rows = (
+            conn.execute(
+                text(
+                    """
                 SELECT lap_number, stint, compound
                 FROM lap_times
                 WHERE session_key = :sk AND driver_number = :dn AND deleted = FALSE
                 ORDER BY lap_number ASC
                 """
-            ),
-            {"sk": inp.session_key, "dn": inp.driver_number},
-        ).mappings().all()
+                ),
+                {"sk": inp.session_key, "dn": inp.driver_number},
+            )
+            .mappings()
+            .all()
+        )
         total_laps = conn.execute(
             text("SELECT MAX(lap_number) FROM lap_times WHERE session_key = :sk"),
             {"sk": inp.session_key},
@@ -1801,11 +1841,7 @@ def compare_strategy_scenarios(
     )
 
     active = next(
-        (
-            s
-            for s in stints.stints
-            if s.start_lap <= current_lap <= s.end_lap
-        ),
+        (s for s in stints.stints if s.start_lap <= current_lap <= s.end_lap),
         stints.stints[-1] if stints.stints else None,
     )
     compound = active.compound if active else None

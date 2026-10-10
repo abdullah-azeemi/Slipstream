@@ -245,8 +245,12 @@ class TestGoldenSet:
 
     def test_golden_set_size(self):
         """Sanity check: we have enough questions to be useful."""
-        assert len(GOLDEN_SET) >= 30, f"Golden set too small: {len(GOLDEN_SET)} questions"
-        assert len(GOLDEN_SET) <= 60, f"Golden set too large: {len(GOLDEN_SET)} questions"
+        assert len(GOLDEN_SET) >= 30, (
+            f"Golden set too small: {len(GOLDEN_SET)} questions"
+        )
+        assert len(GOLDEN_SET) <= 60, (
+            f"Golden set too large: {len(GOLDEN_SET)} questions"
+        )
 
     def test_golden_set_covers_all_intents(self):
         """Every non-UNSUPPORTED intent appears at least 3 times."""
@@ -257,7 +261,9 @@ class TestGoldenSet:
         for intent in types.Intent:
             if intent == types.Intent.UNSUPPORTED:
                 continue
-            assert intent.value in covered, f"Intent {intent.value} not covered in golden set"
+            assert intent.value in covered, (
+                f"Intent {intent.value} not covered in golden set"
+            )
             assert covered[intent.value] >= 3, (
                 f"Intent {intent.value} only has {covered[intent.value]} questions, need >= 3"
             )

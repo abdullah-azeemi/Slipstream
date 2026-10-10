@@ -367,17 +367,19 @@ class WeatherWindowResult:
     rain_share_pct: float = 0.0
     track_temp_delta_c: float | None = None
 
+
 @dataclass(frozen=True)
 class DriverStyleCompareInput:
     driver_name: str
     compare_driver_name: str | None = None
-    year: int = 0  
-    
+    year: int = 0
+
+
 @dataclass(frozen=True)
 class DriverStyleTrait:
     feature: str
     label: str
-    percentile: float  
+    percentile: float
     value: float
 
 

@@ -59,9 +59,7 @@ def test_run_agentic_dispatches_to_agentic_loop(monkeypatch):
 
     from backend.agent import agentic_loop, planner
 
-    monkeypatch.setattr(
-        agentic_loop, "run_agentic_dag", fake_run_agentic_dag
-    )
+    monkeypatch.setattr(agentic_loop, "run_agentic_dag", fake_run_agentic_dag)
 
     routed = _routed("tyre_degradation_analysis")
     env = orchestrator._run_agentic("Did rain affect degradation?", routed)

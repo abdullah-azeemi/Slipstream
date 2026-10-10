@@ -113,9 +113,7 @@ def test_underlying_search_respects_user_scope(lancedb_tmp):
     race_vector_index.upsert_snippet(2, uid2, 99999, "RB19 era dominance")
 
     assert len(race_vector_index.search_user_memory("RB19 era dominance", uid1, 5)) == 1
-    assert (
-        len(race_vector_index.search_user_memory("RB19 era dominance", uid2, 5)) == 1
-    )
+    assert len(race_vector_index.search_user_memory("RB19 era dominance", uid2, 5)) == 1
 
 
 def test_clear_memory_removes_preferences_and_snippets(lancedb_tmp):

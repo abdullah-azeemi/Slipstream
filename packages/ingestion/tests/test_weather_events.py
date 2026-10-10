@@ -14,7 +14,10 @@ def _make_weather(relative_times, rainfall_flags):
     # FastF1 3.8.1 weather_data: RangeIndex + t0-relative Time column.
     return pd.DataFrame(
         {
-            "Time": [pd.Timedelta(t) if not isinstance(t, str) else pd.to_timedelta(t) for t in relative_times],
+            "Time": [
+                pd.Timedelta(t) if not isinstance(t, str) else pd.to_timedelta(t)
+                for t in relative_times
+            ],
             "AirTemp": [20.0, 21.0, 22.0],
             "TrackTemp": [30.0, 31.0, 32.0],
             "Humidity": [50.0, 51.0, 52.0],
@@ -40,9 +43,7 @@ def test_extract_weather_events_absolute_clock_with_telemetry():
     )
     # Sample 0 at +3s (pre-lap-1 / formation), sample 1 at +10min (lap 2),
     # sample 2 at +30min (after lap 3).
-    weather = _make_weather(
-        ["00:03:00", "00:10:00", "00:30:00"], [False, True, False]
-    )
+    weather = _make_weather(["00:03:00", "00:10:00", "00:30:00"], [False, True, False])
     session = _FakeSession(laps, weather, t0)
 
     rows = extract_weather_events(session, session_key=9554)
@@ -73,16 +74,18 @@ def test_extract_weather_events_relative_clock_without_telemetry():
             "LapStartDate": [pd.NaT] * 3,
         }
     )
-    weather = _make_weather(
-        ["00:03:00", "00:10:00", "00:30:00"], [False, True, False]
-    )
+    weather = _make_weather(["00:03:00", "00:10:00", "00:30:00"], [False, True, False])
     session = _FakeSession(laps, weather, t0_date=None)
 
     rows = extract_weather_events(session, session_key=9554)
 
     assert len(rows) == 3
     assert [r["lap_number"] for r in rows] == [1, 2, 3]
-    assert [r["timestamp"] for r in rows] == ["0 days 00:03:00", "0 days 00:10:00", "0 days 00:30:00"]
+    assert [r["timestamp"] for r in rows] == [
+        "0 days 00:03:00",
+        "0 days 00:10:00",
+        "0 days 00:30:00",
+    ]
 
 
 def test_extract_weather_events_empty_weather():

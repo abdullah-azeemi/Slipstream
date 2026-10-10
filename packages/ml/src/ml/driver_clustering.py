@@ -22,7 +22,7 @@ from ml.config import settings
 
 K = 4  # number of style clusters
 
-_ARCHETYPE_BY_FEATURE: dict[str, tuple[str, str]] = { #req update
+_ARCHETYPE_BY_FEATURE: dict[str, tuple[str, str]] = {  # req update
     "braking_aggression": ("Late Braker", "Smooth Operator"),
     "drs_usage_pct": ("Top-Speed Merchant", "Downforce Runner"),
     "max_speed_capability": ("Top-Speed Specialist", "Corner Specialist"),
@@ -230,23 +230,33 @@ def cluster_for_year(year: int, engine=None) -> int:
     embedding_rows = []
     for i, (_, row) in enumerate(fit_df.iterrows()):
         cluster_idx = int(labels[i])
-        embedding_rows.append({
-            "driver_number": int(row["driver_number"]),
-            "season": year,
-            "abbreviation": row["abbreviation"],
-            "team_name": row.get("team_name"),
-            "embedding": [float(x) for x in pcs[i]],
-            "pca_explained_variance": [float(x) for x in pca.explained_variance_ratio_],
-            "pca_loadings": json.dumps({
-                f"D{d + 1}": {"top_feature": f, "label": _FEATURE_LABELS.get(f, f)}
-                for d, f in enumerate(_axis_labels(pca, cols))  
-            }),
-            "axis_labels": json.dumps(axis_labels),
-            "archetype": archetypes[cluster_idx],
-        })
+        embedding_rows.append(
+            {
+                "driver_number": int(row["driver_number"]),
+                "season": year,
+                "abbreviation": row["abbreviation"],
+                "team_name": row.get("team_name"),
+                "embedding": [float(x) for x in pcs[i]],
+                "pca_explained_variance": [
+                    float(x) for x in pca.explained_variance_ratio_
+                ],
+                "pca_loadings": json.dumps(
+                    {
+                        f"D{d + 1}": {
+                            "top_feature": f,
+                            "label": _FEATURE_LABELS.get(f, f),
+                        }
+                        for d, f in enumerate(_axis_labels(pca, cols))
+                    }
+                ),
+                "axis_labels": json.dumps(axis_labels),
+                "archetype": archetypes[cluster_idx],
+            }
+        )
 
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO driver_features (
                 driver_number, season, full_name, abbreviation, team_name,
                 avg_finish_position, finish_position_stddev, podium_rate, win_rate,
@@ -278,9 +288,12 @@ def cluster_for_year(year: int, engine=None) -> int:
                 braking_aggression = EXCLUDED.braking_aggression,
                 drs_usage_pct = EXCLUDED.drs_usage_pct,
                 computed_at = NOW()
-        """), features_rows)
+        """),
+            features_rows,
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO driver_embeddings (
                 driver_number, season, abbreviation, team_name, embedding,
                 pca_explained_variance, pca_loadings, axis_labels, archetype, computed_at
@@ -298,9 +311,13 @@ def cluster_for_year(year: int, engine=None) -> int:
                 axis_labels = EXCLUDED.axis_labels,
                 archetype = EXCLUDED.archetype,
                 computed_at = NOW()
-        """), embedding_rows)
+        """),
+            embedding_rows,
+        )
 
-    print(f"[driver_clustering] {year}: embedded {len(embedding_rows)} drivers into {len(set(labels))} archetypes")
+    print(
+        f"[driver_clustering] {year}: embedded {len(embedding_rows)} drivers into {len(set(labels))} archetypes"
+    )
     return len(embedding_rows)
 
 

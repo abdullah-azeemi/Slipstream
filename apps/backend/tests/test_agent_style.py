@@ -9,12 +9,18 @@ def test_percentile_rank():
 
 def test_style_summary_compares_archetypes():
     a = types.DriverStyleProfile(
-        driver_number=1, full_name="Charles Leclerc", abbreviation="LEC",
-        archetype="Late Braker", traits=(),
+        driver_number=1,
+        full_name="Charles Leclerc",
+        abbreviation="LEC",
+        archetype="Late Braker",
+        traits=(),
     )
     b = types.DriverStyleProfile(
-        driver_number=2, full_name="Lewis Hamilton", abbreviation="HAM",
-        archetype="Smooth Operator", traits=(),
+        driver_number=2,
+        full_name="Lewis Hamilton",
+        abbreviation="HAM",
+        archetype="Smooth Operator",
+        traits=(),
     )
     s = _build_style_summary(a, b)
     assert "Late Braker" in s and "Smooth Operator" in s

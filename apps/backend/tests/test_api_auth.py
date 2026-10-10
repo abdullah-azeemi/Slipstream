@@ -48,7 +48,9 @@ def test_cors_preflight_is_permitted(app):
         },
     )
     assert resp.status_code in (200, 204)
-    assert "authorization" in resp.headers.get("Access-Control-Allow-Headers", "").lower()
+    assert (
+        "authorization" in resp.headers.get("Access-Control-Allow-Headers", "").lower()
+    )
 
 
 def test_valid_bearer_passes_sessions_guard(client, seed_session):

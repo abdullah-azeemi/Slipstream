@@ -1,4 +1,4 @@
-"""Add per-run user feedback 
+"""Add per-run user feedback
 
 Revision ID: 0024
 Revises: 0023
@@ -22,8 +22,18 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("rating", sa.SmallInteger(), nullable=False),
         sa.Column("comment", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
         sa.CheckConstraint("rating IN (-1, 1)", name="ck_agent_run_feedback_rating"),
         sa.UniqueConstraint("run_id", "user_id", name="uq_agent_run_feedback_run_user"),
         sa.ForeignKeyConstraint(["run_id"], ["agent_runs.id"], ondelete="CASCADE"),

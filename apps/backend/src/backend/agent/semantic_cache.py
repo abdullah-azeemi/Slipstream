@@ -1,4 +1,4 @@
-""" Semantic cache for F1 agent queries.
+"""Semantic cache for F1 agent queries.
 
 Before hitting the LLM router, check if a nearly identical question was already answered. Saves API cost + latency.
 
@@ -22,44 +22,47 @@ SIMILARITY_THRESHOLD = 0.95
 CACHE_TTL_SECONDS = 3600
 NGRAM_SIZE = 3
 
+
 @dataclass(frozen=True)
 class CacheEntry:
-    """ A single cached query response pair"""
+    """A single cached query response pair"""
+
     query: str
     response: dict
     normalized_query: str
     ngram_vector: dict[str, int]
     created_at: float
 
+
 @dataclass
 class SemanticCache:
-    """ In memory semantic cache with cosine similarity on character n-grams
-    
-        Usage: 
-            cache = SemanticCache()
+    """In memory semantic cache with cosine similarity on character n-grams
 
-            #check the cache before the llm call
-            cached = cache.get(user_query)
-            if cached is not None:
-                return cache # cache hit
-            
-            #cache miss
-            result = call_llm(user_query)
+    Usage:
+        cache = SemanticCache()
 
-            #store resul
-            cache.set(user_query, result)
+        #check the cache before the llm call
+        cached = cache.get(user_query)
+        if cached is not None:
+            return cache # cache hit
+
+        #cache miss
+        result = call_llm(user_query)
+
+        #store resul
+        cache.set(user_query, result)
     """
 
     _entries: list[CacheEntry] = field(default_factory=list)
 
     def get(self, query: str) -> dict | None:
-        """ Return cached response if single query exists, else NOne
-        
-            Steps:
-                1. Normalize the incoming query
-                2. Build its n-grm vector
-                3. Compare against all the stored entries
-                4. return the best match if above threshold
+        """Return cached response if single query exists, else NOne
+
+        Steps:
+            1. Normalize the incoming query
+            2. Build its n-grm vector
+            3. Compare against all the stored entries
+            4. return the best match if above threshold
         """
 
         self._evict_expired()
@@ -77,30 +80,38 @@ class SemanticCache:
                 best_entry = entry
 
         if best_score >= SIMILARITY_THRESHOLD and best_entry is not None:
-            log.info("semantic_cache.hit", query=query[:50], similarity=round(best_score, 4))
+            log.info(
+                "semantic_cache.hit", query=query[:50], similarity=round(best_score, 4)
+            )
             return best_entry.response
 
         log.info("semantic_cache.miss", query=query[:50])
         return None
 
-    def set(self, query:str, response:dict) -> None:
-        """ Store a query response pair in the cache"""
+    def set(self, query: str, response: dict) -> None:
+        """Store a query response pair in the cache"""
 
         normalized = self._normalize(query)
 
         for entry in self._entries:
             if entry.normalized_query == normalized:
-                return 
+                return
 
-        entry = CacheEntry(query=query, response=response, normalized_query=normalized, 
-                           ngram_vector=self._build_ngram_vector(normalized), created_at=time.time())
+        entry = CacheEntry(
+            query=query,
+            response=response,
+            normalized_query=normalized,
+            ngram_vector=self._build_ngram_vector(normalized),
+            created_at=time.time(),
+        )
 
         self._entries.append(entry)
-        log.info("semantic_cache.stored", query=query[:50], total_entries=len(self._entries))
-
+        log.info(
+            "semantic_cache.stored", query=query[:50], total_entries=len(self._entries)
+        )
 
     def _evict_expired(self) -> None:
-        """Remove entries older than CACHE_TTL_SECONDS """
+        """Remove entries older than CACHE_TTL_SECONDS"""
         cutoff = time.time() - CACHE_TTL_SECONDS
         self._entries = [e for e in self._entries if e.created_at > cutoff]
 
@@ -111,7 +122,7 @@ class SemanticCache:
 
     @staticmethod
     def _build_ngram_vector(text: str) -> dict[str, int]:
-        """Convert text to a frequency dict of character n-grams """
+        """Convert text to a frequency dict of character n-grams"""
         ngrams: dict[str, int] = {}
         for i in range(len(text) - NGRAM_SIZE + 1):
             ngram = text[i : i + NGRAM_SIZE]

@@ -123,7 +123,8 @@ def ingest_session(
         radio_rows = fetch_team_radio(session_key)
         for r in radio_rows:
             r["lap_number"] = _lap_for_timestamp(
-                _lap_start_times(session_obj, driver_number=r["driver_number"]), r["date"]
+                _lap_start_times(session_obj, driver_number=r["driver_number"]),
+                r["date"],
             )
         radio_count = load_team_radio(radio_rows, session_key)
 
@@ -142,8 +143,11 @@ def ingest_session(
     except Exception as exc:
         log.error(
             "ingest.failed",
-            year=year, gp=gp, session=session,
-            error=str(exc), exc_info=True,
+            year=year,
+            gp=gp,
+            session=session,
+            error=str(exc),
+            exc_info=True,
         )
         return None
 

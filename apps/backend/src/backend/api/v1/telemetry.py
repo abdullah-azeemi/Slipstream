@@ -10,6 +10,7 @@ GET /api/v1/sessions/<key>/telemetry/compare?drivers=44,63
 GET /api/v1/sessions/<key>/telemetry/stats?drivers=44,63
     → aggregated stats: max speed, avg throttle, braking zones etc.
 """
+
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from backend import auth, extensions
@@ -58,7 +59,8 @@ def _read_r2_parquet_artifact(storage_key: str) -> list[dict]:
 
 def _get_fastest_lap_number(conn, session_key: int, driver_number: int) -> int | None:
     """Return the lap_number of the driver's fastest clean lap."""
-    row = conn.execute(text("""
+    row = conn.execute(
+        text("""
         SELECT lap_number
         FROM lap_times
         WHERE session_key   = :sk
@@ -67,13 +69,19 @@ def _get_fastest_lap_number(conn, session_key: int, driver_number: int) -> int |
           AND deleted       = FALSE
         ORDER BY lap_time_ms ASC
         LIMIT 1
-    """), {"sk": session_key, "dn": driver_number}).first()
+    """),
+        {"sk": session_key, "dn": driver_number},
+    ).first()
     return row[0] if row else None
 
 
-def _get_telemetry_samples(conn, session_key: int, driver_number: int, lap_number: int) -> list[dict]:
+def _get_telemetry_samples(
+    conn, session_key: int, driver_number: int, lap_number: int
+) -> list[dict]:
     """Return all telemetry samples for a specific lap, ordered by distance."""
-    rows = conn.execute(text("""
+    rows = (
+        conn.execute(
+            text("""
         SELECT
             distance_m,
             speed_kmh,
@@ -89,22 +97,33 @@ def _get_telemetry_samples(conn, session_key: int, driver_number: int, lap_numbe
           AND driver_number = :dn
           AND lap_number    = :ln
         ORDER BY distance_m ASC NULLS LAST
-    """), {"sk": session_key, "dn": driver_number, "ln": lap_number}).mappings().all()
+    """),
+            {"sk": session_key, "dn": driver_number, "ln": lap_number},
+        )
+        .mappings()
+        .all()
+    )
     samples = [dict(r) for r in rows]
     if samples:
         return samples
 
-    artifact = conn.execute(text("""
+    artifact = (
+        conn.execute(
+            text("""
         SELECT storage_key, storage_backend, format
         FROM telemetry_artifacts
         WHERE session_key   = :sk
           AND driver_number = :dn
           AND lap_number    = :ln
         LIMIT 1
-    """), {"sk": session_key, "dn": driver_number, "ln": lap_number}).mappings().first()
+    """),
+            {"sk": session_key, "dn": driver_number, "ln": lap_number},
+        )
+        .mappings()
+        .first()
+    )
     if not artifact:
         return []
-
 
     if artifact["storage_backend"] == "local" and artifact["format"] == "json.gz":
         path = Path(settings.telemetry_artifact_dir) / artifact["storage_key"]
@@ -137,14 +156,18 @@ def _resolve_telemetry_lap(
     telemetry if that specific lap has no telemetry samples.
     """
     if pinned_lap_number is not None:
-        pinned_samples = _get_telemetry_samples(conn, session_key, driver_number, pinned_lap_number)
+        pinned_samples = _get_telemetry_samples(
+            conn, session_key, driver_number, pinned_lap_number
+        )
         if pinned_samples:
             return pinned_lap_number
 
         # If the exact pinned lap has no telemetry, stay as close as possible
         # to that lap first so Q1/Q2/Q3 toggles don't all collapse to the same
         # global fastest telemetry lap.
-        nearby_rows = conn.execute(text("""
+        nearby_rows = (
+            conn.execute(
+                text("""
             SELECT lt.lap_number
             FROM lap_times lt
             WHERE lt.session_key   = :sk
@@ -153,12 +176,23 @@ def _resolve_telemetry_lap(
               AND lt.deleted       = FALSE
             ORDER BY ABS(lt.lap_number - :pinned_ln) ASC, lt.lap_time_ms ASC, lt.lap_number ASC
             LIMIT 8
-        """), {"sk": session_key, "dn": driver_number, "pinned_ln": pinned_lap_number}).scalars().all()
+        """),
+                {
+                    "sk": session_key,
+                    "dn": driver_number,
+                    "pinned_ln": pinned_lap_number,
+                },
+            )
+            .scalars()
+            .all()
+        )
         for lap_number in nearby_rows:
             if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
                 return lap_number
 
-    rows = conn.execute(text("""
+    rows = (
+        conn.execute(
+            text("""
         SELECT lt.lap_number
         FROM lap_times lt
         WHERE lt.session_key   = :sk
@@ -167,7 +201,12 @@ def _resolve_telemetry_lap(
           AND lt.deleted       = FALSE
         ORDER BY lt.lap_time_ms ASC, lt.lap_number ASC
         LIMIT 8
-    """), {"sk": session_key, "dn": driver_number}).scalars().all()
+    """),
+            {"sk": session_key, "dn": driver_number},
+        )
+        .scalars()
+        .all()
+    )
     for lap_number in rows:
         if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
             return lap_number
@@ -189,11 +228,13 @@ def driver_telemetry(session_key: int, driver_number: int):
 
         samples = _get_telemetry_samples(conn, session_key, driver_number, lap_number)
 
-    return jsonify({
-        "driver_number": driver_number,
-        "lap_number":    lap_number,
-        "samples":       samples,
-    })
+    return jsonify(
+        {
+            "driver_number": driver_number,
+            "lap_number": lap_number,
+            "samples": samples,
+        }
+    )
 
 
 @telemetry_bp.get("/sessions/<int:session_key>/telemetry/compare")
@@ -232,7 +273,9 @@ def telemetry_compare(session_key: int):
 
     with extensions.engine.connect() as conn:
         for dn in driver_nums:
-            lap_number = _resolve_telemetry_lap(conn, session_key, dn, pinned_laps.get(dn))
+            lap_number = _resolve_telemetry_lap(
+                conn, session_key, dn, pinned_laps.get(dn)
+            )
             if lap_number is None:
                 continue
 
@@ -241,20 +284,24 @@ def telemetry_compare(session_key: int):
                 continue
 
             # Normalise distance to 0-100%
-            distances = [s["distance_m"] for s in samples if s["distance_m"] is not None]
+            distances = [
+                s["distance_m"] for s in samples if s["distance_m"] is not None
+            ]
             if distances:
                 min_d = min(distances)
                 max_d = max(distances)
-                span  = max_d - min_d or 1
+                span = max_d - min_d or 1
                 for s in samples:
                     if s["distance_m"] is not None:
-                        s["distance_pct"] = round((s["distance_m"] - min_d) / span * 100, 3)
+                        s["distance_pct"] = round(
+                            (s["distance_m"] - min_d) / span * 100, 3
+                        )
                     else:
                         s["distance_pct"] = None
 
             result[str(dn)] = {
                 "lap_number": lap_number,
-                "samples":    samples,
+                "samples": samples,
             }
 
     if not result:
@@ -281,7 +328,9 @@ def telemetry_stats(session_key: int):
 
     with extensions.engine.connect() as conn:
         # Get fastest lap per driver first
-        fastest = conn.execute(text("""
+        fastest = (
+            conn.execute(
+                text("""
             SELECT DISTINCT ON (driver_number)
                 driver_number, lap_number, lap_time_ms
             FROM lap_times
@@ -289,17 +338,24 @@ def telemetry_stats(session_key: int):
               AND lap_time_ms  IS NOT NULL
               AND deleted      = FALSE
             ORDER BY driver_number, lap_time_ms ASC
-        """), {"sk": session_key}).mappings().all()
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
 
         results = []
         for lap in fastest:
-            dn  = lap["driver_number"]
-            ln  = lap["lap_number"]
+            dn = lap["driver_number"]
+            ln = lap["lap_number"]
 
             if drivers_param and dn not in params.get("dns", []):
                 continue
 
-            stats = conn.execute(text("""
+            stats = (
+                conn.execute(
+                    text("""
                 SELECT
                     MAX(speed_kmh)                              AS max_speed,
                     AVG(speed_kmh)                             AS avg_speed,
@@ -328,40 +384,61 @@ def telemetry_stats(session_key: int):
                 WHERE session_key   = :sk
                   AND driver_number = :dn
                   AND lap_number    = :ln
-            """), {"sk": session_key, "dn": dn, "ln": ln}).mappings().first()
+            """),
+                    {"sk": session_key, "dn": dn, "ln": ln},
+                )
+                .mappings()
+                .first()
+            )
 
             # Speed trap data from lap_times
-            traps = conn.execute(text("""
+            traps = (
+                conn.execute(
+                    text("""
                 SELECT speed_i1, speed_i2, speed_fl, speed_st
                 FROM lap_times
                 WHERE session_key   = :sk
                   AND driver_number = :dn
                   AND lap_number    = :ln
-            """), {"sk": session_key, "dn": dn, "ln": ln}).mappings().first()
+            """),
+                    {"sk": session_key, "dn": dn, "ln": ln},
+                )
+                .mappings()
+                .first()
+            )
 
             # Driver info
-            driver = conn.execute(text("""
+            driver = (
+                conn.execute(
+                    text("""
                 SELECT abbreviation, team_name, team_colour
                 FROM drivers
                 WHERE session_key   = :sk
                   AND driver_number = :dn
-            """), {"sk": session_key, "dn": dn}).mappings().first()
+            """),
+                    {"sk": session_key, "dn": dn},
+                )
+                .mappings()
+                .first()
+            )
 
             if not driver:
                 continue
 
-            results.append({
-                "driver_number":    dn,
-                "abbreviation":     driver["abbreviation"],
-                "team_name":        driver["team_name"],
-                "team_colour":      driver["team_colour"],
-                "lap_number":       ln,
-                "lap_time_ms":      lap["lap_time_ms"],
-                **(dict(stats) if stats else {}),
-                "speed_i1":         traps["speed_i1"]  if traps else None,
-                "speed_i2":         traps["speed_i2"]  if traps else None,
-                "speed_fl":         traps["speed_fl"]  if traps else None,
-                "speed_st":         traps["speed_st"]  if traps else None,
-            })
+            results.append(
+                {
+                    "driver_number": dn,
+                    "abbreviation": driver["abbreviation"],
+                    "team_name": driver["team_name"],
+                    "team_colour": driver["team_colour"],
+                    "lap_number": ln,
+                    "lap_time_ms": lap["lap_time_ms"],
+                    **(dict(stats) if stats else {}),
+                    "speed_i1": traps["speed_i1"] if traps else None,
+                    "speed_i2": traps["speed_i2"] if traps else None,
+                    "speed_fl": traps["speed_fl"] if traps else None,
+                    "speed_st": traps["speed_st"] if traps else None,
+                }
+            )
 
     return jsonify(results)

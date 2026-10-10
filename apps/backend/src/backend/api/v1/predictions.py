@@ -5,6 +5,7 @@ Requires the model to be trained first by a one-shot job:
 A missing model returns a fast 503 with `{ "error": "model_unavailable" }`.
 The API never triggers training itself.
 """
+
 from flask import Blueprint, jsonify, redirect, url_for
 from sqlalchemy import text
 from backend import auth, extensions
@@ -26,15 +27,20 @@ def race_predictions(session_key: int):
     """
     # Verify session exists and is qualifying
     with extensions.engine.connect() as conn:
-        row = conn.execute(text("""
+        row = conn.execute(
+            text("""
             SELECT session_type, gp_name, year
             FROM sessions WHERE session_key = :sk
-        """), {"sk": session_key}).first()
+        """),
+            {"sk": session_key},
+        ).first()
 
     if not row:
         return jsonify({"error": "Session not found"}), 404
-    if row[0] not in ('Q', 'SQ'):
-        return jsonify({"error": "Predictions only available for qualifying sessions"}), 400
+    if row[0] not in ("Q", "SQ"):
+        return jsonify(
+            {"error": "Predictions only available for qualifying sessions"}
+        ), 400
 
     try:
         from ml.features import compute_weekend_inputs_used
@@ -44,15 +50,19 @@ def race_predictions(session_key: int):
         return jsonify({"error": "ML package not available — check uv workspace"}), 503
 
     try:
-        predictions  = predict_race(session_key)
+        predictions = predict_race(session_key)
         explanations = explain_prediction(session_key)
     except ModelUnavailableError as exc:
-        return jsonify({
-            "error": "model_unavailable",
-            "detail": str(exc),
-        }), 503
+        return jsonify(
+            {
+                "error": "model_unavailable",
+                "detail": str(exc),
+            }
+        ), 503
     except FileNotFoundError:
-        return jsonify({"error": "Model training did not produce a readable model file"}), 503
+        return jsonify(
+            {"error": "Model training did not produce a readable model file"}
+        ), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -66,12 +76,22 @@ def race_predictions(session_key: int):
 
     # Add team colours from DB
     with extensions.engine.connect() as conn:
-        drivers = conn.execute(text("""
+        drivers = (
+            conn.execute(
+                text("""
             SELECT driver_number, team_colour, team_name
             FROM drivers WHERE session_key = :sk
-        """), {"sk": session_key}).mappings().all()
+        """),
+                {"sk": session_key},
+            )
+            .mappings()
+            .all()
+        )
     from backend.api.v1.strategy import _resolve
-    colour_map = {r["driver_number"]: _resolve(r["team_colour"], r["team_name"]) for r in drivers}
+
+    colour_map = {
+        r["driver_number"]: _resolve(r["team_colour"], r["team_name"]) for r in drivers
+    }
     for p in predictions:
         p["team_colour"] = colour_map.get(p["driver_number"], "666666")
 
@@ -94,42 +114,52 @@ def race_predictions(session_key: int):
     }
     weekend_inputs = compute_weekend_inputs_used(extensions.engine, row[1], row[2])
 
-    return jsonify({
-        "session_key": session_key,
-        "gp_name":     row[1],
-        "year":        row[2],
-        "predictions": predictions,
-        "validation_report": validation_report,
-        "model_baselines": model_baselines,
-        "weekend_inputs_used": weekend_inputs,
-        "model": {
-            "scope": model_metadata.get("model_scope", "global"),
-            "best_estimator": model_metadata.get("best_estimator"),
-            "cv_mae_mean": model_metadata.get("cv_mae_mean"),
-            "cv_mae_std": model_metadata.get("cv_mae_std"),
-            "cv_top3_accuracy_mean": model_metadata.get("cv_top3_accuracy_mean"),
-            "cv_podium_precision_mean": model_metadata.get("cv_podium_precision_mean"),
-            "cv_podium_recall_mean": model_metadata.get("cv_podium_recall_mean"),
-            "cv_podium_brier_mean": model_metadata.get("cv_podium_brier_mean"),
-            "grid_baseline_top3_accuracy_mean": model_metadata.get("grid_baseline_top3_accuracy_mean"),
-            "cv_folds": model_metadata.get("cv_folds"),
-            "n_training_rows": model_metadata.get("n_training_rows"),
-            "years": model_metadata.get("years", []),
-            "gp_name": model_metadata.get("gp_name", row[1] if gp_metadata else None),
-        },
-    })
+    return jsonify(
+        {
+            "session_key": session_key,
+            "gp_name": row[1],
+            "year": row[2],
+            "predictions": predictions,
+            "validation_report": validation_report,
+            "model_baselines": model_baselines,
+            "weekend_inputs_used": weekend_inputs,
+            "model": {
+                "scope": model_metadata.get("model_scope", "global"),
+                "best_estimator": model_metadata.get("best_estimator"),
+                "cv_mae_mean": model_metadata.get("cv_mae_mean"),
+                "cv_mae_std": model_metadata.get("cv_mae_std"),
+                "cv_top3_accuracy_mean": model_metadata.get("cv_top3_accuracy_mean"),
+                "cv_podium_precision_mean": model_metadata.get(
+                    "cv_podium_precision_mean"
+                ),
+                "cv_podium_recall_mean": model_metadata.get("cv_podium_recall_mean"),
+                "cv_podium_brier_mean": model_metadata.get("cv_podium_brier_mean"),
+                "grid_baseline_top3_accuracy_mean": model_metadata.get(
+                    "grid_baseline_top3_accuracy_mean"
+                ),
+                "cv_folds": model_metadata.get("cv_folds"),
+                "n_training_rows": model_metadata.get("n_training_rows"),
+                "years": model_metadata.get("years", []),
+                "gp_name": model_metadata.get(
+                    "gp_name", row[1] if gp_metadata else None
+                ),
+            },
+        }
+    )
 
 
 @predictions_bp.get("/predictions/latest")
 def latest_predictions():
     """Predictions for the most recent qualifying session."""
     with extensions.engine.connect() as conn:
-        row = conn.execute(text("""
+        row = conn.execute(
+            text("""
             SELECT session_key FROM sessions
             WHERE session_type = 'Q'
             ORDER BY date_start DESC NULLS LAST
             LIMIT 1
-        """)).first()
+        """)
+        ).first()
 
     if not row:
         return jsonify({"error": "No qualifying sessions found"}), 404

@@ -1,12 +1,13 @@
 from __future__ import annotations
-import dataclasses 
+import dataclasses
 import json
-import typing as t 
+import typing as t
 
 from backend.agent import llm, memory, types
 
 MAX_DAG_NODES = 8
 MIN_NODE_BUDGET = 3
+
 
 @dataclasses.dataclass(frozen=True)
 class ToolSpec:
@@ -17,9 +18,11 @@ class ToolSpec:
     output_summary: str
 
     @staticmethod
-    def from_dataclass(name: str, description: str, input_cls: type, output_summary: str) -> ToolSpec:
-        """We use dataclasses.fields() + get_type_hints() to introspect the dataclass. 
-        This is the "reflection" pattern, instead of manually writing out each tool's schema, 
+    def from_dataclass(
+        name: str, description: str, input_cls: type, output_summary: str
+    ) -> ToolSpec:
+        """We use dataclasses.fields() + get_type_hints() to introspect the dataclass.
+        This is the "reflection" pattern, instead of manually writing out each tool's schema,
         we derive it from the code."""
 
         hints = t.get_type_hints(input_cls)
@@ -31,7 +34,8 @@ class ToolSpec:
         required = frozenset(
             f.name
             for f in dataclasses.fields(input_cls)
-            if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING
+            if f.default is dataclasses.MISSING
+            and f.default_factory is dataclasses.MISSING
         )
         return ToolSpec(
             name=name,
@@ -40,6 +44,7 @@ class ToolSpec:
             required_fields=required,
             output_summary=output_summary,
         )
+
 
 def _type_to_str(ty: t.Any) -> str:
     """Convert a type annotation to a human-readable string for the LLM prompt.
@@ -50,10 +55,10 @@ def _type_to_str(ty: t.Any) -> str:
     """
     if ty is type(None):
         return "None"
-    
+
     if isinstance(ty, str):
         return ty
-    
+
     origin = getattr(ty, "__origin__", None)
 
     if origin is t.Union:
@@ -61,16 +66,17 @@ def _type_to_str(ty: t.Any) -> str:
         if len(args) < len(ty.__args__):
             return f"{_type_to_str(args[0])} | None"
         return " | ".join(_type_to_str(a) for a in ty.__args__)
-    
+
     if origin is not None:
         args_str = ", ".join(_type_to_str(a) for a in ty.__args__)
         name = getattr(ty, "__name__", None) or origin.__name__
         return f"{name}[{args_str}]"
-    
+
     name = getattr(ty, "__name__", None)
     if name:
         return name
     return str(ty)
+
 
 TOOL_REGISTRY: dict[str, ToolSpec] = {
     "resolve_session": ToolSpec.from_dataclass(
@@ -205,25 +211,24 @@ class PlannerDAGNode:
     round: int = 0
     input_param_refs: dict = dataclasses.field(default_factory=dict)
 
+
 @dataclasses.dataclass(frozen=True)
 class PlannerExecutionDAG:
     nodes: list[PlannerDAGNode]
 
     def edges(self) -> list[tuple[str, str]]:
-        return [
-            (dep, n.node_id)
-            for n in self.nodes
-            for dep in n.depends_on
-        ]
+        return [(dep, n.node_id) for n in self.nodes for dep in n.depends_on]
+
 
 class PlanValidationError(Exception):
     """Raised whenever a plan fails validation. Caller MUST catch and fall
     back to the template DAG."""
+
     pass
 
+
 def topo_sort(dag: PlannerExecutionDAG) -> list[str] | None:
-    """Kahn's algorithm. Returns execution order, or None if a cycle exists.
-    """
+    """Kahn's algorithm. Returns execution order, or None if a cycle exists."""
     indegree: dict[str, int] = {n.node_id: 0 for n in dag.nodes}
     adj: dict[str, list[str]] = {n.node_id: [] for n in dag.nodes}
     for n in dag.nodes:
@@ -243,7 +248,10 @@ def topo_sort(dag: PlannerExecutionDAG) -> list[str] | None:
                 queue.append(nxt)
     return order if len(order) == len(dag.nodes) else None
 
-def validate_plan(raw: dict, registry: dict[str, ToolSpec], known_node_ids: t.Iterable[str] = ()) -> PlannerExecutionDAG:
+
+def validate_plan(
+    raw: dict, registry: dict[str, ToolSpec], known_node_ids: t.Iterable[str] = ()
+) -> PlannerExecutionDAG:
     """Validate a raw parsed-JSON plan from the LLM.
 
     Checks: unknown tool, missing required params, dangling dependency,
@@ -253,7 +261,9 @@ def validate_plan(raw: dict, registry: dict[str, ToolSpec], known_node_ids: t.It
         raise PlanValidationError("plan JSON missing 'nodes' list")
 
     if len(raw["nodes"]) > MAX_DAG_NODES:
-        raise PlanValidationError(f"plan has {len(raw['nodes'])} nodes, cap is {MAX_DAG_NODES}")
+        raise PlanValidationError(
+            f"plan has {len(raw['nodes'])} nodes, cap is {MAX_DAG_NODES}"
+        )
 
     known_ids = set(known_node_ids)
     nodes: list[PlannerDAGNode] = []
@@ -261,51 +271,68 @@ def validate_plan(raw: dict, registry: dict[str, ToolSpec], known_node_ids: t.It
     for raw_node in raw["nodes"]:
         for required_key in ("id", "tool", "params", "depends_on"):
             if required_key not in raw_node:
-                raise PlanValidationError(f"node missing required key '{required_key}': {raw_node}")
+                raise PlanValidationError(
+                    f"node missing required key '{required_key}': {raw_node}"
+                )
 
         tool_name = raw_node["tool"]
         if tool_name not in registry:
-            raise PlanValidationError(f"unknown tool '{tool_name}' -- not in TOOL_REGISTRY")
+            raise PlanValidationError(
+                f"unknown tool '{tool_name}' -- not in TOOL_REGISTRY"
+            )
 
         spec = registry[tool_name]
         params = raw_node["params"]
         if not isinstance(params, dict):
-            raise PlanValidationError(f"node '{raw_node['id']}' params must be an object")
+            raise PlanValidationError(
+                f"node '{raw_node['id']}' params must be an object"
+            )
 
         refs = raw_node.get("input_param_refs", {})
         missing = spec.required_fields - set(params.keys())
         still_missing = missing - set(refs.keys())
         if still_missing:
-            raise PlanValidationError(f"node '{raw_node['id']}' missing required params for '{tool_name}': {still_missing}")
+            raise PlanValidationError(
+                f"node '{raw_node['id']}' missing required params for '{tool_name}': {still_missing}"
+            )
 
         unknown_params = set(params.keys()) - set(spec.input_fields.keys())
         if unknown_params:
-            raise PlanValidationError(f"node '{raw_node['id']}' has params not in '{tool_name}' schema: {unknown_params}")
+            raise PlanValidationError(
+                f"node '{raw_node['id']}' has params not in '{tool_name}' schema: {unknown_params}"
+            )
 
         depends_on = raw_node["depends_on"]
         if not isinstance(depends_on, list):
-            raise PlanValidationError(f"node '{raw_node['id']}' depends_on must be a list")
+            raise PlanValidationError(
+                f"node '{raw_node['id']}' depends_on must be a list"
+            )
 
-        nodes.append(PlannerDAGNode(
-            node_id=raw_node["id"],
-            tool=tool_name,
-            params=params,
-            depends_on=depends_on,
-            round=raw_node.get("round", 0),
-            input_param_refs=refs,
-        ))
+        nodes.append(
+            PlannerDAGNode(
+                node_id=raw_node["id"],
+                tool=tool_name,
+                params=params,
+                depends_on=depends_on,
+                round=raw_node.get("round", 0),
+                input_param_refs=refs,
+            )
+        )
 
     node_ids = {n.node_id for n in nodes}
     for n in nodes:
         for dep in n.depends_on:
             if dep not in node_ids and dep not in known_ids:
-                raise PlanValidationError(f"node '{n.node_id}' depends on '{dep}' which doesn't exist in this plan or in prior-round evidence")
+                raise PlanValidationError(
+                    f"node '{n.node_id}' depends on '{dep}' which doesn't exist in this plan or in prior-round evidence"
+                )
 
     dag = PlannerExecutionDAG(nodes=nodes)
     if topo_sort(dag) is None:
         raise PlanValidationError("plan contains a dependency cycle")
 
     return dag
+
 
 def _to_execution_dag(dag: PlannerExecutionDAG) -> types.ExecutionDAG:
     """Convert a validated planner DAG into the real types.ExecutionDAG that the orchestrator's executor knows how to run."""
@@ -316,19 +343,23 @@ def _to_execution_dag(dag: PlannerExecutionDAG) -> types.ExecutionDAG:
     for n in dag.nodes:
         tool_enum = tool_name_map.get(n.tool)
         if tool_enum is None:
-            raise PlanValidationError(f"tool '{n.tool}' has no corresponding ToolName enum value")
+            raise PlanValidationError(
+                f"tool '{n.tool}' has no corresponding ToolName enum value"
+            )
 
         spec = TOOL_REGISTRY.get(n.tool)
         label = spec.name.replace("_", " ").title() if spec else n.tool
 
-        nodes.append(types.DAGNode(
-            id=n.node_id,
-            tool_name=tool_enum,
-            label=label,
-            description=spec.description if spec else "",
-            depends_on=tuple(n.depends_on),
-            input_params=dict(n.params),
-        ))
+        nodes.append(
+            types.DAGNode(
+                id=n.node_id,
+                tool_name=tool_enum,
+                label=label,
+                description=spec.description if spec else "",
+                depends_on=tuple(n.depends_on),
+                input_params=dict(n.params),
+            )
+        )
 
     edges = tuple(
         types.DAGEdge(source=dep, target=node.id)
@@ -337,6 +368,7 @@ def _to_execution_dag(dag: PlannerExecutionDAG) -> types.ExecutionDAG:
     )
 
     return types.ExecutionDAG(nodes=tuple(nodes), edges=edges)
+
 
 _HEAVY_TELEMETRY_TOOLS = frozenset(
     {
@@ -352,10 +384,15 @@ _HEAVY_TELEMETRY_TOOLS = frozenset(
 # evidence, so pruning them crashes compose with a missing key.
 _COMPOSE_REQUIRED_TOOLS: dict[types.ToolName, frozenset[types.Intent]] = {
     types.ToolName.TELEMETRY_INSPECTOR: frozenset({types.Intent.TELEMETRY_COMPARISON}),
-    types.ToolName.STINT_DEGRADATION_SCANNER: frozenset({types.Intent.TYRE_DEGRADATION_ANALYSIS}),
+    types.ToolName.STINT_DEGRADATION_SCANNER: frozenset(
+        {types.Intent.TYRE_DEGRADATION_ANALYSIS}
+    ),
 }
 
-def prune_dag(dag: types.ExecutionDAG, routed: types.RoutedQuestion) -> types.ExecutionDAG:
+
+def prune_dag(
+    dag: types.ExecutionDAG, routed: types.RoutedQuestion
+) -> types.ExecutionDAG:
     """orchestrator post-step. For SIMPLE questions (complexity <= 2) drop heavy-telemetry nodes that are pure leaves: nothing downstream
     consumes them, so the evidence gate never needs them.
 
@@ -393,11 +430,18 @@ def prune_dag(dag: types.ExecutionDAG, routed: types.RoutedQuestion) -> types.Ex
     )
     return types.ExecutionDAG(nodes=tuple(kept), edges=edges)
 
+
 def _node_budget(complexity: int) -> int:
     return max(MIN_NODE_BUDGET, min(MAX_DAG_NODES, 1 + complexity * 2))
 
-def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec], memory_context: str = "") -> str:
-    """ Build the system prompt that tells the LLM which tools are available and asks it to produce a plan as JSON."""
+
+def _build_planner_prompt(
+    question: str,
+    routed: types.RoutedQuestion,
+    registry: dict[str, ToolSpec],
+    memory_context: str = "",
+) -> str:
+    """Build the system prompt that tells the LLM which tools are available and asks it to produce a plan as JSON."""
     tool_lines: list[str] = []
     for spec in registry.values():
         req = ", ".join(sorted(spec.required_fields)) or "none"
@@ -410,7 +454,8 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
     tools_block = "\n".join(tool_lines)
 
     entities = {
-        k: v for k, v in {
+        k: v
+        for k, v in {
             "intent": routed.intent.value if routed.intent else None,
             "driver_name": routed.driver_name,
             "gp_name": routed.gp_name,
@@ -419,7 +464,8 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
             "session_type": routed.session_type.value if routed.session_type else None,
             "compare_driver_name": routed.compare_driver_name,
             "laps_window": routed.laps_window,
-        }.items() if v is not None
+        }.items()
+        if v is not None
     }
 
     return f"""You are planning which read-only data tools to call to answer an F1 race question.
@@ -457,12 +503,15 @@ def _build_planner_prompt(question: str, routed: types.RoutedQuestion, registry:
             - Always include a "verify_evidence" node as the last step, depending on all other nodes.
 """
 
+
 def call_llm_json(prompt: str, model: str | None = None) -> dict:
     """Call the LLM and parse its response as JSON.
 
-    We are setting the temperature to 0.0 for the planner beacuse we want a deterministic and reproducible plan. 
+    We are setting the temperature to 0.0 for the planner beacuse we want a deterministic and reproducible plan.
     """
-    text, _usage = llm._chat([{"role": "user", "content": prompt}], temperature=0.0, model=model)
+    text, _usage = llm._chat(
+        [{"role": "user", "content": prompt}], temperature=0.0, model=model
+    )
 
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -472,7 +521,13 @@ def call_llm_json(prompt: str, model: str | None = None) -> dict:
 
     return json.loads(cleaned)
 
-def plan_dag(question: str, routed: types.RoutedQuestion, registry: dict[str, ToolSpec] | None = None, memory_snippets: list[dict] | None = None) -> types.ExecutionDAG:
+
+def plan_dag(
+    question: str,
+    routed: types.RoutedQuestion,
+    registry: dict[str, ToolSpec] | None = None,
+    memory_snippets: list[dict] | None = None,
+) -> types.ExecutionDAG:
     """Ask the LLM to produce a plan for answering the question, then validate it and convert to ExecutionDAG."""
     if registry is None:
         registry = TOOL_REGISTRY
