@@ -3,7 +3,7 @@ import dataclasses
 import json
 import typing as t
 
-from backend.agent import llm, memory, types
+from backend.agent import llm, types
 
 MAX_DAG_NODES = 8
 MIN_NODE_BUDGET = 3
@@ -439,7 +439,6 @@ def _build_planner_prompt(
     question: str,
     routed: types.RoutedQuestion,
     registry: dict[str, ToolSpec],
-    memory_context: str = "",
 ) -> str:
     """Build the system prompt that tells the LLM which tools are available and asks it to produce a plan as JSON."""
     tool_lines: list[str] = []
@@ -478,8 +477,6 @@ def _build_planner_prompt(
             Use at most {_node_budget(routed.complexity)} nodes. Prefer the
             FEWEST nodes that still fully answer the question -- do not pad
             the plan with speculative telemetry branches.
-
-            {memory_context}
 
             Available tools:
             {tools_block}
@@ -526,14 +523,12 @@ def plan_dag(
     question: str,
     routed: types.RoutedQuestion,
     registry: dict[str, ToolSpec] | None = None,
-    memory_snippets: list[dict] | None = None,
 ) -> types.ExecutionDAG:
     """Ask the LLM to produce a plan for answering the question, then validate it and convert to ExecutionDAG."""
     if registry is None:
         registry = TOOL_REGISTRY
 
-    memory_context = memory.format_memory_context(memory_snippets or [])
-    prompt = _build_planner_prompt(question, routed, registry, memory_context)
+    prompt = _build_planner_prompt(question, routed, registry)
     model = llm.select_model(routed.intent, routed.complexity)
     raw_plan = call_llm_json(prompt, model=model)
     validated_dag = validate_plan(raw_plan, registry)

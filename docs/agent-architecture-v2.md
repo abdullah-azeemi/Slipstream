@@ -193,31 +193,18 @@ The goal of Tier 1 is to let the LLM **drive the execution** rather than being a
 
 ---
 
-### Tier 2 — Memory & robustness (medium impact)
+### Tier 2 — Robustness (medium impact)
 
 Requires Tier 1 (adaptive planning) to be meaningful.
 
 ---
 
-#### T2.1 — Long-term memory + RAG
+#### T2.1 — Personal memory (out of scope)
 
-**Goal:** Wire up the currently unused RAG settings in `config.py` (`race_vector_index_dir`, `race_vector_table`). Give the agent durable memory: past conversations, race insights, and user preferences — retrieved to ground answers and resolve shortcuts (e.g. "my favourite driver").
-
-**Files to change:**
-- New `apps/backend/src/backend/agent/memory.py` — embed + upsert + query helpers (vector index over race insight/notes and conversation summaries).
-- `apps/backend/src/backend/agent/orchestrator.py` / `llm.py` — before planning, retrieve relevant memory hits and inject them as grounding context into the planner and composer prompts.
-- `apps/backend/src/backend/agent/persistence.py` — persist user preferences (favourite drivers/teams) and per-session insights that qualify as durable.
-- `config.py` — activate the existing vector settings (add embeddings provider + model).
-
-**Key design decisions:**
-- Memory is **grounding, not authority**: retrieved snippets are passed as context the same way evidence is — they never replace the evidence gate, and any recalled fact must still be re-verifiable against the DB or refused.
-- Embeddings model, chunking, and the vector table schema must be added via a migration; the table lives in Postgres (or a local FAISS/annoy index per the existing `race_vector_index_dir` setting).
-- Privacy: memory is per-Clerk-user, opaque to other users; admin flag to disable.
-
-**Acceptance criteria:**
-- A returning user asking "how was my favourite driver's weekend?" resolves the entity from user memory and answers.
-- Recalled context is clearly attributed and still passes `verify_evidence`; a stale recalled fact is refused, not silently trusted.
-- Migration + test cover upsert/query round-trip.
+Per-user preferences, automatically saved answer summaries, and embeddings of
+past chats are excluded by the privacy policy in `docs/plan.md`. Approved
+strategy documents use the separate document retrieval flow; do not use it to
+reintroduce personal memory.
 
 ---
 

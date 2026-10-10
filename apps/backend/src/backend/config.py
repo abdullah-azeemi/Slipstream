@@ -59,12 +59,6 @@ class Settings(CommonSettings):
     clerk_issuer: str = ""
     clerk_admin_user_ids: str = ""
 
-    memory_vector_table: str = "user_memory_snippets"
-
-    auto_ingest_enabled: bool = True
-    auto_ingest_on_startup: bool = True
-    auto_ingest_interval_minutes: int = 60
-
     @model_validator(mode="after")
     def _reject_dev_secret_in_production(self) -> "Settings":
         if self.flask_env.lower() == "production" and self.secret_key == DEV_SECRET_KEY:

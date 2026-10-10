@@ -109,8 +109,6 @@ Check:
 - `DATABASE_URL`
 - `TELEMETRY_ARTIFACT_DIR` if raw telemetry is stored as compressed artifacts
 - `ML_MODELS_DIR` if deployed predictions need persisted model files
-- `AUTO_INGEST_ENABLED` if you want to disable the built-in backend scheduler
-- `AUTO_INGEST_INTERVAL_MINUTES` to control how often production checks for new sessions
 - `REDIS_URL` if workers are in use
 - `KAFKA_BOOTSTRAP_SERVERS` if stream/worker features depend on it
 - `MLFLOW_TRACKING_URI` if training/registry behavior depends on it
@@ -161,18 +159,10 @@ This avoids accidentally pointing operational commands at the wrong database.
 
 ### Single-service deployments
 
-This repo now starts a lightweight auto-ingest scheduler inside the backend process for production-style runs.
-
-Why:
-
-- Railway is often running only the Flask web service from `railway.json`
-- in that setup, Celery beat and worker schedules do not exist unless you deploy separate worker services
-- the backend scheduler closes that gap by periodically calling `ingestion.auto_ingest`
-
-Safety:
-
-- runs are guarded by a PostgreSQL advisory lock so only one instance ingests at a time
-- local `flask --debug` and tests do not start the scheduler by default
+The Flask app does not start ingestion work in a web process. Run
+`python -m ingestion.auto_ingest` as a deliberate one-shot job or from a
+separately deployed scheduler/worker. This avoids starting duplicate loops in
+multi-worker web deployments and remains safe with scale-to-zero hosting.
 
 ### Deployed ML predictions
 

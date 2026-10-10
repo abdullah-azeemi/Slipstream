@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 import time
 from typing import Any, Callable
 
-from backend.agent import circuit_breaker, context as agent_context, memory
+from backend.agent import circuit_breaker, context as agent_context
 from backend.agent import llm, tools, types
 from backend.config import settings
 from backend.agent.nodes import compute_node, critic_node, synthesis_node
@@ -1124,7 +1124,6 @@ def _run_agentic(
     question: str,
     routed: types.RoutedQuestion,
     progress: ProgressCallback | None = None,
-    memory_snippets: list[dict] | None = None,
 ) -> dict[str, Any] | None:
     """Run the T1.2 agentic loop. Returns the evidence env, or None to
     fall back to the deterministic template DAG."""
@@ -1137,7 +1136,6 @@ def _run_agentic(
         question=question,
         routed=routed,
         registry=planner.TOOL_REGISTRY,
-        memory_snippets=memory_snippets,
     )
     tool_results = {
         k: v
@@ -1155,7 +1153,6 @@ def _compose_agentic(
     routed: types.RoutedQuestion,
     env: dict[str, Any],
     progress: ProgressCallback | None = None,
-    memory_snippets: list[dict] | None = None,
 ) -> types.AgentAnswer:
     """Build an AgentAnswer from an agentic-loop evidence env."""
     from backend.agent import tools
@@ -1216,11 +1213,9 @@ def _compose_agentic(
     answer_text = ""
     cost = 0.0
     try:
-        memory_context = memory.format_memory_context(memory_snippets or [])
         answer_text, cost = llm.compose_answer(
             question,
             evidence_payload,
-            memory_context=memory_context,
             intent=routed.intent,
             complexity=routed.complexity,
         )
@@ -1469,7 +1464,6 @@ def run(
     question: str,
     progress: ProgressCallback | None = None,
     context: dict[str, Any] | None = None,
-    clerk_user_id: str | None = None,
 ) -> types.AgentAnswer:
     """Public entry point: one question in, one structured answer out"""
     if circuit_breaker.breaker.is_open():
@@ -1525,23 +1519,6 @@ def run(
     if routed.intent is types.Intent.STRATEGY_SOURCES:
         return _run_strategy_sources(question, routed, progress)
 
-    memory_snippets: list[dict] = []
-    if clerk_user_id and not routed.driver_name:
-        fav = memory.get_preference(clerk_user_id, "favorite_driver")
-        if fav:
-            routed = replace(routed, driver_name=fav)
-            _emit(
-                progress,
-                type="stage",
-                stage="route",
-                status="ok",
-                label=f"Resolved driver from memory: {fav}",
-            )
-
-    if clerk_user_id:
-        memory.maybe_store_preference(question, routed, clerk_user_id)
-        memory_snippets = memory.recall(clerk_user_id, question)
-
     if not routed.driver_name:
         return _clarify(
             question,
@@ -1580,11 +1557,9 @@ def run(
 
     env: dict | None = None
     if settings.agent_planner_mode == "llm":
-        env = _run_agentic(question, routed, progress, memory_snippets=memory_snippets)
+        env = _run_agentic(question, routed, progress)
         if env is not None:
-            return _compose_agentic(
-                question, routed, env, progress, memory_snippets=memory_snippets
-            )
+            return _compose_agentic(question, routed, env, progress)
 
     try:
         dag = build_dag(routed)

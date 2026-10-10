@@ -13,13 +13,13 @@ import os
 import pytest
 from sqlalchemy import create_engine, text
 
-# Dev/postgres infra: the local Dockerised TimescaleDB owns loopback `:5432`
-# (`.env` DATABASE_URL). The brew Postgres instance that runs the test suite is
-# pinned to `:5433` and MUST be targeted explicitly — never route pytest at the
-# real database, its fixtures drop the tables it creates.
-os.environ["DATABASE_URL"] = (
-    "postgresql+psycopg://pitwall:pitwall@localhost:5433/pitwall"
-)
+# Keep local tests isolated from the developer database. CI supplies its own
+# disposable PostgreSQL service and DATABASE_URL (port 5432), which must not
+# be replaced with the local-only test database port.
+if os.environ.get("CI", "").lower() != "true":
+    os.environ["DATABASE_URL"] = (
+        "postgresql+psycopg://pitwall:pitwall@localhost:5433/pitwall"
+    )
 
 from backend import create_app  # noqa: E402
 from backend.config import settings  # noqa: E402
@@ -210,26 +210,6 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS user_preferences (
-    id              SERIAL PRIMARY KEY,
-    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    pref_key        TEXT NOT NULL,
-    pref_value      TEXT NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, pref_key)
-);
-
-CREATE TABLE IF NOT EXISTS agent_memory_snippets (
-    id              SERIAL PRIMARY KEY,
-    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    snippet         TEXT NOT NULL,
-    run_id          INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_agent_memory_snippets_user_id
-    ON agent_memory_snippets (user_id);
-
 CREATE TABLE IF NOT EXISTS agent_run_feedback (
     id              SERIAL PRIMARY KEY,
     run_id          INTEGER NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
@@ -357,11 +337,10 @@ def app():
     Create a Flask app configured for testing.
     scope="session" means this runs once for the entire test suite.
 
-    settings.testing is set BEFORE create_app() so the auto-ingest
-    scheduler guard in __init__.py skips starting the background thread.
+    settings.testing is set before app creation so testing configuration is
+    applied to the backend.
     """
     settings.testing = True
-    settings.auto_ingest_enabled = False
     test_app = create_app()
     test_app.config["TESTING"] = True
     return test_app
@@ -395,8 +374,6 @@ def _create_tables(db_engine):
     # Tear down tables after the full test suite finishes.
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS agent_memory_snippets CASCADE;"))
-        conn.execute(text("DROP TABLE IF EXISTS user_preferences CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS strategy_document_chunks CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS strategy_documents CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))

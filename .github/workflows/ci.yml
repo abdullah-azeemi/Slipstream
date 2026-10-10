@@ -84,7 +84,7 @@ jobs:
           node-version: '20'
 
       - name: Install pnpm
-        run: npm i -g pnpm
+        run: npm i -g pnpm@10.30.3
 
       - name: Install dependencies
         run: cd apps/frontend && pnpm install

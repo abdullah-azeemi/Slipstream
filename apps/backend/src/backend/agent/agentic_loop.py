@@ -85,7 +85,6 @@ def run_agentic_dag(
     question: str,
     routed: types.RoutedQuestion,
     registry: dict,
-    memory_snippets: list[dict] | None = None,
 ) -> dict[str, t.Any]:
     """Plan round 0, execute, assess and repeat upto MAX_ROUNDS
 
@@ -97,7 +96,7 @@ def run_agentic_dag(
 
     try:
         dag = prune_dag(
-            plan_dag(question, routed, registry, memory_snippets=memory_snippets),
+            plan_dag(question, routed, registry),
             routed,
         )
 

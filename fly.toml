@@ -10,8 +10,6 @@ primary_region = 'sin'
   dockerfile = 'Dockerfile'
 
 [env]
-  AUTO_INGEST_ENABLED = 'false'
-  AUTO_INGEST_ON_STARTUP = 'false'
   FLASK_ENV = 'production'
   ML_MODELS_DIR = '/data/ml_models'
   RACE_VECTOR_INDEX_DIR = '/data/lancedb'

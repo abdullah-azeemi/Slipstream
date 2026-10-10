@@ -403,21 +403,12 @@ def select_model(
 def compose_answer(
     question: str,
     evidence: dict,
-    memory_context: str = "",
     intent: types.Intent | None = None,
     complexity: int = 1,
     requires_compute: bool = False,
     intent_category: str = "descriptive",
 ) -> tuple[str, float]:
     """Write the final human-readable answer from structured evidence."""
-    context_block = ""
-    if memory_context:
-        context_block = (
-            f"\n\nBackground context from this user's memory (usable for narrative "
-            f"flavour only, NOT evidence -- every number you write must come from "
-            f"the evidence JSON):\n{memory_context}"
-        )
-
     category_guide = {
         "chitchat": "Answer briefly and warmly; you do not need the evidence.",
         "predictive": "Frame the answer as a reasoned estimate with uncertainty; never overclaim certainty.",
@@ -431,7 +422,6 @@ def compose_answer(
             "content": (
                 f"Question: {question}\n\nQuestion category: {category_guide}\n\n"
                 f"Evidence (JSON):\n{json.dumps(evidence, indent=2, default=str)}"
-                f"{context_block}"
             ),
         },
     ]

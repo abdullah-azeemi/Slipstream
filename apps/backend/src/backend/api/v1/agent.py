@@ -9,7 +9,7 @@ import threading
 from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from backend import auth, extensions
-from backend.agent import memory, orchestrator, persistence, rate_limit
+from backend.agent import orchestrator, persistence, rate_limit
 from backend.config import settings
 from sqlalchemy import text as sql_text
 
@@ -142,33 +142,6 @@ def _finalize_run(answer, started_at, clerk_user_id: str, conv_id: int):
     return run_id
 
 
-def _maybe_store_insight(answer, clerk_user_id: str, run_id: int | None) -> None:
-    """T2.1 -- write a durable insight ONLY when the evidence gate passed.
-
-    This is the 'memory is grounding, not authority' rule applied to writes:
-    an answer the gate refused must never become durable memory."""
-    if (
-        run_id is None
-        or answer.evidence is None
-        or not answer.evidence.passed
-        or answer.refusals
-        or answer.session is None
-    ):
-        return
-
-    driver = answer.driver
-    summary = (
-        f"{answer.intent.value}: {driver.full_name if driver else 'driver'} "
-        f"@ {answer.session.gp_name} {answer.session.year} -- {answer.answer[:200]}"
-    )
-    try:
-        memory.store_insight(
-            clerk_user_id, answer.session.session_key, summary, run_id=run_id
-        )
-    except Exception as exc:  # memory is optional -- never fail the response on it
-        log.warning("agent.insight_store_failed", error=str(exc))
-
-
 @agent_bp.before_request
 def require_clerk_session():
     """Reject the request before the view unless a valid Clerk token is present."""
@@ -194,13 +167,10 @@ def agent_query():
 
     # ── Run the orchestrator ────────────────────────────────────────────
     started_at = datetime.now().astimezone()
-    answer = orchestrator.run(
-        question.strip(), context=context, clerk_user_id=g.clerk_user_id
-    )
+    answer = orchestrator.run(question.strip(), context=context)
 
     # ── Store the assistant message + persist run ───────────────────────
     run_id = _finalize_run(answer, started_at, g.clerk_user_id, conv_id)
-    _maybe_store_insight(answer, g.clerk_user_id, run_id)
 
     response = _serialize_answer(
         answer,
@@ -239,10 +209,8 @@ def agent_query_stream():
                 question.strip(),
                 progress=lambda payload: events.put(("progress", payload)),
                 context=context,
-                clerk_user_id=clerk_user_id,
             )
             run_id = _finalize_run(answer, started_at, clerk_user_id, conv_id)
-            _maybe_store_insight(answer, clerk_user_id, run_id)
             events.put(
                 (
                     "final",
@@ -310,14 +278,6 @@ def get_usage():
 def get_limits():
     """Return the current authenticated user's daily agent allowance."""
     return jsonify(persistence.get_usage_summary(g.clerk_user_id))
-
-
-@agent_bp.delete("/agent/memory")
-def delete_agent_memory():
-    """T0.6 -- clear this user's durable memory (preferences + snippets)."""
-    memory.clear_memory(g.clerk_user_id)
-    log.info("agent.memory_cleared", user=g.clerk_user_id)
-    return jsonify({"ok": True})
 
 
 @agent_bp.get("/agent/admin/stats")
