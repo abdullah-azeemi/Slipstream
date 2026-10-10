@@ -1,73 +1,58 @@
-# Contributing to Slipstream
+# Contributing
 
-Thank you for your interest. This guide gets you from zero to a running dev environment.
+Thanks for helping improve Slipstream. Start with the root [README](README.md)
+and [repository guide](docs/repository.md) for setup and project layout.
 
-## Prerequisites
+## Development setup
 
-| Tool   | Version  | Install                                      |
-|--------|----------|----------------------------------------------|
-| Python | 3.11+    | https://python.org                           |
-| uv     | latest   | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| Node   | 20+      | https://nodejs.org                           |
-| pnpm   | latest   | `npm install -g pnpm`                        |
-| Docker | latest   | https://docker.com                           |
+Install dependencies and start the local services:
 
-## Setup
 ```bash
-git clone https://github.com/abdullah-azeemi/Slipstream
-cd Slipstream
-make install    # installs all Python + JS dependencies
-make up         # starts Docker infrastructure
-make migrate    # runs database migrations
-make seed       # downloads sample F1 session data
+make install
+make up
+make migrate
+make seed       # optional sample sessions
 ```
 
-## Code Standards
+Run `make backend` and `make frontend` in separate terminals. Keep local
+development and tests pointed at local Postgres; do not use production
+credentials for routine development.
 
-**Python**
-- Formatter + linter: `ruff` (`uv run ruff check . && uv run ruff format .`)
-- Type checker: `mypy --strict` (`uv run mypy apps/ packages/`)
-- Tests: `pytest` (`uv run pytest --cov`)
-- No `print()` in production code — use `structlog`
+## Checks
 
-**TypeScript**
-- Strict mode enabled in `tsconfig.json`
-- Formatter: Prettier (`pnpm format`)
-- Linter: ESLint (`pnpm lint`)
+Run the checks relevant to your changes:
 
-All PRs must pass CI (lint + type check + tests) before merge.
-
-## Commit Convention
-
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
-```
-feat: add tyre strategy visualisation
-fix: correct lap time aggregation during safety car periods  
-docs: update API endpoint reference
-chore: bump FastF1 to 3.4.0
-test: add unit tests for lap time transformer
-refactor: extract Kafka producer into shared utility
+```bash
+make lint
+make test
+cd apps/frontend && pnpm tsc --noEmit && pnpm test
 ```
 
-## Branch Naming
-```
-feat/tyre-strategy-map
-fix/lap-aggregation-safety-car
-docs/api-reference
-chore/bump-dependencies
-```
+Backend tests use the configured `DATABASE_URL`; set it to the local database
+before running them. CI also runs backend tests, Ruff, the agent golden eval,
+frontend type checking, and a frontend build.
 
-## Pull Request Process
+## Change guidelines
 
-1. Branch from `main`
-2. Make your changes with tests
-3. Run `make lint && make test` — both must pass
-4. Open a PR with a clear description of what and why
-5. Reference any related issue with `Closes #123`
+- Keep database access parameterized and agent tools read-only.
+- Keep API and agent tool inputs and outputs explicit and validated.
+- Do not commit secrets, local environment files, generated models, or caches.
+- Add or update focused tests when changing behavior.
+- Update one of the five project docs only when the change affects its subject.
 
-## Architecture Decisions
+## Pull requests
 
-Significant technical decisions are documented as ADRs in `docs/adr/`.
-If your PR makes a decision that future contributors would ask "why did they do it this way?",
-write an ADR for it.
-EOF
+Use a short branch name such as `feat/telemetry-filter` or
+`fix/agent-timeout`. Open a PR against `main`, explain the user-visible change,
+and include the checks you ran. Use Conventional Commit prefixes such as
+`feat:`, `fix:`, `docs:`, `test:`, or `chore:`.
+
+Keep discussion respectful and focused on the work. Report conduct concerns to
+the maintainers at `abdullahazeemi.work@gmail.com`.
+
+## Security reports
+
+Do not post vulnerabilities in a public issue. Email
+`abdullahazeemi.work@gmail.com` with the impact and, if possible, reproduction
+steps and affected files or routes. Never commit `.env` files, credentials,
+private API tokens, or sensitive database dumps.

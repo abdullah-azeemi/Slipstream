@@ -1,3 +1,4 @@
+import { getAuthToken } from '@/lib/auth-token'
 import type {
   Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus
 } from '@/types/f1'
@@ -11,9 +12,13 @@ class APIError extends Error {
   }
 }
 
-async function get<T>(path: string, serverOnly = false): Promise<T> {
+async function get<T>(path: string, serverOnly = false, token?: string): Promise<T> {
+  const bearer = token ?? getAuthToken()
   const options: RequestInit = {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+    },
     // Only add next.revalidate in server context
     ...(serverOnly ? { next: { revalidate: 60 } } : { cache: 'no-store' }),
   }
@@ -30,8 +35,8 @@ export const api = {
     get: () => get<HealthStatus>('/health'),
   },
   sessions: {
-    list: (server = false) => get<Session[]>('/api/v1/sessions', server),
-    get: (key: number, server = false) => get<Session>(`/api/v1/sessions/${key}`, server),
+    list: (server = false, token?: string) => get<Session[]>('/api/v1/sessions', server, token),
+    get: (key: number, server = false, token?: string) => get<Session>(`/api/v1/sessions/${key}`, server, token),
   },
   laps: {
     list: (key: number, driver?: number) =>
@@ -88,7 +93,7 @@ export const telemetryApi = {
 export const predictionsApi = {
   predict: (qualiKey: number) =>
     get<import('@/types/f1').PredictionResponse>(
-      `/api/v1/sessions/${qualiKey}/predict`
+      `/api/v1/sessions/${qualiKey}/predictions`
     ),
 }
 
@@ -97,10 +102,122 @@ export const raceIntelligenceApi = {
     get<import('@/types/f1').RaceIntelligenceResponse>(
       `/api/v1/sessions/${key}/analysis/race-intelligence`
     ),
-    events: (key: number, type?: string) => {
-      const q = type ? `?type=${encodeURIComponent(type)}` : ''
-      return get<import('@/types/f1').RaceIntelligenceResponse>(
-        `/api/v1/sessions/${key}/analysis/race-intelligence/events${q}`
-      )
-    },
+}
+
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+// ── Agent conversation API (L16) ──────────────────────────
+// These require a Clerk Bearer token, so they use the raw fetch pattern
+// instead of the server-safe `get()` helper above.
+
+export const agentApi = {
+  listConversations: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/conversations`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to list conversations (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').ConversationSummary[]>
+  },
+
+  getConversation: async (
+    convId: number,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/conversations/${convId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to load conversation (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').ConversationDetail>
+  },
+
+  getUsage: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/api/v1/agent/usage`, {
+      headers: {
+        'Content-Type' : 'application/json', 
+         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch usage (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').UsageInfo>
+  },
+
+  getLimits: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/limits`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch usage limits (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').UsageInfo>
+  },
+
+  getAdminStats: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/stats`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch admin stats (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').AdminStats>
+  },
+
+  rateRun: async (
+    runId: number,
+    rating: 1 | -1,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/runs/${runId}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ rating }),
+    })
+    if (!res.ok) throw new Error(`Failed to rate run (${res.status})`)
+    return res.json() as Promise<{ run_id: number; rating: 1 | -1 | null }>
+  },
+
+  clearFeedback: async (
+    runId: number,
+    getToken: () => Promise<string | null>
+  ) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/runs/${runId}/feedback`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to clear feedback (${res.status})`)
+    return res.json() as Promise<{ run_id: number; rating: null }>
+  },
+
+  getFeedbackStats: async (getToken: () => Promise<string | null>) => {
+    const token = await getToken()
+    const res = await fetch(`${API_URL}/api/v1/agent/admin/feedback`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) throw new Error(`Failed to fetch feedback stats (${res.status})`)
+    return res.json() as Promise<import('@/types/agent').FeedbackStats>
+  },
 }

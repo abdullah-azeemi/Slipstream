@@ -1,21 +1,37 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
-from backend import extensions
+from datetime import datetime, timezone
+from backend import auth, extensions
+from backend.config import settings
 
 sessions_bp = Blueprint("sessions", __name__)
 
 
+@sessions_bp.before_request
+def require_clerk_session():
+    """Clerk-protected product API: reject requests without a valid JWT."""
+    return auth.require_api_auth()
+
+
+def _current_year() -> int:
+    return datetime.now(timezone.utc).year
+
+
 def _is_missing_table_error(exc: ProgrammingError) -> bool:
-    return "UndefinedTable" in exc.__class__.__name__ or "does not exist" in str(exc.orig)
+    return "UndefinedTable" in exc.__class__.__name__ or "does not exist" in str(
+        exc.orig
+    )
 
 
 def _missing_schema_response():
-    return jsonify({
-        "error": "Database schema is not initialized",
-        "detail": "The backend connected to Postgres, but required Pitwall tables such as sessions do not exist.",
-        "suggested_command": "uv run alembic -c apps/backend/alembic.ini upgrade head",
-    }), 503
+    return jsonify(
+        {
+            "error": "Database schema is not initialized",
+            "detail": "The backend connected to Postgres, but required Pitwall tables such as sessions do not exist.",
+            "suggested_command": "uv run alembic -c apps/backend/alembic.ini upgrade head",
+        }
+    ), 503
 
 
 @sessions_bp.get("/sessions")
@@ -274,15 +290,14 @@ def driver_standings():
     Official driver championship standings via FastF1 → Jolpica-F1 API.
     Uses FastF1's caching so repeat calls are instant.
 
-    Query param: ?year=2026 (default: current year)
+    Query param: ?year=<year> (default: current year)
     """
     import fastf1
     from fastf1.ergast import Ergast
-    import os
 
-    year = request.args.get("year", 2026, type=int)
+    year = request.args.get("year", _current_year(), type=int)
 
-    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    cache_dir = settings.fastf1_cache_dir
     try:
         fastf1.Cache.enable_cache(cache_dir)
     except Exception:
@@ -330,15 +345,14 @@ def driver_standings():
 def constructor_standings():
     """
     Official constructor championship standings via FastF1 → Jolpica-F1 API.
-    Query param: ?year=2026
+    Query param: ?year=<year> (default: current year)
     """
     import fastf1
     from fastf1.ergast import Ergast
-    import os
 
-    year = request.args.get("year", 2026, type=int)
+    year = request.args.get("year", _current_year(), type=int)
 
-    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    cache_dir = settings.fastf1_cache_dir
     try:
         fastf1.Cache.enable_cache(cache_dir)
     except Exception:

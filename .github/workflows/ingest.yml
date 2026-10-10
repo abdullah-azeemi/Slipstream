@@ -1,0 +1,84 @@
+name: Ingest & Train
+
+# Keeps the hosted database fresh without paying for an always-on worker.
+#  - Ingestion runs on the GitHub runner against Neon.
+#  - Training runs on the Fly machine so the model lands on the /data volume.
+#
+# Required repository secrets:
+#   DATABASE_URL            Neon connection string (postgresql://...)
+#   TELEMETRY_ARTIFACT_BUCKET
+#   R2_ENDPOINT_URL
+#   R2_ACCESS_KEY_ID
+#   R2_SECRET_ACCESS_KEY
+#   FLY_API_TOKEN           from `fly tokens create org`
+
+on:
+  schedule:
+    # Every Monday 06:00 UTC, after a typical race weekend.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ingest-train
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      new_sessions: ${{ steps.auto-ingest.outputs.new_sessions }}
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Raw lap traces -> R2; Postgres keeps only metadata (Neon free tier).
+      TELEMETRY_STORAGE_MODE: files
+      TELEMETRY_ARTIFACT_BACKEND: r2
+      TELEMETRY_ARTIFACT_BUCKET: ${{ secrets.TELEMETRY_ARTIFACT_BUCKET }}
+      R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      FASTF1_CACHE_DIR: /tmp/fastf1_cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Apply database migrations
+        run: uv run alembic -c apps/backend/alembic.ini upgrade head
+
+      - name: Ingest completed sessions
+        id: auto-ingest
+        run: uv run python -m ingestion.auto_ingest
+
+  train:
+    needs: ingest
+    if: needs.ingest.outputs.new_sessions == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # Wakes the machine (scale-to-zero aware), trains on the /data volume,
+      # then lets it fall back asleep. Secrets + volume come from the machine.
+      - name: Retrain model on Fly
+        run: |
+          flyctl ssh console \
+            --app pitwall-api \
+            --command "/app/.venv/bin/python -m ml.train"

@@ -19,7 +19,7 @@ export default function Sidebar() {
 
   const navItems = [
     { name: 'RACE OVERVIEW', icon: LayoutDashboard, href: '/dashboard', active: pathname === '/dashboard' },
-    { name: 'LATEST WEEKEND', icon: Flag, href: '/sessions/latest', active: pathname === '/sessions/latest' || pathname.endsWith('/overview') },
+    { name: 'LATEST WEEKEND', icon: Flag, href: '/sessions/latest', active: pathname === '/sessions/latest' || /^\/sessions\/\d+/.test(pathname) },
     { name: 'DRIVER ANALYSIS', icon: User, href: '/analysis', active: pathname === '/analysis' },
     { name: 'CAR SETUP', icon: Sliders, href: '/setup', active: pathname === '/setup' },
     { name: 'STRATEGY TOOL', icon: Brain, href: '/predictions', active: pathname === '/predictions' },

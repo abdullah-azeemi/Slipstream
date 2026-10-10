@@ -3,10 +3,15 @@ FastF1 client — fetches and normalises session data.
 """
 
 from __future__ import annotations
+import math
 import warnings
-import fastf1
+from typing import TYPE_CHECKING
+
 import pandas as pd
 import structlog
+
+if TYPE_CHECKING:
+    import fastf1
 
 warnings.filterwarnings("ignore")
 log = structlog.get_logger()
@@ -27,7 +32,9 @@ def _segment_quali_laps(laps):
 
     all_laps = all_laps.sort_values("LapStartTime")
     all_laps["gap"] = all_laps["LapStartTime"].diff()
-    boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)]["LapStartTime"].tolist()
+    boundaries = all_laps[all_laps["gap"] > pd.Timedelta(minutes=5)][
+        "LapStartTime"
+    ].tolist()
 
     def assign_segment(t):
         if len(boundaries) == 0:
@@ -46,10 +53,12 @@ def _segment_quali_laps(laps):
 
 
 def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
+    import fastf1  # heavy — pulled in lazily; ingestion workers only
+
     fastf1.Cache.enable_cache("./fastf1_cache")
     session = fastf1.get_session(year, gp, session_type)
     load_weather = True
-    session.load(telemetry=True, weather=load_weather, messages=False)
+    session.load(telemetry=True, weather=load_weather, messages=True, livedata=None)
     log.info(
         "session.loaded",
         year=year,
@@ -111,7 +120,11 @@ def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict
 
 def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     laps = session.laps
-    lap_segment_map = _segment_quali_laps(laps) if session.name in ("Qualifying", "Sprint Qualifying") else {}
+    lap_segment_map = (
+        _segment_quali_laps(laps)
+        if session.name in ("Qualifying", "Sprint Qualifying")
+        else {}
+    )
     results = []
     for _, row in laps.iterrows():
         try:
@@ -120,7 +133,11 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
             continue
         lap_number = row.get("LapNumber")
         try:
-            quali_segment = lap_segment_map.get((str(driver_num), int(lap_number))) if lap_number is not None else None
+            quali_segment = (
+                lap_segment_map.get((str(driver_num), int(lap_number)))
+                if lap_number is not None
+                else None
+            )
         except (TypeError, ValueError):
             quali_segment = None
         results.append(
@@ -155,26 +172,230 @@ def extract_laps(session: fastf1.core.Session, session_key: int) -> list[dict]:
     return results
 
 
+def extract_race_control(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    """Extract the race control messages (safety car, VSC, yellow/red flags, DRS) into a list of events dicts for storage"""
+    try:
+        rc = session.race_control_messages
+    except Exception as e:
+        log.warning("race_control.extract_failed", error=str(e))
+        return []
+
+    if rc is None or rc.empty:
+        log.info("race_control.empty", session_key=session_key)
+        return []
+
+    results = []
+    for _, row in rc.iterrows():
+        results.append(
+            {
+                "session_key": session_key,
+                "category": _clean(row.get("Category")),
+                "flag": _clean(row.get("Flag")),
+                "scope": _clean(row.get("Scope")),
+                "driver_number": _to_int(row.get("DriverNumber")),
+                "sector": _to_int(row.get("Sector")),
+                "lap_number": _to_int(row.get("LapNumber")),
+                "message": _clean(row.get("Message")),
+            }
+        )
+    log.info("race_control.extracted", session_key=session_key, count=len(results))
+    return results
+
+
+def _lap_start_times(session, driver_number=None):
+    """
+    Build a sorted list of (lap_number, start) covering the session's recorded
+    laps (optionally one driver). The `start` value is the absolute lock-step ON
+    LapStartDate when available, otherwise it falls back to the session-relative
+    LapStartTime clock. Used to derive a lap_number from a timestamp (team radio,
+    weather). Returns [] when lap data is absent.
+    """
+    laps = session.laps
+    if laps is None or laps.empty:
+        return []
+    has_date = "LapStartDate" in laps and laps["LapStartDate"].notna().any()
+    col = "LapStartDate" if has_date else "LapStartTime"
+    if col not in laps:
+        return []
+    rows = []
+    for _, row in laps.iterrows():
+        drv = row.get("DriverNumber")
+        try:
+            drv = int(drv)
+        except (TypeError, ValueError):
+            continue
+        if driver_number is not None and drv != driver_number:
+            continue
+        start = row.get(col)
+        lap = row.get("LapNumber")
+        try:
+            lap = int(lap)
+        except (TypeError, ValueError):
+            continue
+        if start is None or lap is None:
+            continue
+        try:
+            if pd.isna(start):
+                continue
+        except Exception:
+            pass
+        rows.append((int(lap), start))
+    rows.sort(key=lambda r: r[1])
+    return rows
+
+
+def _lap_for_timestamp(lap_starts: list[tuple[int, object]], ts) -> int | None:
+    """Return the lap_number whose [start, next_start) window contains ts."""
+    if not lap_starts or ts is None:
+        return None
+    try:
+        if isinstance(ts, str):
+            ts = pd.Timestamp(ts)
+    except (ValueError, TypeError):
+        return None
+    if not lap_starts:
+        return None
+
+    # LapStartDate from FastF1 is usually tz-naive while our incoming timestamps
+    # (OpenF1 `date`, weather `t0_date + Time`) are tz-aware UTC. Normalise the
+    # incoming ts to the same timezone convention as the lap-start reference so
+    # the comparison doesn't throw a naive/aware mismatch.
+    ref = lap_starts[0][1]
+    if isinstance(ts, pd.Timestamp) and isinstance(ref, pd.Timestamp):
+        if ref.tzinfo is None and ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        elif ref.tzinfo is not None and ts.tzinfo is None:
+            ts = ts.tz_localize(ref.tzinfo)
+
+    best_lap = None
+    for lap, start in lap_starts:
+        try:
+            if pd.isna(start):
+                continue
+            if start <= ts:
+                best_lap = lap
+            else:
+                break
+        except (TypeError, ValueError):
+            # clock mismatch (absolute LapStartDate vs relative LapStartTime, or
+            # vice versa) — the two sources aren't on the same timebase
+            return None
+    return best_lap
+
+
+def extract_weather_events(
+    session: fastf1.core.Session, session_key: int
+) -> list[dict]:
+    """
+    Extract every weather sample from session.weather_data into event rows,
+    deriving the lap_number each sample belongs to from lap start times.
+    This powers "Was it raining when he pitted?" style queries.
+    """
+    try:
+        wx = session.weather_data
+    except Exception as e:
+        log.warning("weather_events.extract_failed", error=str(e))
+        return []
+    if wx is None or wx.empty:
+        return []
+
+    lap_starts = _lap_start_times(session)
+
+    results = []
+    for _, row in wx.iterrows():
+        # weather_data is indexed by a RangeIndex with a t0-relative `Time`
+        # column (timedelta since session start). Lap starts are absolute
+        # (`LapStartDate = LapStartTime + t0`) when telemetry was loaded, so we
+        # must convert weather Time to the same absolute clock via session.t0_date.
+        t_rel = row.get("Time")
+        ts: object | None = None
+        lap_number: int | None = None
+        if t_rel is not None:
+            relative_clock = not lap_starts or not isinstance(
+                lap_starts[0][1], pd.Timestamp
+            )
+            if not relative_clock:
+                try:
+                    t0 = session.t0_date
+                    ts = pd.Timestamp(t0) + pd.Timedelta(t_rel)
+                    lap_number = _lap_for_timestamp(lap_starts, ts)
+                except Exception:
+                    relative_clock = True
+            if relative_clock:
+                ts = t_rel
+                lap_number = _lap_for_timestamp(lap_starts, ts)
+        rainfall = row.get("RainFull", row.get("Rainfall", False))
+        results.append(
+            {
+                "session_key": session_key,
+                "timestamp": str(ts) if ts is not None else None,
+                "lap_number": lap_number,
+                "track_temp_c": _to_float(row.get("TrackTemp")),
+                "air_temp_c": _to_float(row.get("AirTemp")),
+                "humidity_pct": _to_float(row.get("Humidity")),
+                "rainfall": bool(rainfall),
+                "wind_speed_ms": _to_float(row.get("WindSpeed")),
+            }
+        )
+    log.info("weather_events.extracted", session_key=session_key, count=len(results))
+    return results
+
+
+def _clean(val):
+    """sanitise a string field (NaN → None)"""
+    if (
+        val is None
+        or (isinstance(val, float) and math.isnan(val))
+        or str(val).strip() == ""
+    ):
+        return None
+    return str(val).strip()
+
+
+def _to_int(val):
+    """sanitise an int field (NaN/empty → None)"""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_float(val):
+    """sanitise a float field (NaN/empty → None)"""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def extract_telemetry(
     session: fastf1.core.Session,
     session_key: int,
     all_drivers: bool = False,
+    all_laps: bool = False,
 ) -> list[dict]:
     """
-    Extract telemetry for the best qualifying lap in each segment.
+    Extract telemetry samples for a session.
 
     Captures: speed, rpm, gear, throttle, brake, drs, distance.
     Distance is key — it's metres around the lap, so two drivers
     can be compared at the exact same track position regardless of
     how many samples they have.
 
-    To keep storage lean while still supporting the Q1/Q2/Q3 switcher,
-    we only store up to one telemetry lap per driver per segment:
+    Qualifying stores up to one telemetry lap per driver per segment:
     best Q1, best Q2, best Q3.
+
+    Race ingestion can pass all_laps=True so the agent can compute windows
+    around any pit stop without guessing from partial traces.
     """
     results = []
     drivers = session.drivers if all_drivers else session.drivers[:10]
-    lap_segment_map = _segment_quali_laps(session.laps)
+    is_qualifying = session.name in ("Qualifying", "Sprint Qualifying")
+    lap_segment_map = _segment_quali_laps(session.laps) if is_qualifying else {}
 
     for drv in drivers:
         try:
@@ -193,23 +414,34 @@ def extract_telemetry(
                 log.debug("telemetry.no_valid_laps", driver=drv)
                 continue
 
-            best_laps_by_segment = {}
-            for _, lap in valid_laps.iterrows():
-                lap_number = int(lap["LapNumber"])
-                segment = lap_segment_map.get((str(drv), lap_number), 1)
-                current_best = best_laps_by_segment.get(segment)
-                if current_best is None or lap["LapTime"] < current_best["LapTime"]:
-                    best_laps_by_segment[segment] = lap
+            if all_laps:
+                laps_to_store = list(valid_laps.sort_values("LapNumber").iterrows())
+            else:
+                best_laps_by_segment = {}
+                for _, lap in valid_laps.iterrows():
+                    lap_number = int(lap["LapNumber"])
+                    segment = lap_segment_map.get((str(drv), lap_number), 1)
+                    current_best = best_laps_by_segment.get(segment)
+                    if current_best is None or lap["LapTime"] < current_best["LapTime"]:
+                        best_laps_by_segment[segment] = lap
+                laps_to_store = [
+                    (None, best_laps_by_segment[segment])
+                    for segment in sorted(best_laps_by_segment)
+                ]
 
             driver_sample_count = 0
             stored_lap_count = 0
 
-            for segment in sorted(best_laps_by_segment):
-                lap = best_laps_by_segment[segment]
+            for _, lap in laps_to_store:
                 try:
                     tel = lap.get_telemetry()
                 except Exception as e:
-                    log.debug("telemetry.lap_failed", driver=drv, lap_number=lap.get("LapNumber"), error=str(e))
+                    log.debug(
+                        "telemetry.lap_failed",
+                        driver=drv,
+                        lap_number=lap.get("LapNumber"),
+                        error=str(e),
+                    )
                     continue
 
                 if tel is None or tel.empty:
@@ -237,7 +469,12 @@ def extract_telemetry(
                     )
                 driver_sample_count += len(tel)
 
-            log.info("telemetry.driver_done", driver=drv, laps=stored_lap_count, samples=driver_sample_count)
+            log.info(
+                "telemetry.driver_done",
+                driver=drv,
+                laps=stored_lap_count,
+                samples=driver_sample_count,
+            )
 
         except Exception as e:
             log.warning("telemetry.skip", driver=drv, error=str(e))

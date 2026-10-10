@@ -28,7 +28,7 @@ describe('session routing helpers', () => {
   })
 
   it('builds overview and telemetry routes explicitly', () => {
-    expect(getSessionOverviewRoute(11286)).toBe('/sessions/11286/overview')
+    expect(getSessionOverviewRoute(11286)).toBe('/sessions/11286')
     expect(getSessionTelemetryRoute(11287)).toBe('/sessions/11287/telemetry')
   })
 })

@@ -45,7 +45,7 @@ describe('session weekend helpers', () => {
       makeSession({ session_key: 204, year: 2026, gp_name: 'Chinese Grand Prix', session_type: 'SS', date_start: '2026-03-22T03:00:00Z' }),
     ]
 
-    expect(getLatestWeekendOverviewRoute(sessions)).toBe('/sessions/204/overview')
+    expect(getLatestWeekendOverviewRoute(sessions)).toBe('/sessions/204')
   })
 
   it('falls back to null when no weekends exist', () => {

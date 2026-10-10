@@ -4,6 +4,7 @@ Loader — writes ingested data to TimescaleDB.
 All inputs are plain dicts from fastf1_client (raw FastF1 values).
 This module handles all type conversion: Timedeltas to ms, NaN to None, etc.
 """
+
 from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
@@ -16,31 +17,30 @@ import structlog
 log = structlog.get_logger()
 
 TEAM_COLOUR_FALLBACK: dict[str, str] = {
-    'McLaren':          'FF8000',
-    'Ferrari':          'E8002D',
-    'Red Bull Racing':  '3671C6',
-    'Mercedes':         '27F4D2',
-    'Aston Martin':     '229971',
-    'Alpine':           'FF87BC',
-    'Williams':         '64C4FF',
-    'Haas':             'B6BABD',
-    'Kick Sauber':      '52E252',
-    'Sauber':           '52E252',
-    'RB':               '6692FF',
-    'Racing Bulls':     '6692FF',
-    'Cadillac':         'C8A217',
-    'Audi':             'C8A217',
+    "McLaren": "FF8000",
+    "Ferrari": "E8002D",
+    "Red Bull Racing": "3671C6",
+    "Mercedes": "27F4D2",
+    "Aston Martin": "229971",
+    "Alpine": "FF87BC",
+    "Williams": "64C4FF",
+    "Haas": "B6BABD",
+    "Kick Sauber": "52E252",
+    "Sauber": "52E252",
+    "RB": "6692FF",
+    "Racing Bulls": "6692FF",
+    "Cadillac": "C8A217",
+    "Audi": "C8A217",
 }
 
 
 def _get_engine():
-    url = settings.database_url.replace("postgres://", "postgresql+psycopg://").replace("postgresql://", "postgresql+psycopg://")
-    return create_engine(url)
+    return create_engine(settings.db_url)
 
 
 def _resolve_colour(colour: Optional[str], team_name: Optional[str]) -> Optional[str]:
     if colour and colour.strip():
-        return colour.lstrip('#')
+        return colour.lstrip("#")
     if team_name:
         if team_name in TEAM_COLOUR_FALLBACK:
             return TEAM_COLOUR_FALLBACK[team_name]
@@ -55,8 +55,10 @@ def _td_to_ms(val) -> Optional[float]:
     if val is None:
         return None
     import math
+
     try:
         import pandas as pd
+
         if pd.isna(val):
             return None
     except Exception:
@@ -76,7 +78,7 @@ def _clean_str(val) -> Optional[str]:
     if val is None:
         return None
     s = str(val).strip()
-    return None if s in ('', 'nan', 'None', 'NaT') else s
+    return None if s in ("", "nan", "None", "NaT") else s
 
 
 def _clean_bool(val) -> bool:
@@ -84,6 +86,7 @@ def _clean_bool(val) -> bool:
         return False
     try:
         import math
+
         if math.isnan(float(val)):
             return False
     except (TypeError, ValueError):
@@ -96,6 +99,7 @@ def _clean_int(val) -> Optional[int]:
         return None
     try:
         import math
+
         f = float(val)
         return None if math.isnan(f) else int(f)
     except (TypeError, ValueError):
@@ -107,6 +111,7 @@ def _clean_float(val) -> Optional[float]:
         return None
     try:
         import math
+
         f = float(val)
         return None if math.isnan(f) else f
     except (TypeError, ValueError):
@@ -115,10 +120,12 @@ def _clean_float(val) -> Optional[float]:
 
 # ── Session ──────────────────────────────────────────────────────────────────
 
+
 def upsert_session(info: dict) -> int:
     engine = _get_engine()
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO sessions (
                 session_key, year, gp_name, country,
                 session_type, session_name, date_start
@@ -132,22 +139,25 @@ def upsert_session(info: dict) -> int:
                 session_type = EXCLUDED.session_type,
                 session_name = EXCLUDED.session_name,
                 date_start   = EXCLUDED.date_start
-        """), info)
-    log.info("loader.session_upserted", session_key=info['session_key'])
-    return info['session_key']
+        """),
+            info,
+        )
+    log.info("loader.session_upserted", session_key=info["session_key"])
+    return info["session_key"]
 
 
 def update_session_weather(
     session_key: int,
-    track_temp:  Optional[float] = None,
-    air_temp:    Optional[float] = None,
-    humidity:    Optional[float] = None,
-    rainfall:    Optional[bool]  = None,
-    wind_speed:  Optional[float] = None,
+    track_temp: Optional[float] = None,
+    air_temp: Optional[float] = None,
+    humidity: Optional[float] = None,
+    rainfall: Optional[bool] = None,
+    wind_speed: Optional[float] = None,
 ) -> None:
     engine = _get_engine()
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             UPDATE sessions SET
                 track_temp_c  = :track_temp,
                 air_temp_c    = :air_temp,
@@ -155,18 +165,21 @@ def update_session_weather(
                 rainfall      = :rainfall,
                 wind_speed_ms = :wind_speed
             WHERE session_key = :session_key
-        """), {
-            'session_key': session_key,
-            'track_temp':  track_temp,
-            'air_temp':    air_temp,
-            'humidity':    humidity,
-            'rainfall':    rainfall,
-            'wind_speed':  wind_speed,
-        })
+        """),
+            {
+                "session_key": session_key,
+                "track_temp": track_temp,
+                "air_temp": air_temp,
+                "humidity": humidity,
+                "rainfall": rainfall,
+                "wind_speed": wind_speed,
+            },
+        )
     log.info("loader.weather_updated", session_key=session_key)
 
 
 # ── Drivers ───────────────────────────────────────────────────────────────────
+
 
 def load_drivers(drivers: list[dict]) -> None:
     if not drivers:
@@ -175,11 +188,12 @@ def load_drivers(drivers: list[dict]) -> None:
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM drivers WHERE session_key = :sk"),
-            {"sk": drivers[0]['session_key']}
+            {"sk": drivers[0]["session_key"]},
         )
         for d in drivers:
-            resolved_colour = _resolve_colour(d.get('team_colour'), d.get('team_name'))
-            conn.execute(text("""
+            resolved_colour = _resolve_colour(d.get("team_colour"), d.get("team_name"))
+            conn.execute(
+                text("""
                 INSERT INTO drivers (
                     session_key, driver_number, full_name,
                     abbreviation, team_name, team_colour
@@ -187,11 +201,14 @@ def load_drivers(drivers: list[dict]) -> None:
                     :session_key, :driver_number, :full_name,
                     :abbreviation, :team_name, :team_colour
                 )
-            """), {**d, 'team_colour': resolved_colour})
+            """),
+                {**d, "team_colour": resolved_colour},
+            )
     log.info("loader.drivers_loaded", count=len(drivers))
 
 
 # ── Laps ──────────────────────────────────────────────────────────────────────
+
 
 def load_laps(laps: list[dict], session_key: int) -> int:
     if not laps:
@@ -200,58 +217,200 @@ def load_laps(laps: list[dict], session_key: int) -> int:
     engine = _get_engine()
     rows = []
     for lap in laps:
-        rows.append({
-            'session_key':      session_key,
-            'driver_number':    _clean_int(lap.get('driver_number')),
-            'lap_number':       _clean_int(lap.get('lap_number')),
-            'lap_time_ms':      _td_to_ms(lap.get('lap_time_ms')),
-            's1_ms':            _td_to_ms(lap.get('s1_ms')),
-            's2_ms':            _td_to_ms(lap.get('s2_ms')),
-            's3_ms':            _td_to_ms(lap.get('s3_ms')),
-            'compound':         _clean_str(lap.get('compound')),
-            'tyre_life_laps':   _clean_int(lap.get('tyre_life_laps')),
-            'is_personal_best': _clean_bool(lap.get('is_personal_best')),
-            'track_status':     _clean_str(lap.get('track_status')),
-            'position':         _clean_int(lap.get('position')),
-            'quali_segment':    _clean_int(lap.get('quali_segment')),
-            'deleted':          _clean_bool(lap.get('deleted')),
-            'recorded_at':      now,
-            # Speed trap measurements — from FastF1 SpeedI1/I2/FL/ST
-            # These are km/h readings at official FIA timing lines:
-            # speed_i1 = intermediate 1 (end of S1 straight)
-            # speed_i2 = intermediate 2 (mid-lap straight)
-            # speed_fl = finish line speed (exit of final corner)
-            # speed_st = official speed trap (fastest point on circuit)
-            'speed_i1':         _clean_float(lap.get('speed_i1')),
-            'speed_i2':         _clean_float(lap.get('speed_i2')),
-            'speed_fl':         _clean_float(lap.get('speed_fl')),
-            'speed_st':         _clean_float(lap.get('speed_st')),
-        })
+        rows.append(
+            {
+                "session_key": session_key,
+                "driver_number": _clean_int(lap.get("driver_number")),
+                "lap_number": _clean_int(lap.get("lap_number")),
+                "lap_time_ms": _td_to_ms(lap.get("lap_time_ms")),
+                "s1_ms": _td_to_ms(lap.get("s1_ms")),
+                "s2_ms": _td_to_ms(lap.get("s2_ms")),
+                "s3_ms": _td_to_ms(lap.get("s3_ms")),
+                "compound": _clean_str(lap.get("compound")),
+                "tyre_life_laps": _clean_int(lap.get("tyre_life_laps")),
+                "is_personal_best": _clean_bool(lap.get("is_personal_best")),
+                "pit_in_time_ms": _td_to_ms(lap.get("pit_in_time_ms")),
+                "pit_out_time_ms": _td_to_ms(lap.get("pit_out_time_ms")),
+                "track_status": _clean_str(lap.get("track_status")),
+                "stint": _clean_int(lap.get("stint")),
+                "position": _clean_int(lap.get("position")),
+                "fresh_tyre": _clean_bool(lap.get("fresh_tyre")),
+                "deleted_reason": _clean_str(lap.get("deleted_reason")),
+                "is_accurate": _clean_bool(lap.get("is_accurate")),
+                "quali_segment": _clean_int(lap.get("quali_segment")),
+                "deleted": _clean_bool(lap.get("deleted")),
+                "recorded_at": now,
+                # Speed trap measurements — from FastF1 SpeedI1/I2/FL/ST
+                # These are km/h readings at official FIA timing lines:
+                # speed_i1 = intermediate 1 (end of S1 straight)
+                # speed_i2 = intermediate 2 (mid-lap straight)
+                # speed_fl = finish line speed (exit of final corner)
+                # speed_st = official speed trap (fastest point on circuit)
+                "speed_i1": _clean_float(lap.get("speed_i1")),
+                "speed_i2": _clean_float(lap.get("speed_i2")),
+                "speed_fl": _clean_float(lap.get("speed_fl")),
+                "speed_st": _clean_float(lap.get("speed_st")),
+            }
+        )
 
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM lap_times WHERE session_key = :sk"),
-            {"sk": session_key}
+            text("DELETE FROM lap_times WHERE session_key = :sk"), {"sk": session_key}
         )
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO lap_times (
                 session_key, driver_number, lap_number,
                 lap_time_ms, s1_ms, s2_ms, s3_ms,
                 compound, tyre_life_laps,
-                is_personal_best, track_status, position, quali_segment, deleted,
+                is_personal_best, pit_in_time_ms, pit_out_time_ms,
+                track_status, stint, position, fresh_tyre,
+                deleted_reason, is_accurate, quali_segment, deleted,
                 recorded_at,
                 speed_i1, speed_i2, speed_fl, speed_st
             ) VALUES (
                 :session_key, :driver_number, :lap_number,
                 :lap_time_ms, :s1_ms, :s2_ms, :s3_ms,
                 :compound, :tyre_life_laps,
-                :is_personal_best, :track_status, :position, :quali_segment, :deleted,
+                :is_personal_best, :pit_in_time_ms, :pit_out_time_ms,
+                :track_status, :stint, :position, :fresh_tyre,
+                :deleted_reason, :is_accurate, :quali_segment, :deleted,
                 :recorded_at,
                 :speed_i1, :speed_i2, :speed_fl, :speed_st
             )
-        """), rows)
+        """),
+            rows,
+        )
     log.info("loader.laps_loaded", count=len(laps), session_key=session_key)
     return len(laps)
+
+
+def load_race_control(events: list[dict], session_key: int) -> int:
+    """Replace all the race control events for a season with the giiven list"""
+    if not events:
+        return 0
+
+    engine = _get_engine()
+    rows = [
+        {
+            "session_key": session_key,
+            "category": _clean_str(ev.get("category")),
+            "flag": _clean_str(ev.get("flag")),
+            "scope": _clean_str(ev.get("scope")),
+            "driver_number": _clean_int(ev.get("driver_number")),
+            "sector": _clean_int(ev.get("sector")),
+            "lap_number": _clean_int(ev.get("lap_number")),
+            "message": _clean_str(ev.get("message")),
+        }
+        for ev in events
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text(""" DELETE FROM race_control_events WHERE session_key = :sk """),
+            {"sk": session_key},
+        )
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO race_control_events (
+                    session_key, category, flag, scope, driver_number, sector, lap_number, message) 
+                VALUES (
+                    :session_key, :category, :flag, :scope, :driver_number, :sector, :lap_number, :message)
+            """
+            ),
+            rows,
+        )
+    log.info("loader.race_control_loaded", count=len(events), session_key=session_key)
+    return len(events)
+
+
+def load_team_radio(rows: list[dict], session_key: int) -> int:
+    """Replace all team radio clips for a session with the given list."""
+    if not rows:
+        return 0
+
+    engine = _get_engine()
+    clean = [
+        {
+            "session_key": session_key,
+            "driver_number": _clean_int(r.get("driver_number")),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "date": r.get("date"),
+            "recording_url": _clean_str(r.get("recording_url")),
+            "transcript": _clean_str(r.get("transcript")),
+        }
+        for r in rows
+        if r.get("recording_url")
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM team_radio WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        if clean:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO team_radio (
+                        session_key, driver_number, lap_number, date,
+                        recording_url, transcript
+                    ) VALUES (
+                        :session_key, :driver_number, :lap_number, :date,
+                        :recording_url, :transcript
+                    )
+                """
+                ),
+                clean,
+            )
+    log.info("loader.team_radio_loaded", count=len(clean), session_key=session_key)
+    return len(clean)
+
+
+def load_weather_events(rows: list[dict], session_key: int) -> int:
+    """Replace all weather events for a session with the given list."""
+    if not rows:
+        return 0
+
+    engine = _get_engine()
+    clean = [
+        {
+            "session_key": session_key,
+            "timestamp": r.get("timestamp"),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "track_temp_c": _clean_float(r.get("track_temp_c")),
+            "air_temp_c": _clean_float(r.get("air_temp_c")),
+            "humidity_pct": _clean_float(r.get("humidity_pct")),
+            "rainfall": _clean_bool(r.get("rainfall")),
+            "wind_speed_ms": _clean_float(r.get("wind_speed_ms")),
+        }
+        for r in rows
+        if r.get("timestamp")
+    ]
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM weather_events WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        if clean:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO weather_events (
+                        session_key, timestamp, lap_number,
+                        track_temp_c, air_temp_c, humidity_pct,
+                        rainfall, wind_speed_ms
+                    ) VALUES (
+                        :session_key, :timestamp, :lap_number,
+                        :track_temp_c, :air_temp_c, :humidity_pct,
+                        :rainfall, :wind_speed_ms
+                    )
+                """
+                ),
+                clean,
+            )
+    log.info("loader.weather_events_loaded", count=len(clean), session_key=session_key)
+    return len(clean)
 
 
 # ── Telemetry ─────────────────────────────────────────────────────────────────
@@ -276,8 +435,11 @@ def _telemetry_storage_mode() -> str:
     return mode if mode in {"database", "files"} else "database"
 
 
-def _telemetry_storage_key(session_key: int, driver_number: int, lap_number: int) -> str:
+def _telemetry_storage_key(
+    session_key: int, driver_number: int, lap_number: int
+) -> str:
     return f"telemetry/session_{session_key}/driver_{driver_number}/lap_{lap_number}.parquet"
+
 
 def _r2_client():
     import boto3
@@ -296,6 +458,7 @@ def _write_telemetry_artifact(
     session_key: int,
     driver_number: int,
     lap_number: int,
+    r2_client=None,
 ) -> dict:
     import io
     import pyarrow as pa
@@ -309,9 +472,10 @@ def _write_telemetry_artifact(
     digest = hashlib.sha256(data).hexdigest()
 
     if settings.telemetry_artifact_backend == "r2":
-        _r2_client().put_object(
+        client = r2_client or _r2_client()
+        client.put_object(
             Bucket=settings.telemetry_artifact_bucket,
-            Key= storage_key,
+            Key=storage_key,
             Body=data,
             ContentType="application/vnd.apache.parquet",
         )
@@ -334,7 +498,10 @@ def _write_telemetry_artifact(
         "checksum_sha256": digest,
     }
 
+
 def _load_telemetry_files(rows: list[dict], session_key: int) -> int:
+    from concurrent.futures import ThreadPoolExecutor
+
     engine = _get_engine()
     grouped: dict[tuple[int, int], list[dict]] = {}
     for i, row in enumerate(rows):
@@ -356,20 +523,38 @@ def _load_telemetry_files(rows: list[dict], session_key: int) -> int:
         }
         grouped.setdefault((driver_number, lap_number), []).append(sample)
 
-    artifacts = []
-    for (driver_number, lap_number), samples in grouped.items():
-        samples.sort(key=lambda s: (
-            s["distance_m"] is None,
-            s["distance_m"] if s["distance_m"] is not None else 0,
-            s["sample_order"],
-        ))
-        artifacts.append(_write_telemetry_artifact(samples, session_key, driver_number, lap_number))
+    for samples in grouped.values():
+        samples.sort(
+            key=lambda s: (
+                s["distance_m"] is None,
+                s["distance_m"] if s["distance_m"] is not None else 0,
+                s["sample_order"],
+            )
+        )
+
+    r2 = _r2_client() if settings.telemetry_artifact_backend == "r2" else None
+
+    def _process_item(item):
+        (driver_number, lap_number), samples = item
+        return _write_telemetry_artifact(
+            samples, session_key, driver_number, lap_number, r2_client=r2
+        )
+
+    workers = 16 if settings.telemetry_artifact_backend == "r2" else 4
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        artifacts = list(executor.map(_process_item, grouped.items()))
 
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"), {"sk": session_key})
-        conn.execute(text("DELETE FROM telemetry WHERE session_key = :sk"), {"sk": session_key})
+        conn.execute(
+            text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"),
+            {"sk": session_key},
+        )
+        conn.execute(
+            text("DELETE FROM telemetry WHERE session_key = :sk"), {"sk": session_key}
+        )
         if artifacts:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 INSERT INTO telemetry_artifacts (
                     session_key, driver_number, lap_number,
                     storage_key, storage_backend, format,
@@ -379,9 +564,16 @@ def _load_telemetry_files(rows: list[dict], session_key: int) -> int:
                     :storage_key, :storage_backend, :format,
                     :sample_count, :size_bytes, :checksum_sha256
                 )
-            """), artifacts)
+            """),
+                artifacts,
+            )
 
-    log.info("loader.telemetry_artifacts_loaded", artifacts=len(artifacts), samples=len(rows), session_key=session_key)
+    log.info(
+        "loader.telemetry_artifacts_loaded",
+        artifacts=len(artifacts),
+        samples=len(rows),
+        session_key=session_key,
+    )
     return len(rows)
 
 
@@ -396,30 +588,31 @@ def load_telemetry(rows: list[dict], session_key: int) -> int:
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM telemetry_artifacts WHERE session_key = :sk"),
-            {"sk": session_key}
+            {"sk": session_key},
         )
         conn.execute(
-            text("DELETE FROM telemetry WHERE session_key = :sk"),
-            {"sk": session_key}
+            text("DELETE FROM telemetry WHERE session_key = :sk"), {"sk": session_key}
         )
         batch: list[dict] = []
         for i, row in enumerate(rows):
-            batch.append({
-                'session_key':   session_key,
-                'driver_number': row.get('driver_number'),
-                'lap_number':    row.get('lap_number'),
-                'distance_m':    _clean_float(row.get('distance_m')),
-                'speed_kmh':     _clean_float(row.get('speed_kmh')),
-                'throttle_pct':  _clean_float(row.get('throttle_pct')),
-                'brake':         bool(row.get('brake', False)),
-                'gear':          _clean_int(row.get('gear')),
-                'rpm':           _clean_float(row.get('rpm')),
-                'drs':           _clean_int(row.get('drs')),
-                'x_pos':         _clean_float(row.get('x_pos')),
-                'y_pos':         _clean_float(row.get('y_pos')),
-                'recorded_at':   row.get('recorded_at') or now,
-                'sample_order':  row.get('sample_order', i),
-            })
+            batch.append(
+                {
+                    "session_key": session_key,
+                    "driver_number": row.get("driver_number"),
+                    "lap_number": row.get("lap_number"),
+                    "distance_m": _clean_float(row.get("distance_m")),
+                    "speed_kmh": _clean_float(row.get("speed_kmh")),
+                    "throttle_pct": _clean_float(row.get("throttle_pct")),
+                    "brake": bool(row.get("brake", False)),
+                    "gear": _clean_int(row.get("gear")),
+                    "rpm": _clean_float(row.get("rpm")),
+                    "drs": _clean_int(row.get("drs")),
+                    "x_pos": _clean_float(row.get("x_pos")),
+                    "y_pos": _clean_float(row.get("y_pos")),
+                    "recorded_at": row.get("recorded_at") or now,
+                    "sample_order": row.get("sample_order", i),
+                }
+            )
             if len(batch) >= 1000:
                 conn.execute(text(_TEL_INSERT), batch)
                 batch = []

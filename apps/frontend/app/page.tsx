@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { Zap, Brain, Globe, Activity } from 'lucide-react'
+import { Zap, ChevronDown } from 'lucide-react'
 
 function LandingHeroMedia() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -57,7 +57,7 @@ function LandingHeroMedia() {
     <>
       <Image
         src="/LandingPage3-poster.jpg"
-        alt="Pitwall landing page hero"
+        alt="Pitwall landing page hero preview"
         fill
         priority
         sizes="(max-width: 768px) 100vw, 1000px"
@@ -81,7 +81,7 @@ function LandingHeroMedia() {
             height: '100%',
             objectFit: 'cover',
             opacity: videoReady ? 1 : 0,
-            transition: 'opacity 220ms ease',
+            transition: 'opacity 300ms ease',
           }}
         >
           <source src="/LandingPage3.webm" type="video/webm" />
@@ -93,361 +93,358 @@ function LandingHeroMedia() {
 }
 
 export default function LandingPage() {
-  return (
-    <div style={{ background: '#FAFAFA', overflowX: 'hidden', width: '100%', paddingTop: 16 }}>
+  const [activeObjective, setActiveObjective] = useState<number>(0)
 
-      {/*  HERO SECTION ─────────────────────────────────────────────────── */}
+  const objectives = [
+    {
+      title: 'Automated Lap Delta Analysis',
+      subtitle: 'Identify exact corner numbers where drivers gain or lose lap time.',
+      matchup: 'VER (Red Bull) vs NOR (McLaren)',
+      metric: '-0.142s Delta',
+      discipline: 'High Frequency 100Hz Sync',
+    },
+    {
+      title: 'Tyre Degradation & Compound Wear',
+      subtitle: 'Real-time thermal degradation curves for Soft, Medium, and Hard compounds.',
+      matchup: 'LEC (Ferrari) vs RUS (Mercedes)',
+      metric: '0.08s / lap wear rate',
+      discipline: 'Pirelli C3 Soft Model',
+    },
+    {
+      title: 'Predictive Pit Stop Windows',
+      subtitle: 'Undercut and overcut window warnings calculated live during the race.',
+      matchup: 'HAM (Ferrari) vs PIA (McLaren)',
+      metric: 'Lap 24-27 Pit Window',
+      discipline: 'Monte Carlo 10k Sims',
+    },
+  ]
+
+  return (
+    <div style={{ background: '#FFFFFF', color: '#111827', width: '100%', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+
+      {/* Responsive Stylesheet */}
       <style>{`
-        .hero-gif-card { aspect-ratio: 16 / 6.5; }
+        @media (max-width: 1024px) {
+          .hero-section { padding: 4px 20px 24px !important; }
+          .spotlight-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .spotlight-left { grid-column: span 12 !important; padding: 32px 24px !important; min-height: auto !important; }
+          .spotlight-right { grid-column: span 12 !important; }
+        }
+
         @media (max-width: 768px) {
-          .hero-gif-card { aspect-ratio: 6.25 / 7.5 !important; }
+          .landing-header { padding: 0 16px !important; height: 52px !important; }
+          .hidden-mobile { display: none !important; }
+          .hero-title { font-size: 1.8rem !important; margin-bottom: 16px !important; line-height: 1.15 !important; }
+          .hero-video-box { height: auto !important; aspect-ratio: 16 / 9 !important; border-radius: 16px !important; margin-bottom: 24px !important; }
+          .hero-subtitle { font-size: 13.5px !important; margin-bottom: 40px !important; }
+          .partners-band { padding: 16px 16px !important; margin-bottom: 48px !important; }
+          .partners-grid { justify-content: center !important; gap: 16px 24px !important; }
+          .spotlight-section { margin-bottom: 64px !important; padding: 0 16px !important; }
+          .spotlight-left { padding: 20px 14px !important; border-radius: 18px !important; }
+          .mockup-card { padding: 18px 14px !important; border-radius: 14px !important; }
+          .mockup-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .landing-footer { flex-direction: column !important; text-align: center !important; gap: 16px !important; padding: 24px 16px !important; }
+        }
+
+        @media (max-width: 480px) {
+          .hidden-xs { display: none !important; }
+          .get-started-btn { padding: 7px 14px !important; font-size: 12px !important; }
+          .hero-title { font-size: 1.6rem !important; }
         }
       `}</style>
 
-      <section style={{
-        maxWidth: 1100,
-        margin: '0 auto 32px',
-        padding: '0 24px',
-        textAlign: 'center',
+      {/* ── HERO SECTION ─────────────────────────────────────────────────── */}
+      <section className="hero-section" style={{
+        maxWidth: 1040,
+        margin: '0 auto',
+        padding: '4px 24px 24px',
       }}>
-        {/* Video / Image Card */}
-        <div className="hero-gif-card" style={{
+        {/* Main Title in Playfair Display Serif */}
+        <h1 className="hero-title" style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: 'clamp(2.4rem, 4.2vw, 3.6rem)',
+          fontWeight: 400,
+          letterSpacing: '-0.02em',
+          color: '#111827',
+          lineHeight: 1.12,
+          maxWidth: 840,
+          marginBottom: 28,
+        }}>
+          Master Precision in Motorsport Intelligence
+        </h1>
+
+        {/* Hero Video Card (Fluidly Responsive) */}
+        <div className="hero-video-box" style={{
           position: 'relative',
           width: '100%',
           maxWidth: 1000,
-          margin: '0 auto 16px',
-          borderRadius: 24,
+          height: 'clamp(280px, 50vh, 460px)',
+          margin: '0 auto 36px',
+          borderRadius: 22,
           overflow: 'hidden',
-          boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.12)',
-          background: '#F1F5F9',
+          background: '#F3F4F6',
+          boxShadow: '0 6px 28px rgba(0, 0, 0, 0.07)',
         }}>
           <LandingHeroMedia />
         </div>
 
-        {/* Hero Text Content */}
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
-
-          <h1 style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 900,
-            fontSize: 'clamp(2.2rem, 5vw, 3.6rem)',
-            lineHeight: 1.0,
-            letterSpacing: '-0.05em',
-            color: '#0F172A',
-            marginBottom: 8,
-            textTransform: 'uppercase',
-          }}>
-            PRECISION IN <em style={{ fontStyle: 'italic', fontWeight: 700, color: '#0F172A' }}>EVERY</em>
-            <br />
-            <em style={{ fontStyle: 'italic', fontWeight: 700, color: '#0F172A' }}>MILLISECOND.</em>
-          </h1>
-
+        {/* Subtitle Paragraph */}
+        <div className="hero-subtitle" style={{ maxWidth: 640, marginBottom: 56 }}>
           <p style={{
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 15,
-            lineHeight: 1.6,
-            color: '#64748B',
-            marginBottom: 24,
-            maxWidth: 500,
-            margin: '0 auto 24px',
+            fontSize: 14,
+            lineHeight: 1.7,
+            color: '#6B7280',
+            fontWeight: 400,
           }}>
-            Unlock elite-level race analytics. From real-time telemetry to
-            predictive race strategy, dominate the grid with
-            advanced motorsport data archive.
+            This comprehensive platform strips away the unnecessary, focusing on core principles of spatial track relationship, high-frequency telemetry, and real-time pit strategy. Discover how sub-millisecond precision creates superior race execution.
           </p>
-        </div>
-
-        {/* Partners / Data sources strip */}
-        <div style={{ marginTop: 48 }}>
-          <p style={{
-            fontFamily: 'Space Grotesk, sans-serif',
-            fontSize: 10, fontWeight: 700,
-            letterSpacing: '0.16em', textTransform: 'uppercase',
-            color: '#CBD5E1', marginBottom: 16,
-          }}>
-            DATA FROM
-          </p>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 40,
-            flexWrap: 'wrap',
-          }}>
-            {['FastF1', 'OpenF1', 'Jolpica'].map(name => (
-              <span key={name} style={{
-                fontFamily: 'Inter, sans-serif',
-                fontSize: 14, fontWeight: 600,
-                color: '#CBD5E1',
-                letterSpacing: '-0.01em',
-              }}>
-                {name}
-              </span>
-            ))}
-          </div>
         </div>
       </section>
 
-      {/* ── FEATURES SECTION ─────────────────────────────────────────────── */}
-      <section style={{ padding: '120px 5vw', width: '100%', background: '#F4F6F8', borderTop: '1px solid #E2E8F0' }}>
-
-        {/* Section header */}
-        <div style={{ marginBottom: 64, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 24 }}>
-          <div style={{ maxWidth: 500 }}>
-            <h2 style={{
+      {/* ── LOGO MARQUEE / PARTNERS BAND ────────────────────────────────────── */}
+      <section className="partners-band" style={{
+        background: '#FAFAFA',
+        borderTop: '1px solid #F3F4F6',
+        borderBottom: '1px solid #F3F4F6',
+        padding: '20px 5vw',
+        marginBottom: 80,
+      }}>
+        <div className="partners-grid" style={{
+          maxWidth: 1040,
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 32,
+          flexWrap: 'wrap',
+          opacity: 0.6,
+        }}>
+          {['FASTF1', 'OPENF1', 'JOLPICA', 'TIMESCALEDB', 'KAFKA', 'FASTF1'].map((brand, i) => (
+            <span key={i} style={{
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: '0.12em',
+              color: '#374151',
               fontFamily: 'Inter, sans-serif',
-              fontWeight: 900,
-              fontSize: 'clamp(2rem, 4vw, 2.8rem)',
-              letterSpacing: '-0.04em',
-              color: '#0F172A',
-              lineHeight: 1.1,
-              marginBottom: 16,
-              textTransform: 'uppercase',
             }}>
-              TECHNICAL MASTERY
-            </h2>
-            <p style={{
-              fontFamily: 'Inter, sans-serif',
-              fontSize: 16, color: '#64748B', lineHeight: 1.6,
-            }}>
-              Strip away the drag from your decision-making process with high-fidelity telemetry architecture.
-            </p>
-          </div>
+              {brand}
+            </span>
+          ))}
         </div>
+      </section>
 
-        {/* Feature grid */}
-        <div style={{
+      {/* ── FEATURE SPOTLIGHT (SMART INSIGHTS) ────────────────────────────── */}
+      <section className="spotlight-section" style={{
+        maxWidth: 1040,
+        margin: '0 auto 120px',
+        padding: '0 24px',
+      }}>
+        <div className="spotlight-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(12, 1fr)',
-          gap: 16,
+          gap: 56,
+          alignItems: 'center',
         }}>
 
-          {/* TELEMETRY — large, spans 8 cols */}
-          <div style={{
-            gridColumn: 'span 8',
-            background: '#FAFAFA',
-            borderRadius: 24,
-            overflow: 'hidden',
-            display: 'flex',
-            minHeight: 460,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
-          }}>
-            <div style={{ padding: 48, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <Activity size={18} color="#E8002D" />
-                <span style={{
-                  fontFamily: 'Space Grotesk, sans-serif', fontSize: 11,
-                  fontWeight: 800, letterSpacing: '0.12em', color: '#E8002D', textTransform: 'uppercase',
-                }}>Telemetry</span>
-              </div>
-              <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6, maxWidth: 320, marginBottom: 24 }}>
-                Distributed data streaming via Apache Kafka. Processed with sub-millisecond latency for instant technical insight from over 300 sensors.
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['KAFKA-DRIVEN', '2.4GB/S', 'DIST-ALIGNED'].map(t => (
-                  <span key={t} style={{
-                    fontFamily: 'Space Grotesk, sans-serif', fontSize: 10,
-                    padding: '6px 12px', borderRadius: 4,
-                    background: '#F8FAFC', color: '#0F172A', fontWeight: 700,
-                    border: '1px solid #E2E8F0',
-                  }}>{t}</span>
-                ))}
-              </div>
-            </div>
-            <div style={{ flex: 1, position: 'relative', background: '#0F172A' }}>
-              <div style={{
-                position: 'absolute', inset: 0,
-                backgroundImage: `url('https://images.unsplash.com/photo-1522519972666-d8677d9d3e67?q=80&w=988&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                opacity: 0.6,
-              }} />
-              <div style={{
-                position: 'absolute', inset: 0,
-                background: 'linear-gradient(90deg, #FFFFFF 0%, rgba(255, 255, 255, 0) 40%)',
-              }} />
-            </div>
-          </div>
-
-          {/* STRATEGY — 4 cols */}
-          <div style={{
-            gridColumn: 'span 4',
-            background: '#FFFFFF',
-            borderRadius: 24,
-            padding: 48,
-            display: 'flex', flexDirection: 'column',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <Zap size={18} color="#E8002D" />
-              <span style={{
-                fontFamily: 'Space Grotesk, sans-serif', fontSize: 11,
-                fontWeight: 800, letterSpacing: '0.12em', color: '#E8002D', textTransform: 'uppercase',
-              }}>Strategy</span>
-            </div>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6, marginBottom: 32 }}>
-              Monte Carlo simulations running on TimescaleDB hypertables to provide optimal pit-stop windows and compound degradation models.
-            </p>
-            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', gap: 6, height: 100 }}>
-              {[40, 60, 100, 80, 50].map((h, i) => (
-                <div key={i} style={{ flex: 1, height: `${h}%`, background: h === 100 ? '#E8002D' : '#FEE2E7', borderRadius: 4 }} />
-              ))}
-            </div>
-          </div>
-
-          {/* PREDICTIONS — 4 cols */}
-          <div style={{
-            gridColumn: 'span 4',
-            background: '#FFFFFF',
+          {/* Left Side: Soft Gray Frame with Floating UI Card */}
+          <div className="spotlight-left" style={{
+            gridColumn: 'span 7',
+            background: '#F3F4F6',
             borderRadius: 24,
             padding: 40,
-            minHeight: 240,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 440,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <Brain size={18} color="#E8002D" />
-              <span style={{
-                fontFamily: 'Space Grotesk, sans-serif', fontSize: 11,
-                fontWeight: 800, letterSpacing: '0.12em', color: '#E8002D', textTransform: 'uppercase',
-              }}>AutoML Inference</span>
+            {/* White Floating UI Card */}
+            <div className="mockup-card" style={{
+              width: '100%',
+              maxWidth: 420,
+              background: '#FFFFFF',
+              borderRadius: 16,
+              padding: 24,
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.06)',
+              border: '1px solid #E5E7EB',
+            }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#9CA3AF' }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
+                  Generate Insight
+                </span>
+              </div>
+
+              {/* Form Inputs */}
+              <div className="mockup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
+                    Matchup
+                  </div>
+                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', fontWeight: 500, border: '1px solid #F3F4F6' }}>
+                    {objectives[activeObjective].matchup}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
+                    Metric
+                  </div>
+                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#111827', fontWeight: 600, border: '1px solid #F3F4F6' }}>
+                    {objectives[activeObjective].metric}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mockup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
+                    Discipline
+                  </div>
+                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #F3F4F6' }}>
+                    Telemetry <ChevronDown size={12} color="#9CA3AF" />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
+                    Research Direction
+                  </div>
+                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #F3F4F6' }}>
+                    Synthesize <ChevronDown size={12} color="#9CA3AF" />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
+                  What do you want to know from the insight?
+                </div>
+                <div style={{ background: '#F9FAFB', padding: 12, borderRadius: 8, fontSize: 11, color: '#4B5563', lineHeight: 1.5, minHeight: 64, border: '1px solid #F3F4F6' }}>
+                  {objectives[activeObjective].subtitle}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 12, color: '#6B7280', cursor: 'pointer', fontWeight: 500 }}>
+                  Cancel
+                </span>
+                <button style={{
+                  padding: '9px 18px',
+                  background: '#000000',
+                  color: '#FFFFFF',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 9999,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}>
+                  Create insight
+                </button>
+              </div>
+
             </div>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#64748B', lineHeight: 1.6 }}>
-              Neural networks and FLAML ensembles trained on 70 years of race data to predict overtaking probability and engine fatigue with SHAP interpretability.
+          </div>
+
+          {/* Right Side: Editorial Text & Objective Selector */}
+          <div className="spotlight-right" style={{ gridColumn: 'span 5' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Zap size={16} color="#111827" />
+              <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#111827', letterSpacing: '-0.02em' }}>
+                Smart Insights
+              </h2>
+            </div>
+
+            <p style={{
+              fontSize: 14,
+              color: '#6B7280',
+              lineHeight: 1.7,
+              marginBottom: 28,
+            }}>
+              Your environment will surface patterns and uncover root causes, then offer pathways on how to structure your studies to improve race execution based on the telemetry objectives you choose.
             </p>
-          </div>
 
-          {/* GLOBAL SYNC — 8 cols, dark */}
-          <div className="landing-global-sync" style={{
-            gridColumn: 'span 8',
-            background: '#0F172A',
-            borderRadius: 24,
-            padding: 48,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            minHeight: 240,
-          }}>
-            <div style={{ maxWidth: 400 }}>
-              <h3 style={{
-                fontFamily: 'Inter, sans-serif', fontSize: 18, fontWeight: 800,
-                color: '#FFFFFF', marginBottom: 12, textTransform: 'uppercase',
-              }}>Ingestion Pipeline</h3>
-              <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#94A3B8', lineHeight: 1.6 }}>
-                Automated data ingestion from FastF1, OpenF1, and Jolpica. Zero-config synchronization between the track and your local archive.
-              </p>
+            <button style={{
+              padding: '11px 24px',
+              borderRadius: 9999,
+              border: '1px solid #E5E7EB',
+              background: '#FFFFFF',
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#111827',
+              cursor: 'pointer',
+              marginBottom: 36,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}>
+              Explore Smart Insights
+            </button>
+
+            {/* Divider Line */}
+            <div style={{ height: 1, background: '#E5E7EB', marginBottom: 24 }} />
+
+            {/* Objective Options List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {objectives.map((obj, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setActiveObjective(idx)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{
+                    fontSize: 14,
+                    fontWeight: activeObjective === idx ? 700 : 500,
+                    color: activeObjective === idx ? '#111827' : '#9CA3AF',
+                    marginBottom: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}>
+                    {activeObjective === idx && (
+                      <span style={{ width: 16, height: 2, background: '#111827' }} />
+                    )}
+                    {obj.title}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="landing-global-sync-right" style={{ textAlign: 'right' }}>
-              <div style={{
-                fontFamily: 'Inter, sans-serif', fontWeight: 900,
-                fontSize: 56, color: '#10B981',
-                letterSpacing: '-0.04em', lineHeight: 1,
-              }}>
-                99.9%
-              </div>
-              <div style={{
-                fontFamily: 'Space Grotesk, sans-serif', fontSize: 10,
-                fontWeight: 700, color: '#10B981', opacity: 0.8,
-                letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: 8,
-              }}>
-                Ingestion Accuracy
-              </div>
-            </div>
+
           </div>
 
-        </div>
-      </section>
-
-      {/* ── COMMUNITY & CONTRIBUTION ─────────────────────────────────────────── */}
-      <section style={{ padding: '120px 5vw', textAlign: 'center', background: '#FFFFFF' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          <h2 style={{
-            fontFamily: 'Inter, sans-serif', fontWeight: 900,
-            fontSize: 'clamp(2rem, 4vw, 3rem)',
-            letterSpacing: '-0.05em', color: '#0F172A',
-            lineHeight: 1.1, marginBottom: 24,
-            textTransform: 'uppercase',
-          }}>
-            Built by the community,<br />for the community.
-          </h2>
-          <p style={{
-            fontFamily: 'Inter, sans-serif', fontSize: 18,
-            color: '#64748B', lineHeight: 1.6, marginBottom: 48,
-            maxWidth: 600, margin: '0 auto 48px'
-          }}>
-            Slipstream is 100% open-source. Join 1,200+ engineers and F1 fans building the future of accessible motorsport analytics.
-          </p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="https://github.com/abdullah-azeemi/Slipstream" target="_blank" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 12,
-              padding: '16px 36px',
-              background: '#0F172A', color: '#fff',
-              fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 800,
-              borderRadius: 12, textDecoration: 'none',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              transition: 'transform 0.2s ease',
-            }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-              <Globe size={18} /> Contribute on GitHub
-            </Link>
-          </div>
         </div>
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer style={{
-        background: '#F4F6F8',
-        borderTop: '1px solid #E2E8F0',
-        padding: '60px 5vw 40px',
+      <footer className="landing-footer" style={{
+        borderTop: '1px solid #F3F4F6',
+        padding: '32px 5vw',
         display: 'flex',
-        flexDirection: 'column',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 40,
+        flexWrap: 'wrap',
+        gap: 20,
+        fontSize: 12,
+        color: '#6B7280',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: 18,
-            color: '#0F172A', letterSpacing: '-0.04em', textTransform: 'uppercase', fontStyle: 'italic',
-          }}>
-            Slipstream
-          </span>
+        <div style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>
+          Slipstream
         </div>
-        <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['LATEST WEEKEND', 'TELEMETRY', 'SESSIONS', 'PREDICTIONS', 'GITHUB'].map(l => {
-            const href = l === 'GITHUB'
-              ? 'https://github.com/abdullah-azeemi/Slipstream'
-              : l === 'LATEST WEEKEND'
-                ? '/sessions/latest'
-                : `/${l.toLowerCase()}`
-            return (
-              <Link key={l} href={href} target={l === 'GITHUB' ? '_blank' : undefined} style={{
-                fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700,
-                color: '#94A3B8', textDecoration: 'none', letterSpacing: '0.05em',
-              }}>{l}</Link>
-            )
-          })}
+
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {['Telemetry', 'Sessions', 'Schedule', 'Predictions', 'GitHub'].map(link => (
+            <Link key={link} href={link === 'GitHub' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${link.toLowerCase()}`} style={{
+              color: '#6B7280',
+              textDecoration: 'none',
+            }}>
+              {link}
+            </Link>
+          ))}
         </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#CBD5E1', fontWeight: 500 }}>
-          © 2026 SLIPSTREAM  · APACHE 2.0
+
+        <div>
+          © 2026 Motorsport Platform. Built with intention.
         </div>
       </footer>
-
-      {/* Mobile responsiveness & Hover effects */}
-      <style>{`
-        .play-btn:hover { transform: scale(1.1); }
-        @media (max-width: 1024px) {
-          [style*="span 8"], [style*="span 4"] {
-            grid-column: span 12 !important;
-          }
-        }
-        @media (max-width: 768px) {
-          .landing-global-sync {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 32px;
-            padding: 32px 24px !important;
-          }
-          .landing-global-sync-right {
-            text-align: left !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }

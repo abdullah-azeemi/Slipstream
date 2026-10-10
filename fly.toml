@@ -1,0 +1,46 @@
+# fly.toml app configuration file generated for pitwall-api on 2026-10-10T01:14:11+05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'pitwall-api'
+primary_region = 'sin'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  FLASK_ENV = 'production'
+  ML_MODELS_DIR = '/data/ml_models'
+  RACE_VECTOR_INDEX_DIR = '/data/lancedb'
+  TELEMETRY_ARTIFACT_BACKEND = 'r2'
+  TELEMETRY_ARTIFACT_BUCKET = 'pitwall-telemetry'
+  TELEMETRY_STORAGE_MODE = 'files'
+
+[[mounts]]
+  source = 'pitwall_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 40
+    soft_limit = 20
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '1gb'
