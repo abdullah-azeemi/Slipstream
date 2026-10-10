@@ -35,10 +35,7 @@ TEAM_COLOUR_FALLBACK: dict[str, str] = {
 
 
 def _get_engine():
-    url = settings.database_url.replace("postgres://", "postgresql+psycopg://").replace(
-        "postgresql://", "postgresql+psycopg://"
-    )
-    return create_engine(url)
+    return create_engine(settings.db_url)
 
 
 def _resolve_colour(colour: Optional[str], team_name: Optional[str]) -> Optional[str]:

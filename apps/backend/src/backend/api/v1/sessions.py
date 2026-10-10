@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from datetime import datetime, timezone
 from backend import auth, extensions
+from backend.config import settings
 
 sessions_bp = Blueprint("sessions", __name__)
 
@@ -289,11 +290,10 @@ def driver_standings():
     """
     import fastf1
     from fastf1.ergast import Ergast
-    import os
 
     year = request.args.get("year", _current_year(), type=int)
 
-    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    cache_dir = settings.fastf1_cache_dir
     try:
         fastf1.Cache.enable_cache(cache_dir)
     except Exception:
@@ -345,11 +345,10 @@ def constructor_standings():
     """
     import fastf1
     from fastf1.ergast import Ergast
-    import os
 
     year = request.args.get("year", _current_year(), type=int)
 
-    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    cache_dir = settings.fastf1_cache_dir
     try:
         fastf1.Cache.enable_cache(cache_dir)
     except Exception:

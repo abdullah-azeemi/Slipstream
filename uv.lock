@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "ml",
     "slipstream-backend",
+    "slipstream-config",
     "slipstream-ingestion",
     "slipstream-stream",
     "workers",
@@ -1768,6 +1769,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "scikit-learn" },
+    { name = "slipstream-config" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "xgboost" },
@@ -1792,6 +1794,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "scikit-learn", specifier = ">=1.4.0" },
     { name = "shap", marker = "extra == 'explain'", specifier = ">=0.44.0" },
+    { name = "slipstream-config", editable = "packages/config" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "xgboost", specifier = ">=2.0.0" },
@@ -3541,6 +3544,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "redis" },
+    { name = "slipstream-config" },
     { name = "sqlalchemy" },
     { name = "structlog" },
 ]
@@ -3560,8 +3564,24 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.3" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.11.0" },
     { name = "redis", specifier = ">=5.0" },
+    { name = "slipstream-config", editable = "packages/config" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.0" },
+]
+
+[[package]]
+name = "slipstream-config"
+version = "0.1.0"
+source = { editable = "packages/config" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.3" },
 ]
 
 [[package]]
@@ -3576,6 +3596,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "slipstream-config" },
     { name = "structlog" },
     { name = "tenacity" },
 ]
@@ -3589,6 +3610,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=16.0" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.3" },
+    { name = "slipstream-config", editable = "packages/config" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "tenacity", specifier = ">=8.3" },
 ]
@@ -3985,6 +4007,7 @@ dependencies = [
     { name = "fastf1" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
+    { name = "slipstream-config" },
     { name = "sqlalchemy" },
     { name = "structlog" },
 ]
@@ -3995,6 +4018,7 @@ requires-dist = [
     { name = "fastf1", specifier = ">=3.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "slipstream-config", editable = "packages/config" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.0" },
 ]

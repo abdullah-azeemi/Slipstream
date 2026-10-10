@@ -9,6 +9,8 @@ requires-python = ">=3.11"
 
 dependencies = [
 
+    "slipstream-config",
+
     "flaml[automl]>=2.1.0",
 
     "scikit-learn>=1.4.0",
@@ -42,6 +44,10 @@ tracking = [
 requires = ["hatchling"]
 
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+
+slipstream-config = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 

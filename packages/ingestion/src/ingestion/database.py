@@ -16,7 +16,7 @@ from ingestion.config import settings
 # pool_size=5: keep 5 connections open permanently.
 # max_overflow=10: allow up to 10 extra connections under load.
 engine = create_engine(
-    settings.database_url,
+    settings.db_url,
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,   # test connections before using them

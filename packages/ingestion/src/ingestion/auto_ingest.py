@@ -12,7 +12,6 @@ Run on a schedule (cron example — every hour):
 """
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 
 import structlog
@@ -60,15 +59,6 @@ CLI_SESSION_MAP = {
 }
 
 SPRINT_EVENT_FORMATS = {"sprint", "sprint_qualifying", "sprint_shootout"}
-
-
-def _database_url() -> str:
-    url = os.environ.get("DATABASE_URL", settings.database_url)
-    if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+psycopg://", 1)
-    if url.startswith("postgresql://") and "+psycopg" not in url:
-        return url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return url
 
 
 def get_ingested_sessions(engine) -> set[tuple[int, str, str]]:
@@ -224,7 +214,7 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
 
 def run_once() -> bool:
     current_year = datetime.now(timezone.utc).year
-    engine = create_engine(_database_url())
+    engine = create_engine(settings.db_url)
     lock_acquired = False
 
     with engine.connect() as conn:

@@ -40,6 +40,7 @@ RUN uv sync --no-dev \
     --package slipstream-backend \
     --package ml \
     --package slipstream-ingestion \
+    --package slipstream-config \
     --no-cache \
     && find /app/.venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true \
     && find /app/.venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -63,6 +64,7 @@ FROM base AS production
 # Copy compiled virtualenv and application packages from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY apps/backend /app/apps/backend
+COPY packages/config /app/packages/config
 COPY packages/ml /app/packages/ml
 COPY packages/ingestion /app/packages/ingestion
 

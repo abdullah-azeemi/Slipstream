@@ -8,6 +8,7 @@ Race       → lap evolution, stint pace, position changes, sector stints
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
+from backend.config import settings
 from backend.extensions import engine
 
 analysis_bp = Blueprint("analysis", __name__)
@@ -1647,7 +1648,6 @@ def quali_segments(session_key: int):
     boundary detection only for older sessions that were ingested before
     quali_segment existed.
     """
-    import os
     import fastf1
     import pandas as pd
     from backend.api.v1.strategy import _resolve
@@ -1745,7 +1745,7 @@ def quali_segments(session_key: int):
     else:
         # ── 2. Fallback: derive segments from FastF1 cache for older data ────
         try:
-            cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+            cache_dir = settings.fastf1_cache_dir
             fastf1.Cache.enable_cache(cache_dir)
 
             f1_session_name = (
