@@ -116,6 +116,15 @@ seed:
 	uv run python -m ingestion.ingest_session --year 2024 --gp "Monza" --session R
 	uv run python -m ingestion.ingest_session --year 2024 --gp "Monza" --session FP2 --skip-telemetry
 
+# Backfill historical sessions (resumable — already-ingested sessions are skipped).
+#   make backfill START_YEAR=2022 END_YEAR=2025
+#   make backfill START_YEAR=2024 END_YEAR=2024 SKIP_TELEMETRY=1
+#   make backfill START_YEAR=2022 END_YEAR=2025 DRY_RUN=1
+backfill:
+	uv run python -m ingestion.backfill --start-year $(START_YEAR) --end-year $(END_YEAR) \
+		$(if $(SKIP_TELEMETRY),--skip-telemetry,) \
+		$(if $(DRY_RUN),--dry-run,)
+
 
 # ── Development ───────────────────────────────────────────────────────────────
 

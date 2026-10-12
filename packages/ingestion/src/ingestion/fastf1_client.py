@@ -93,6 +93,7 @@ def extract_session_info(session: fastf1.core.Session) -> dict:
             "Race": "R",
             "Sprint": "SS",
             "Sprint Qualifying": "SQ",
+            "Sprint Shootout": "SQ",
             "Practice 1": "FP1",
             "Practice 2": "FP2",
             "Practice 3": "FP3",
