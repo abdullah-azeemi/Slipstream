@@ -111,28 +111,70 @@ export interface TelemetrySample {
 }
 
 export interface ShapFactor {
-  feature:    string
-  label:      string
-  shap_value: number
-  positive:   boolean
+  feature:      string
+  label:        string
+  shap_value:   number
+  positive:     boolean
+  stream?:      string
+  stream_label?: string
+}
+
+export interface FeatureStream {
+  stream: string
+  label:  string
+  share:  number
+  score:  number
 }
 
 export interface DriverPrediction {
-  driver_number:           number
-  abbreviation:            string
-  team_name:               string | null
-  grid_position:           number
-  predicted_position:      number
-  win_probability:         number
-  podium_probability:      number
-  position_probabilities:  Record<string, number>
-  shap_factors:            ShapFactor[]
+  driver_number:          number
+  abbreviation:           string
+  team_name:              string | null
+  team_colour?:           string
+  grid_position:          number
+  predicted_position:     number
+  p1_probability?:        number
+  p2_probability?:        number
+  p3_probability?:        number
+  win_probability:        number
+  podium_probability:     number
+  position_probabilities: Record<string, number>
+  factors?:               ShapFactor[]
+  feature_streams?:       FeatureStream[]
+}
+
+export interface WeekendInput {
+  available:     boolean
+  session_type:  string
+  session_key?:  number
+  lap_count:     number
+}
+
+export interface PredictionModelInfo {
+  scope:                          string
+  best_estimator:                 string | null
+  cv_mae_mean:                    number | null
+  cv_mae_std:                     number | null
+  cv_top3_accuracy_mean:          number | null
+  cv_podium_precision_mean:       number | null
+  cv_podium_recall_mean:          number | null
+  cv_podium_brier_mean:           number | null
+  grid_baseline_top3_accuracy_mean: number | null
+  cv_folds:                       number | null
+  n_training_rows:                number | null
+  years:                          number[]
+  gp_name:                        string | null
 }
 
 export interface PredictionResponse {
-  quali_session_key: number
-  predictions:       DriverPrediction[]
-  model_info:        { name: string; version: string }
+  session_key:         number
+  gp_name:             string
+  year:                number
+  predictions:         DriverPrediction[]
+  validation_report:   { available: boolean; caveat: string }
+  model_baselines:     Record<string, number | null>
+  weekend_inputs_used: Record<string, WeekendInput>
+  model:               PredictionModelInfo
 }
 
 export interface CornerStat {
