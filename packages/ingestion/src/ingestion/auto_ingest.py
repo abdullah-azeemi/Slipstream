@@ -333,12 +333,18 @@ def run_once() -> bool:
     finally:
         try:
             if lock_acquired:
-                lock_conn.execute(
-                    text("SELECT pg_advisory_unlock(:lock_id)"),
-                    {"lock_id": AUTO_INGEST_LOCK_ID},
-                )
+                try:
+                    lock_conn.execute(
+                        text("SELECT pg_advisory_unlock(:lock_id)"),
+                        {"lock_id": AUTO_INGEST_LOCK_ID},
+                    )
+                except Exception as e:
+                    log.warning("auto_ingest.unlock_failed", error=str(e))
         finally:
-            lock_conn.close()
+            try:
+                lock_conn.close()
+            except Exception:
+                pass
             engine.dispose()
 
 

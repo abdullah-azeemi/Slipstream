@@ -55,7 +55,11 @@ def _segment_quali_laps(laps):
 def fetch_session(year: int, gp: str, session_type: str) -> fastf1.core.Session:
     import fastf1  # heavy — pulled in lazily; ingestion workers only
 
-    fastf1.Cache.enable_cache("./fastf1_cache")
+    import os
+
+    cache_dir = os.environ.get("FASTF1_CACHE_DIR", "./fastf1_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    fastf1.Cache.enable_cache(cache_dir)
     session = fastf1.get_session(year, gp, session_type)
     load_weather = True
     session.load(telemetry=True, weather=load_weather, messages=True, livedata=None)
