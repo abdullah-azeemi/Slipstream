@@ -14,52 +14,39 @@ jobs:
         run: uv python install 3.11
       - name: Install dependencies
         run: uv sync --all-packages
-      - name: Probe F1 API from runner
-        run: uv run python - <<'PY'
-import logging, sys
-from fastf1 import _api as fastf1_api
-
-console = logging.StreamHandler(sys.stdout)
-console.setLevel(logging.DEBUG)
-
-# FastF1 internal HTTP layer + logger
-for name in ("fastf1._api", "fastf1", "req", "_api"):
-    lg = logging.getLogger(name)
-    lg.setLevel(logging.DEBUG)
-    lg.addHandler(console)
-
-import fastf1
-print("fastf1 version", fastf1.__version__)
-fastf1.Cache.enable_cache("/tmp/fastf1_diag_cache")
-
-# 1) schedule host (worked in backfill)
-try:
-    sched = fastf1.get_event_schedule(2025, include_testing=False)
-    print("SCHEDULE OK rows=", len(sched))
-except Exception as e:
-    print("SCHEDULE FAIL", type(e).__name__, repr(e))
-
-# 2) session timing host
-s = fastf1.get_session(2025, "Australian", "FP1")
-try:
-    s.load(telemetry=True, weather=True, messages=True)
-    print("LOAD OK laps=", len(s.laps))
-except Exception as e:
-    print("LOAD FAIL", type(e).__name__, repr(e)[:500])
-PY
+      - name: Probe FastF1 from runner
+        run: |
+          uv run python -c "
+          import fastf1, logging, sys
+          logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+          print('fastf1 version', fastf1.__version__)
+          fastf1.Cache.enable_cache('/tmp/fastf1_diag_cache')
+          try:
+              sched = fastf1.get_event_schedule(2025, include_testing=False)
+              print('SCHEDULE OK rows=', len(sched))
+          except Exception as e:
+              print('SCHEDULE FAIL', type(e).__name__, repr(e)[:300])
+          s = fastf1.get_session(2025, 'Australian', 'FP1')
+          try:
+              s.load(telemetry=True, weather=True, messages=True)
+              print('LOAD OK laps=', len(s.laps))
+          except Exception as e:
+              print('LOAD FAIL', type(e).__name__, repr(e)[:500])
+          "
       - name: Raw HTTP probe
-        run: uv run python - <<'PY'
-import urllib.request, urllib.error
-urls = [
-    "https://api.formula1.com/v1/static/2025/1/session_data.json",
-    "https://livetiming.formula1.com/static/2025/1/2025-03-14_Practice-1/session_info.json",
-]
-for u in urls:
-    try:
-        with urllib.request.urlopen(u, timeout=10) as r:
-            print("OK", r.status, u[:80])
-    except urllib.error.HTTPError as e:
-        print("HTTPERR", e.code, e.reason, u[:80])
-    except Exception as e:
-        print("ERR", type(e).__name__, str(e)[:120], u[:80])
-PY
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error
+          urls = [
+              "https://api.formula1.com/v1/static/2025/1/session_data.json",
+              "https://livetiming.formula1.com/static/2025/1/2025-03-14_Practice-1/session_info.json",
+          ]
+          for u in urls:
+              try:
+                  with urllib.request.urlopen(u, timeout=10) as r:
+                      print("OK", r.status, u[:80])
+              except urllib.error.HTTPError as e:
+                  print("HTTPERR", e.code, e.reason, u[:80])
+              except Exception as e:
+                  print("ERR", type(e).__name__, str(e)[:120], u[:80])
+          PY
