@@ -30,10 +30,28 @@ SESSION_MAP = {
     "R": "Race",
     "SQ": "Sprint Qualifying",
     "S": "Sprint",
+    "SS": "Sprint",
     "FP1": "Practice 1",
     "FP2": "Practice 2",
     "FP3": "Practice 3",
 }
+
+# Canonical short code for every FastF1 session name. Used so callers can pass
+# either a code ("SQ") or the raw FastF1 name ("Sprint Shootout") and still get
+# consistent telemetry decisions and DB session types.
+NAME_TO_CODE = {
+    "Qualifying": "Q",
+    "Race": "R",
+    "Sprint": "SS",
+    "Sprint Qualifying": "SQ",
+    "Sprint Shootout": "SQ",
+    "Practice 1": "FP1",
+    "Practice 2": "FP2",
+    "Practice 3": "FP3",
+}
+
+# Sessions whose lap telemetry is worth storing (races: all laps; rest: fastest)
+TELEMETRY_SESSIONS = {"Q", "SQ", "R"}
 
 
 def extract_weather(session) -> dict:
@@ -68,6 +86,10 @@ def ingest_session(
     Callable directly so auto_ingest does not need to shell out to `uv`.
     """
     fastf1_session = SESSION_MAP.get(session.upper(), session)
+    # Canonical code whether the caller passed a code ("SQ") or a FastF1 name
+    # ("Sprint Shootout", "Qualifying", ...). Falls back to the upper-cased
+    # input so unknown sessions still agree between the two lookups.
+    code = NAME_TO_CODE.get(fastf1_session, session.upper())
 
     log.info(
         "ingest.start",
@@ -98,16 +120,16 @@ def ingest_session(
         lap_count = load_laps(laps, session_key)
 
         tel_count = 0
-        TELEMETRY_SESSIONS = {"Q", "SQ", "R"}  # Q selected laps; R full-lap artifacts
-        if not skip_telemetry and session.upper() in TELEMETRY_SESSIONS:
+        # Q/SQ store fastest laps; races store full-lap artifacts
+        if not skip_telemetry and code in TELEMETRY_SESSIONS:
             tel = extract_telemetry(
                 session_obj,
                 session_key,
                 all_drivers=True,
-                all_laps=session.upper() == "R",
+                all_laps=code == "R",
             )
             tel_count = load_telemetry(tel, session_key)
-        elif not skip_telemetry and session.upper() not in TELEMETRY_SESSIONS:
+        elif not skip_telemetry and code not in TELEMETRY_SESSIONS:
             log.info(
                 "telemetry.skipped",
                 reason="non-qualifying session — telemetry not stored by design",
