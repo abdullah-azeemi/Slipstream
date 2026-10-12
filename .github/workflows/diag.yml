@@ -17,7 +17,8 @@ jobs:
       - name: Probe FastF1 from runner
         run: |
           uv run python -c "
-          import fastf1, logging, sys
+          import fastf1, logging, sys, os
+          os.makedirs('/tmp/fastf1_diag_cache', exist_ok=True)
           logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
           print('fastf1 version', fastf1.__version__)
           fastf1.Cache.enable_cache('/tmp/fastf1_diag_cache')
