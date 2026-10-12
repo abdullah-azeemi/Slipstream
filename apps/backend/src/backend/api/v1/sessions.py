@@ -34,12 +34,25 @@ def _missing_schema_response():
     ), 503
 
 
+def _format_lap_time(ms: float | None) -> str | None:
+    """Format a lap time in milliseconds as m:ss.mmm (e.g. 1:29.525)."""
+    if ms is None:
+        return None
+    total_seconds = ms / 1000.0
+    minutes = int(total_seconds // 60)
+    seconds = total_seconds - minutes * 60
+    return f"{minutes}:{seconds:06.3f}"
+
+
 @sessions_bp.get("/sessions")
 def list_sessions():
     """
     List all sessions ordered by date descending.
     Qualifying sessions appear before Race sessions on the same date
     so the home page hero shows the most recent qualifying.
+
+    Each row is enriched with the qualifying pole sitter (Q/SQ) and the race
+    winner (R), derived from lap_times — see the LATERAL joins below.
     """
     try:
         with extensions.engine.connect() as conn:
@@ -47,16 +60,65 @@ def list_sessions():
                 conn.execute(
                     text("""
             SELECT
-                session_key, year, gp_name, country,
-                session_type, session_name,
-                date_start, date_end,
-                track_temp_c, air_temp_c, humidity_pct,
-                rainfall, wind_speed_ms
-            FROM sessions
+                s.session_key, s.year, s.gp_name, s.country,
+                s.session_type, s.session_name,
+                s.date_start, s.date_end,
+                s.track_temp_c, s.air_temp_c, s.humidity_pct,
+                s.rainfall, s.wind_speed_ms,
+                pole.full_name     AS pole_driver,
+                pole.lap_time_ms   AS pole_time_ms,
+                win.full_name      AS winner_driver,
+                win.total_laps     AS winner_laps
+            FROM sessions s
+            LEFT JOIN LATERAL (
+                -- Pole sitter: fastest valid lap in a Q/SQ session
+                SELECT d.full_name, lt.lap_time_ms
+                FROM lap_times lt
+                JOIN drivers d
+                    ON d.session_key = lt.session_key
+                    AND d.driver_number = lt.driver_number
+                WHERE lt.session_key = s.session_key
+                    AND s.session_type IN ('Q', 'SQ')
+                    AND lt.lap_time_ms IS NOT NULL
+                    AND lt.deleted = FALSE
+                ORDER BY lt.lap_time_ms ASC
+                LIMIT 1
+            ) pole ON TRUE
+            LEFT JOIN LATERAL (
+                -- Race winner: final-lap position when available, otherwise
+                -- most laps completed with the lowest cumulative time.
+                SELECT d.full_name, fl.total_laps, fl.finish_pos, rt.total_ms
+                FROM (
+                    SELECT DISTINCT ON (l.driver_number)
+                        l.driver_number,
+                        l.lap_number AS total_laps,
+                        l.position   AS finish_pos
+                    FROM lap_times l
+                    WHERE l.session_key = s.session_key
+                    ORDER BY l.driver_number, l.lap_number DESC
+                ) fl
+                JOIN drivers d
+                    ON d.session_key = s.session_key
+                    AND d.driver_number = fl.driver_number
+                LEFT JOIN (
+                    SELECT driver_number, SUM(lap_time_ms) AS total_ms
+                    FROM lap_times
+                    WHERE session_key = s.session_key
+                        AND lap_time_ms IS NOT NULL
+                        AND deleted = FALSE
+                    GROUP BY driver_number
+                ) rt ON rt.driver_number = fl.driver_number
+                WHERE s.session_type = 'R'
+                ORDER BY
+                    COALESCE(fl.finish_pos, 9999) ASC,
+                    fl.total_laps DESC,
+                    rt.total_ms ASC NULLS LAST
+                LIMIT 1
+            ) win ON TRUE
             ORDER BY
-                date_start DESC NULLS LAST,
+                s.date_start DESC NULLS LAST,
                 -- Within same date: Q before R so home hero shows qualifying
-                CASE session_type
+                CASE s.session_type
                     WHEN 'Q'  THEN 1
                     WHEN 'SQ' THEN 2
                     WHEN 'S'  THEN 3
@@ -72,7 +134,16 @@ def list_sessions():
         if _is_missing_table_error(exc):
             return _missing_schema_response()
         raise
-    return jsonify([dict(r) for r in rows])
+
+    result = []
+    for r in rows:
+        row = dict(r)
+        pole_ms = row.pop("pole_time_ms", None)
+        row["pole_time"] = _format_lap_time(pole_ms)
+        winner_laps = row.pop("winner_laps", None)
+        row["winner_summary"] = f"{winner_laps} Laps" if winner_laps else None
+        result.append(row)
+    return jsonify(result)
 
 
 @sessions_bp.get("/sessions/<int:session_key>")

@@ -135,7 +135,10 @@ function weekendStatus(group: WeekendGroup) {
 }
 
 function poleInfo(group: WeekendGroup) {
-  const q = group.sessions.find(s => s.session_type === 'Q' || s.session_type === 'SQ')
+  // Prefer the Grand Prix qualifying (Q) pole; sprint weekends also have SQ.
+  const q =
+    group.sessions.find(s => s.session_type === 'Q') ??
+    group.sessions.find(s => s.session_type === 'SQ')
   return {
     exists: Boolean(q),
     driver: q?.pole_driver ?? '—',
