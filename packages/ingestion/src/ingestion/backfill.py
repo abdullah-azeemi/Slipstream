@@ -129,9 +129,27 @@ def run_year(
                     ingested.add(key)
                     continue
 
-                session_key = ingest_session(
-                    year, gp_short, session_name, skip_telemetry=skip_telemetry
-                )
+                try:
+                    session_key = ingest_session(
+                        year, gp_short, session_name, skip_telemetry=skip_telemetry
+                    )
+                except Exception as e:
+                    if (
+                        type(e).__name__ == "DataNotLoadedError"
+                        or "DataNotLoadedError" in str(type(e))
+                        or "not been loaded yet" in str(e).lower()
+                    ):
+                        log.warning(
+                            "backfill.not_ready",
+                            year=year,
+                            gp=gp_short,
+                            session=code,
+                            reason="Data not yet available upstream",
+                        )
+                        session_key = None
+                    else:
+                        raise
+
                 if session_key is not None:
                     new_sessions += 1
                     ingested.add(key)

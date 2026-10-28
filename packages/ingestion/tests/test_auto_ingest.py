@@ -89,3 +89,68 @@ def test_run_once_fails_when_completed_session_ingestion_fails(monkeypatch):
     assert engine.connection.closed
     assert engine.disposed
     assert any("pg_advisory_unlock" in query for query in engine.connection.statements)
+
+
+def test_run_once_does_not_fail_when_session_data_not_ready(monkeypatch):
+    class Result:
+        def scalar(self):
+            return True
+
+    class Connection:
+        closed = False
+        statements = []
+
+        def execute(self, statement, _params):
+            self.statements.append(str(statement))
+            return Result()
+
+        def close(self):
+            self.closed = True
+
+    class Engine:
+        def __init__(self):
+            self.connection = Connection()
+            self.disposed = False
+
+        def connect(self):
+            return self.connection
+
+        def dispose(self):
+            self.disposed = True
+
+    engine = Engine()
+    monkeypatch.setattr(auto_ingest, "create_engine", lambda _url: engine)
+    monkeypatch.setattr(auto_ingest, "get_ingested_sessions", lambda _engine: set())
+    monkeypatch.setattr(
+        auto_ingest,
+        "get_fastf1_schedule",
+        lambda _year: [{"gp_name": "Test Grand Prix", "event_format": "conventional"}],
+    )
+    monkeypatch.setattr(
+        auto_ingest, "sessions_for_event", lambda _event: [("R", False)]
+    )
+    monkeypatch.setattr(
+        auto_ingest, "session_has_completed", lambda _year, _event, _session: True
+    )
+    # Simulate session data not being ready (returns None)
+    monkeypatch.setattr(
+        auto_ingest, "ingest_session", lambda _year, _gp, _session: None
+    )
+
+    result = auto_ingest.run_once()
+    assert result is False
+    assert engine.connection.closed
+    assert engine.disposed
+    assert any("pg_advisory_unlock" in query for query in engine.connection.statements)
+
+
+def test_ingest_session_handles_data_not_loaded(monkeypatch):
+    class DataNotLoadedError(Exception):
+        pass
+
+    def fake_run_ingest(*args, **kwargs):
+        raise DataNotLoadedError("The data you are trying to access has not been loaded yet.")
+
+    monkeypatch.setattr("ingestion.ingest_session.ingest_session", fake_run_ingest)
+    result = auto_ingest.ingest_session(2026, "United States Grand Prix", "R")
+    assert result is None

@@ -163,6 +163,21 @@ def ingest_session(
         )
         return session_key
     except Exception as exc:
+        is_data_not_loaded = (
+            type(exc).__name__ == "DataNotLoadedError"
+            or "DataNotLoadedError" in str(type(exc))
+            or "not been loaded yet" in str(exc).lower()
+        )
+        if is_data_not_loaded:
+            log.warning(
+                "ingest.not_ready",
+                year=year,
+                gp=gp,
+                session=session,
+                reason="FastF1 data has not been loaded yet (timing data may not be published upstream)",
+            )
+            raise
+
         log.error(
             "ingest.failed",
             year=year,
@@ -184,7 +199,17 @@ def main():
     parser.add_argument("--skip-telemetry", action="store_true")
     args = parser.parse_args()
 
-    ingest_session(args.year, args.gp, args.session, skip_telemetry=args.skip_telemetry)
+    try:
+        ingest_session(args.year, args.gp, args.session, skip_telemetry=args.skip_telemetry)
+    except Exception as exc:
+        if (
+            type(exc).__name__ == "DataNotLoadedError"
+            or "DataNotLoadedError" in str(type(exc))
+            or "not been loaded yet" in str(exc).lower()
+        ):
+            log.warning("ingest.cli.not_ready", error=str(exc))
+            return
+        raise
 
 
 if __name__ == "__main__":

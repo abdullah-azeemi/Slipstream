@@ -221,9 +221,13 @@ def session_has_completed(year: int, event: dict, session_type: str) -> bool:
             return False
 
 
-def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
+def ingest_session(year: int, gp_name: str, session_type: str) -> bool | None:
     """
-    Ingest a single session in-process. Returns True if successful.
+    Ingest a single session in-process.
+    Returns:
+        True: Ingested successfully.
+        None: Session data is not ready/published yet upstream in FastF1.
+        False: Ingestion failed due to an error.
     """
     session_name = CLI_SESSION_MAP.get(session_type, session_type)
 
@@ -249,6 +253,20 @@ def ingest_session(year: int, gp_name: str, session_type: str) -> bool:
         log.error("ingest.failed", year=year, gp=gp_short, session=session_name)
         return False
     except Exception as e:
+        is_not_loaded = (
+            type(e).__name__ == "DataNotLoadedError"
+            or "DataNotLoadedError" in str(type(e))
+            or "not been loaded yet" in str(e).lower()
+        )
+        if is_not_loaded:
+            log.warning(
+                "auto_ingest.not_ready",
+                gp=gp_name,
+                session=session_name,
+                reason="FastF1 data not available yet upstream",
+            )
+            return None
+
         log.error(
             "ingest.error", year=year, gp=gp_short, session=session_name, error=str(e)
         )
@@ -281,6 +299,7 @@ def run_once() -> bool:
             raise RuntimeError(f"No FastF1 event schedule available for {current_year}")
 
         new_sessions = 0
+        not_ready = 0
         failed = 0
         latest_gp_ingested: str | None = None
 
@@ -300,17 +319,20 @@ def run_once() -> bool:
                     continue
 
                 # Ingest it
-                success = ingest_session(current_year, gp_name, session_type)
-                if success:
+                result = ingest_session(current_year, gp_name, session_type)
+                if result is True:
                     new_sessions += 1
                     ingested.add(key)  # prevent re-attempting in same run
                     latest_gp_ingested = gp_name
+                elif result is None:
+                    not_ready += 1
                 else:
                     failed += 1
 
         log.info(
             "auto_ingest.done",
             new_sessions=new_sessions,
+            not_ready=not_ready,
             failed=failed,
             total_in_db=len(ingested),
         )
