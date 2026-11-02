@@ -186,6 +186,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             total += backfill_year(year)
         except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code == 429:
+                # Still throttled after the retries: the hourly quota is spent, so
+                # carrying on would only burn through the remaining years. Stop
+                # with a non-zero status; re-running is safe (the loader upserts).
+                log.error("jolpica.quota_exhausted", year=year, error=str(exc))
+                print(json.dumps({"rows": total, "stopped_at_year": year}))
+                return 1
             # Keep going: the upsert makes a later re-run fill any gap.
             log.error("jolpica.year_failed", year=year, error=str(exc))
         time.sleep(REQUEST_GAP_S)

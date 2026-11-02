@@ -141,5 +141,13 @@ def test_binders_build_track_status_and_session_results_inputs():
         {"from_lap": 11, "to_lap": 13}, env
     )
     assert (track.session_key, track.from_lap, track.to_lap) == (SK, 11, 13)
-    results = orchestrator._BINDERS[types.ToolName.FETCH_SESSION_RESULTS]({}, env)
+    bind = orchestrator._BINDERS[types.ToolName.FETCH_SESSION_RESULTS]
+    results = bind({}, env)
     assert results.session_key == SK and results.driver_number is None
+
+
+def test_session_results_binder_prefers_explicit_driver_over_resolved_one():
+    env = {"session": SimpleNamespace(session_key=SK), "driver": SimpleNamespace(driver_number=44)}
+    bind = orchestrator._BINDERS[types.ToolName.FETCH_SESSION_RESULTS]
+    assert bind({"driver_number": 1}, env).driver_number == 1  # explicit param wins
+    assert bind({}, env).driver_number == 44  # else the driver resolved earlier in the plan

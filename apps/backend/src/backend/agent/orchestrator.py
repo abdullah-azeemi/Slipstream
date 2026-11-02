@@ -225,10 +225,14 @@ def _bind_track_status(params, env):
 
 @_register(types.ToolName.FETCH_SESSION_RESULTS)
 def _bind_session_results(params, env):
-    driver = env.get("driver")
+    # An explicit driver_number in the node params wins; otherwise fall back to
+    # a driver resolved earlier in the plan (same convention as the other binders).
+    driver_number = params.get("driver_number")
+    if driver_number is None:
+        driver_number = getattr(env.get("driver"), "driver_number", None)
     return types.SessionResultsInput(
         session_key=env["session"].session_key,
-        driver_number=getattr(driver, "driver_number", None),
+        driver_number=driver_number,
     )
 
 

@@ -152,3 +152,30 @@ def test_reversed_year_range_is_an_argument_error():
     with pytest.raises(SystemExit) as exc:
         jolpica.main(["--start-year", "2025", "--end-year", "2020"])
     assert exc.value.code == 2
+
+
+def test_persistent_429_stops_the_backfill_with_nonzero_exit(monkeypatch, capsys):
+    years = []
+
+    def fake_backfill(year):
+        years.append(year)
+        raise urllib.error.HTTPError("u", 429, "Too Many Requests", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(jolpica, "backfill_year", fake_backfill)
+    assert jolpica.main(["--start-year", "2020", "--end-year", "2024"]) == 1
+    assert years == [2020]  # did not carry on through 2021-2024 while throttled
+    assert "stopped_at_year" in capsys.readouterr().out
+
+
+def test_other_year_errors_are_skipped_and_the_run_continues(monkeypatch):
+    years = []
+
+    def fake_backfill(year):
+        years.append(year)
+        if year == 2021:
+            raise RuntimeError("boom")
+        return 5
+
+    monkeypatch.setattr(jolpica, "backfill_year", fake_backfill)
+    assert jolpica.main(["--start-year", "2020", "--end-year", "2022"]) == 0
+    assert years == [2020, 2021, 2022]
