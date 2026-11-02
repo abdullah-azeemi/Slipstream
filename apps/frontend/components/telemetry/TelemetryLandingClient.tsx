@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowRight, MagnifyingGlass } from '@phosphor-icons/react'
 import '@/components/landing/landing.css'
 import { geist } from '@/components/landing/font'
+import { ToggleGroup } from '@/components/landing/Tabs'
 import type { Session } from '@/types/f1'
 
 type Props = { initialSessions: Session[]; failed?: boolean }
@@ -47,11 +48,19 @@ function SessionCard({ s }: { s: Session }) {
 }
 
 export default function TelemetryLandingClient({ initialSessions, failed = false }: Props) {
-  const usable = useMemo(() => initialSessions.filter(s => kindOf(s.session_type) !== null), [initialSessions])
+  // Hide sessions whose laps have not been loaded yet: their telemetry page would be empty.
+  const usable = useMemo(
+    () => initialSessions.filter(s => kindOf(s.session_type) !== null && s.has_laps !== false),
+    [initialSessions],
+  )
   const years = useMemo(() => Array.from(new Set(usable.map(s => s.year))).sort((a, b) => b - a), [usable])
 
   const [year, setYear] = useState<number | null>(years[0] ?? null)
-  const [kind, setKind] = useState<Kind>('Q')
+  const [kind, setKind] = useState<Kind>(() => {
+    const first = years[0]
+    const order: Kind[] = ['Q', 'R', 'P']
+    return order.find(k => usable.some(s => s.year === first && kindOf(s.session_type) === k)) ?? 'Q'
+  })
   const [query, setQuery] = useState('')
 
   const latest = useMemo(
@@ -75,7 +84,7 @@ export default function TelemetryLandingClient({ initialSessions, failed = false
 
   return (
     <div className={`lp ${geist.className}`}>
-      <main id="main" className="dash">
+      <div id="main" className="dash">
         <div className="wrap">
           <header className="dash-head" style={{ maxWidth: 680 }}>
             <p className="caption-1 muted">Telemetry</p>
@@ -114,34 +123,18 @@ export default function TelemetryLandingClient({ initialSessions, failed = false
               )}
 
               <div className="tel-filters">
-                <div className="tabs" role="tablist" aria-label="Season">
-                  {years.map(y => (
-                    <button
-                      key={y}
-                      type="button"
-                      role="tab"
-                      aria-selected={year === y}
-                      className={`tab button-sm ${year === y ? 'on' : ''}`}
-                      onClick={() => setYear(y)}
-                    >
-                      {y}
-                    </button>
-                  ))}
-                </div>
-                <div className="tabs" role="tablist" aria-label="Session type">
-                  {KINDS.map(k => (
-                    <button
-                      key={k.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={kind === k.key}
-                      className={`tab button-sm ${kind === k.key ? 'on' : ''}`}
-                      onClick={() => setKind(k.key)}
-                    >
-                      {k.label} <span className="muted">{counts[k.key]}</span>
-                    </button>
-                  ))}
-                </div>
+                <ToggleGroup
+                  label="Season"
+                  value={year}
+                  onChange={setYear}
+                  items={years.map(y => ({ key: y, label: String(y) }))}
+                />
+                <ToggleGroup
+                  label="Session type"
+                  value={kind}
+                  onChange={setKind}
+                  items={KINDS.map(k => ({ key: k.key, label: <>{k.label} <span className="muted">{counts[k.key]}</span></> }))}
+                />
                 <label className="search">
                   <MagnifyingGlass size={16} aria-hidden="true" />
                   <span className="sr-only">Search Grand Prix</span>
@@ -168,7 +161,7 @@ export default function TelemetryLandingClient({ initialSessions, failed = false
             </>
           )}
         </div>
-      </main>
+      </div>
     </div>
   )
 }

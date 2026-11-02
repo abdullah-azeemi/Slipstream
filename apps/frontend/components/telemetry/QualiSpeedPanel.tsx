@@ -21,7 +21,7 @@ const C = {
   teal: '#0EA5E9',
 } as const
 
-const PAD = { top: 16, right: 20, bottom: 32, left: 56 }
+const PAD = { top: 16, right: 20, bottom: 32, left: 68 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

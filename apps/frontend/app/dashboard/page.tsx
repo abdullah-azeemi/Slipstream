@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic'
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
 
-type Result<T> = { ok: true; data: T } | { ok: false }
+type Result<T> = { ok: true; data: T } | { ok: false; status?: number }
 
 async function load<T>(path: string, token?: string, revalidate = 60): Promise<Result<T>> {
   try {
@@ -28,7 +28,7 @@ async function load<T>(path: string, token?: string, revalidate = 60): Promise<R
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       next: { revalidate },
     })
-    if (!res.ok) return { ok: false }
+    if (!res.ok) return { ok: false, status: res.status }
     return { ok: true, data: (await res.json()) as T }
   } catch {
     return { ok: false }
@@ -41,6 +41,7 @@ interface NextRace {
 }
 interface SessionRow {
   session_key: number
+  year: number
   gp_name: string
   session_type: string
   date_start: string | null
@@ -71,7 +72,7 @@ export default async function DashboardPage() {
   const user = await currentUser().catch(() => null)
 
   const [next, sessions, drivers, constructors, convos] = await Promise.all([
-    load<NextRace>('/api/v1/schedule/next-race', undefined, 300),
+    load<NextRace>('/api/v1/schedule/next-race', undefined, 30),
     load<SessionRow[]>('/api/v1/sessions', token, 120),
     load<StandingsPayload<DriverStanding>>(`/api/v1/standings/drivers?year=${year}`, token, 300),
     load<StandingsPayload<ConstructorStanding>>(`/api/v1/standings/constructors?year=${year}`, token, 300),
@@ -82,16 +83,17 @@ export default async function DashboardPage() {
     ? sessions.data.find(s => s.session_type === 'R' && s.winner_driver && s.date_start && new Date(s.date_start) <= new Date())
     : undefined
   const lastPole = sessions.ok && lastRace
-    ? sessions.data.find(s => s.gp_name === lastRace.gp_name && s.pole_driver)?.pole_driver
+    ? sessions.data.find(s => s.year === lastRace.year && s.gp_name === lastRace.gp_name && s.pole_driver)?.pole_driver
     : undefined
 
-  const standingsRound = drivers.ok && drivers.data.round ? Number(drivers.data.round) : null
+  const roundOf = (r: Result<StandingsPayload<unknown>>) => (r.ok && r.data.round ? Number(r.data.round) : null)
+  const standingsRound = roundOf(drivers) ?? roundOf(constructors)
   const recent = convos.ok ? convos.data.slice(0, 3) : []
   const name = user?.firstName
 
   return (
     <div className={`lp ${geist.className}`}>
-      <main id="main" className="dash">
+      <div id="main" className="dash">
         <div className="wrap">
           <header className="dash-head">
             <p className="caption-1 muted">Dashboard</p>
@@ -115,8 +117,16 @@ export default async function DashboardPage() {
                 </>
               ) : next.ok ? (
                 <>
-                  <h2 id="next-title" className="heading-4">No session scheduled</h2>
-                  <p className="body-3 muted">The calendar has no upcoming sessions right now.</p>
+                  <h2 id="next-title" className="heading-4">{next.data.race.event_name}</h2>
+                  <p className="body-3 muted">
+                    Round {next.data.race.round}
+                    {next.data.race.circuit ? `, ${next.data.race.circuit}` : ''}. Session times are not available yet.
+                  </p>
+                </>
+              ) : next.status === 404 ? (
+                <>
+                  <h2 id="next-title" className="heading-4">No upcoming race</h2>
+                  <p className="body-3 muted">The calendar has no more races this season.</p>
                 </>
               ) : (
                 <>
@@ -176,6 +186,8 @@ export default async function DashboardPage() {
                 constructors={constructors.ok ? constructors.data.standings ?? [] : []}
                 round={standingsRound}
                 year={year}
+                driversFailed={!drivers.ok}
+                constructorsFailed={!constructors.ok}
               />
             ) : (
               <>
@@ -192,7 +204,7 @@ export default async function DashboardPage() {
               <ul className="convo-list">
                 {recent.map(c => (
                   <li key={c.id}>
-                    <Link href="/agent" className="card" style={{ height: '100%' }}>
+                    <Link href={`/agent?c=${c.id}`} className="card" style={{ height: '100%' }}>
                       <h3 className="title-3">{c.title ?? 'Untitled conversation'}</h3>
                       <p className="body-6">{c.last_message_preview ?? 'No messages yet.'}</p>
                       <span className="caption-4 muted">{c.message_count} messages</span>
@@ -213,7 +225,7 @@ export default async function DashboardPage() {
             )}
           </section>
         </div>
-      </main>
+      </div>
       <LandingFooter />
     </div>
   )

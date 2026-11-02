@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -36,12 +34,12 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+html { font-family: system-ui, sans-serif; scroll-behavior: smooth; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -57,12 +55,12 @@ main {
 }
 
 /* ── Typography ── */
-.mono    { font-family: 'JetBrains Mono', monospace; }
-.display { font-family: 'Inter', sans-serif; }
-.rajdhani { font-family: 'Rajdhani', sans-serif; }
+.mono    { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.display { font-family: inherit; }
+.rajdhani { font-family: inherit; }
 
 .page-title {
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   font-weight: 800;
   font-size: clamp(2rem, 5vw, 3.5rem);
   line-height: 1.05;
@@ -78,7 +76,7 @@ main {
 }
 
 .eyebrow {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -116,7 +114,7 @@ main {
   padding: 12px 24px;
   background: var(--red);
   color: #fff;
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   border-radius: 10px;
@@ -139,7 +137,7 @@ main {
   padding: 12px 24px;
   background: var(--navy);
   color: #fff;
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   border-radius: 10px;
@@ -157,7 +155,7 @@ main {
   padding: 11px 24px;
   background: transparent;
   color: var(--navy);
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   border-radius: 10px;
@@ -210,50 +208,8 @@ main {
   align-items: start;
 }
 
-/* ── Bottom nav ── */
-.bottom-nav-shell {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 50;
-  background: rgba(255,255,255,0.94);
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
-}
-
-.bottom-nav-inner {
-  max-width: 600px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  height: 60px;
-}
-
-.bottom-nav-link {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex: 1;
-  padding: 6px 4px;
-  border-radius: 12px;
-  text-decoration: none;
-  transition: background 150ms ease;
-}
-
-.bottom-nav-label {
-  font-size: 10px;
-  font-weight: 500;
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: 0.04em;
-}
-
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  main { padding-top: 60px; padding-bottom: 96px; }
-  main.landing { padding-top: 0; padding-bottom: 0; }
   .layout-wrapper { padding: 12px 12px 32px; }
   .page-title { font-size: 2rem; }
   .telemetry-top-grid { grid-template-columns: 1fr !important; }
@@ -458,7 +414,7 @@ main {
 
 /* ── L28 markdown prose styles ── */
 .pitwall-prose {
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   font-size: 0.9375rem;
   line-height: 1.75;
   color: #1e293b;
@@ -476,7 +432,7 @@ main {
 .pitwall-prose strong { font-weight: 700; color: #0f172a; }
 .pitwall-prose em { font-style: italic; color: #475569; }
 .pitwall-prose code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.8125rem;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
@@ -630,7 +586,7 @@ main {
   min-height: 100vh;
   background: #f7f8fc;
   color: var(--text);
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
 }
 
 .calendar-container {
@@ -716,7 +672,7 @@ main {
 .calendar-hero-title-group h1 {
   margin: 0;
   color: #111827;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: inherit;
   font-size: clamp(24px, 4vw, 40px);
   line-height: 1.1;
   font-weight: 400;
@@ -759,7 +715,7 @@ main {
   display: block;
   margin-top: 8px;
   color: #111827;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: inherit;
   font-size: clamp(18px, 2.4vw, 24px);
   line-height: 1;
   font-weight: 500;
@@ -792,7 +748,7 @@ main {
 .calendar-section-header h2 {
   margin: 0;
   color: #111827;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: inherit;
   font-size: clamp(17px, 2.4vw, 26px);
   line-height: 1;
   font-weight: 500;
@@ -922,7 +878,7 @@ main {
   margin: 26px 0 0;
   overflow: hidden;
   color: #111827;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: inherit;
   font-size: 17px;
   line-height: 1.25;
   font-weight: 500;

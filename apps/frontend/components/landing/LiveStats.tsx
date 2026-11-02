@@ -62,6 +62,30 @@ export default function LiveStats() {
     void load()
   }, [load])
 
+  // Keep the next session fresh while the page stays open. The API moves on to the
+  // following session two hours after one starts. Each poll is scheduled after the
+  // previous one finishes, so requests never overlap.
+  useEffect(() => {
+    if (status !== 'ready') return
+    const controller = new AbortController()
+    let timer: number | undefined
+    const poll = async () => {
+      try {
+        const res = await fetch(`${BASE}/api/v1/schedule/next-race`, { signal: controller.signal })
+        if (res.status === 404) setNext(null)
+        else if (res.ok) setNext((await res.json()) as NextRace)
+      } catch {
+        // Keep the last known value on network failures.
+      }
+      if (!controller.signal.aborted) timer = window.setTimeout(poll, 60000)
+    }
+    timer = window.setTimeout(poll, 60000)
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [status])
+
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30000)
     return () => window.clearInterval(id)
@@ -112,7 +136,7 @@ export default function LiveStats() {
             />
             <Stat
               loading={status === 'loading'}
-              value={next?.next_session ? countdown(next.next_session.date_utc, now) : 'Off season'}
+              value={next ? (next.next_session ? countdown(next.next_session.date_utc, now) : 'Date to be confirmed') : 'Off season'}
               label={
                 next
                   ? `${next.next_session?.name ?? 'Next session'}, ${next.race.event_name}`

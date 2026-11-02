@@ -143,9 +143,9 @@ function StatBadge({ value, label, sub, color }: { value: string; label: string;
       padding: '14px 20px',
       minWidth: 105,
     }}>
-      <div style={{ fontSize: 24, fontWeight: 800, color: color || '#111827', lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: '#6B7280', letterSpacing: '0.07em', textTransform: 'uppercase', marginTop: 4 }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, color: '#10B981', fontWeight: 600, marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || '#111827', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', letterSpacing: '0.07em', textTransform: 'uppercase', marginTop: 4 }}>{label}</div>
+      {sub && <div style={{ fontSize: 12, color: '#10B981', fontWeight: 600, marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
@@ -163,7 +163,7 @@ function SessionPill({ tag }: { tag: SessionTag }) {
       alignItems: 'center',
       padding: '3px 10px',
       borderRadius: 9999,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: 500,
       background: c.bg,
       color: c.color,
@@ -196,21 +196,21 @@ function GPCard({ gp }: { gp: GrandPrix }) {
       >
         {/* Round */}
         <div style={{ textAlign: 'center', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.06em', textTransform: 'uppercase' }}>RD</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#111827', lineHeight: 1 }}>{gp.round}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.06em', textTransform: 'uppercase' }}>RD</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', lineHeight: 1 }}>{gp.round}</div>
         </div>
 
         {/* Content */}
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{gp.name}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{gp.name}</span>
             {gp.isNew && (
-              <span style={{ fontSize: 10, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>
                 NEW
               </span>
             )}
             {gp.isSprint && (
-              <span style={{ fontSize: 10, fontWeight: 700, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 9999 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, background: '#EDE9FE', color: '#7C3AED', padding: '2px 8px', borderRadius: 9999 }}>
                 SPRINT WEEKEND
               </span>
             )}
@@ -220,17 +220,17 @@ function GPCard({ gp }: { gp: GrandPrix }) {
           {/* Stats grid */}
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Qualifying Pole</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Qualifying Pole</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{gp.qualifyingPole.driver}</div>
-              <div style={{ fontSize: 11, color: '#6B7280', fontFamily: '"JetBrains Mono", monospace' }}>{gp.qualifyingPole.time}</div>
+              <div style={{ fontSize: 12, color: '#6B7280', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' }}>{gp.qualifyingPole.time}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Race Winner</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Race Winner</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{gp.raceWinner.driver}</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>{gp.raceWinner.detail}</div>
+              <div style={{ fontSize: 12, color: '#6B7280' }}>{gp.raceWinner.detail}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Telemetry Data</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Telemetry Data</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: gp.telemetryColor }}>{gp.telemetryStatus}</div>
             </div>
           </div>
@@ -256,7 +256,7 @@ function GPCard({ gp }: { gp: GrandPrix }) {
         {gp.sessions.map((s, i) => <SessionPill key={i} tag={s} />)}
         <Link
           href="/sessions"
-          style={{ marginLeft: 'auto', fontSize: 11, color: '#9CA3AF', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}
+          style={{ marginLeft: 'auto', fontSize: 12, color: '#9CA3AF', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}
         >
           {gp.round} Load Sessions <ChevronRight size={11} />
         </Link>
@@ -280,8 +280,8 @@ function GPCard({ gp }: { gp: GrandPrix }) {
           ].map(item => (
             <div key={item.label} style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 14px' }}>
               <div style={{ fontSize: 18, marginBottom: 4 }}>{item.icon}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{item.value}</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>{item.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{item.value}</div>
+              <div style={{ fontSize: 12, color: '#6B7280' }}>{item.label}</div>
             </div>
           ))}
         </div>
@@ -315,7 +315,7 @@ export default function HistoricalArchivePage() {
           {['DATABASE INDEX', 'TELEMETRY', 'SESSIONS ARCHIVE'].map((crumb, i, arr) => (
             <React.Fragment key={crumb}>
               <span style={{
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -326,14 +326,14 @@ export default function HistoricalArchivePage() {
               {i < arr.length - 1 && <ChevronRight size={10} color="#D1D5DB" />}
             </React.Fragment>
           ))}
-          <span style={{ marginLeft: 8, fontSize: 10, color: '#9CA3AF', fontFamily: 'monospace' }}>F1A 2026 v1.12</span>
+          <span style={{ marginLeft: 8, fontSize: 12, color: '#9CA3AF', fontFamily: 'inherit' }}>F1A 2026 v1.12</span>
         </div>
 
         {/* ── Hero ───────────────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 32, flexWrap: 'wrap', marginBottom: 36 }}>
           <div style={{ flex: '1 1 380px' }}>
             <h1 style={{
-              fontFamily: "'Playfair Display', Georgia, serif",
+              fontFamily: 'inherit',
               fontSize: 'clamp(36px, 6vw, 56px)',
               fontWeight: 700,
               color: '#111827',
@@ -368,7 +368,7 @@ export default function HistoricalArchivePage() {
           marginBottom: 20,
           flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Filter</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Filter</span>
 
           <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap' }}>
             {SESSION_FILTERS.map(f => (
@@ -450,10 +450,10 @@ export default function HistoricalArchivePage() {
             <div style={{ background: '#0F172A', padding: '28px 24px', color: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }} />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748B' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#64748B' }}>
                   Generate Telemetry Overlay
                 </span>
-                <span style={{ marginLeft: 'auto', fontSize: 10, color: '#475569' }}>Live Sync · Pole · P2</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569' }}>Live Sync · Pole · P2</span>
               </div>
 
               {/* Driver selectors */}
@@ -464,7 +464,7 @@ export default function HistoricalArchivePage() {
                 ].map(d => (
                   <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1E293B', borderRadius: 8, padding: '8px 10px' }}>
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: '#CBD5E1' }}>{d.name}</span>
+                    <span style={{ fontSize: 12, color: '#CBD5E1' }}>{d.name}</span>
                   </div>
                 ))}
               </div>
@@ -472,8 +472,8 @@ export default function HistoricalArchivePage() {
               {/* Sparkline */}
               <div style={{ background: '#1E293B', borderRadius: 10, padding: '14px', marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, color: '#475569' }}>Curve Throttle — Trepole Chicane</span>
-                  <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace' }}>Δ +0.13s</span>
+                  <span style={{ fontSize: 12, color: '#475569' }}>Curve Throttle — Trepole Chicane</span>
+                  <span style={{ fontSize: 12, color: '#475569', fontFamily: 'inherit' }}>Δ +0.13s</span>
                 </div>
                 <svg width="100%" height="72" viewBox="0 0 280 72" style={{ overflow: 'visible' }}>
                   {/* Norris */}
@@ -488,8 +488,8 @@ export default function HistoricalArchivePage() {
                   />
                 </svg>
                 <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
-                  <span style={{ fontSize: 10, color: '#FF8000' }}>— Norris (MCL)</span>
-                  <span style={{ fontSize: 10, color: '#E8002D' }}>- - Leclerc (SF)</span>
+                  <span style={{ fontSize: 12, color: '#FF8000' }}>— Norris (MCL)</span>
+                  <span style={{ fontSize: 12, color: '#E8002D' }}>- - Leclerc (SF)</span>
                 </div>
               </div>
 
@@ -500,7 +500,7 @@ export default function HistoricalArchivePage() {
                   { label: 'Read Channels', value: '48 Active' },
                 ].map(m => (
                   <div key={m.label} style={{ background: '#1E293B', borderRadius: 8, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 9, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
+                    <div style={{ fontSize: 12, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#FFFFFF', marginTop: 2 }}>{m.value}</div>
                   </div>
                 ))}
@@ -526,13 +526,13 @@ export default function HistoricalArchivePage() {
             <div style={{ padding: '32px 28px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#E8002D' }} />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B7280' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B7280' }}>
                   Engineering Spotlight · Monza 2026
                 </span>
               </div>
 
               <h2 style={{
-                fontFamily: "'Playfair Display', Georgia, serif",
+                fontFamily: 'inherit',
                 fontSize: 'clamp(22px, 3.5vw, 32px)',
                 fontWeight: 700,
                 color: '#111827',
@@ -542,7 +542,7 @@ export default function HistoricalArchivePage() {
                 Monza Telemetry Breakdown: Norris vs Leclerc Sector 2 Apex Speed
               </h2>
 
-              <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, marginBottom: 24 }}>
+              <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.8, marginBottom: 24 }}>
                 Our synchronized telemetry reveals how Ferrari&apos;s all-or-stop-the management protocol preserved gaining residence in the Ascari Chicane, offsetting McLaren&apos;s 6.8 km/h aerodynamic peak velocity advantage into the Parabolica.
               </p>
 
@@ -562,7 +562,7 @@ export default function HistoricalArchivePage() {
                     borderBottom: '1px solid #F3F4F6',
                   }}>
                     <span style={{ fontSize: 12, color: '#6B7280' }}>{stat.label}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: 16 }}>{stat.value}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'inherit', whiteSpace: 'nowrap', marginLeft: 16 }}>{stat.value}</span>
                   </div>
                 ))}
               </div>
@@ -575,7 +575,7 @@ export default function HistoricalArchivePage() {
                 background: '#E8002D',
                 color: '#FFFFFF',
                 borderRadius: 9999,
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 600,
                 textDecoration: 'none',
               }}>

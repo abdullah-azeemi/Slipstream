@@ -68,7 +68,11 @@ def list_sessions():
                 pole.full_name     AS pole_driver,
                 pole.lap_time_ms   AS pole_time_ms,
                 win.full_name      AS winner_driver,
-                win.total_laps     AS winner_laps
+                win.total_laps     AS winner_laps,
+                EXISTS (
+                    SELECT 1 FROM lap_times lt0
+                    WHERE lt0.session_key = s.session_key
+                ) AS has_laps
             FROM sessions s
             LEFT JOIN LATERAL (
                 -- Pole sitter: fastest valid lap in a Q/SQ session

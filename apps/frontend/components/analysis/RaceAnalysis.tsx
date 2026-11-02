@@ -366,15 +366,15 @@ export default function RaceAnalysis({
       const ms = yMin + (i / 5) * (yMax - yMin); const y = toY(ms)
       ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillText(formatLapTime(ms), PAD.left - 6, y + 3)
     }
     const lapStep = Math.max(1, Math.ceil(maxLap / 10))
     for (let lap = 1; lap <= maxLap; lap += lapStep) {
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
       ctx.fillText(String(lap), toX(lap), H - 12)
     }
-    ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+    ctx.fillStyle = TEXT_MID; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
@@ -431,15 +431,15 @@ export default function RaceAnalysis({
       const y = toY(g)
       ctx.beginPath(); ctx.strokeStyle = g === 0 ? '#2A2A2A' : AXIS_COLOR; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillText(g === 0 ? 'LEAD' : `${g}s`, PAD.left - 6, y + 3)
     }
     const lapStep = Math.max(1, Math.ceil(maxLap / 10))
     for (let lap = 1; lap <= maxLap; lap += lapStep) {
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
       ctx.fillText(String(lap), toX(lap), H - 12)
     }
-    ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+    ctx.fillStyle = TEXT_MID; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
@@ -461,7 +461,7 @@ export default function RaceAnalysis({
       ctx.stroke()
       if (isSel && pts.length) {
         const last = pts[pts.length - 1]
-        ctx.fillStyle = colour; ctx.font = 'bold 10px JetBrains Mono, monospace'; ctx.textAlign = 'left'
+        ctx.fillStyle = colour; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'left'
         ctx.fillText(data.abbreviation, toX(last.lap) + 8, toY(last.gap) + 4)
       }
       if (isSel && hovLap !== null) {
@@ -499,15 +499,15 @@ export default function RaceAnalysis({
       const y = toY(p)
       ctx.beginPath(); ctx.strokeStyle = AXIS_COLOR; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillText(`P${p}`, PAD.left - 6, y + 4)
     }
     const lapStep = Math.max(1, Math.ceil(maxLap / 10))
     for (let lap = 1; lap <= maxLap; lap += lapStep) {
-      ctx.fillStyle = TEXT_DIM; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
       ctx.fillText(String(lap), toX(lap), H - 12)
     }
-    ctx.fillStyle = TEXT_MID; ctx.font = '10px JetBrains Mono, monospace'; ctx.textAlign = 'center'
+    ctx.fillStyle = TEXT_MID; ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
     ctx.fillText('LAP', PAD.left + cW / 2, H - 2)
 
     if (hovLap !== null) {
@@ -529,7 +529,7 @@ export default function RaceAnalysis({
       ctx.stroke()
       if (isSel && pts.length) {
         const last = pts[pts.length - 1]
-        ctx.fillStyle = colour; ctx.font = 'bold 10px JetBrains Mono, monospace'; ctx.textAlign = 'left'
+        ctx.fillStyle = colour; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'left'
         ctx.fillText(data.abbreviation, toX(last.lap) + 8, toY(last.pos) + 4)
       }
       if (isSel && hovLap !== null) {

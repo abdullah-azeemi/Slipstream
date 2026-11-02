@@ -36,8 +36,9 @@ export default function TaglineReveal({ text }: { text: string }) {
   return (
     <p ref={ref} className="heading-2" aria-label={text}>
       {text.split(' ').map((word, i) => (
-        <span key={`${word}-${i}`} className="word" aria-hidden="true">
-          {word}
+        <span key={`${word}-${i}`}>
+          {i > 0 ? ' ' : null}
+          <span className="word" aria-hidden="true">{word}</span>
         </span>
       ))}
     </p>

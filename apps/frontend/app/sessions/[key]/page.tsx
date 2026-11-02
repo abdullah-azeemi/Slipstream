@@ -27,8 +27,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const RACE_LIKE = ['R', 'S'] as const
 const QUALI_LIKE = ['Q', 'SQ'] as const
-const SERIF = "'Playfair Display', Georgia, serif"
-const MONO = 'JetBrains Mono, monospace'
+const SERIF = 'inherit'
+const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 const PALETTE = ['#0D9488', '#DC2626', '#1D4ED8', '#64748B']
 const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 
@@ -109,7 +109,7 @@ type SessionRef = {
 }
 
 const eyebrow = {
-  fontSize: 10,
+  fontSize: 12,
   fontWeight: 700,
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
@@ -210,7 +210,7 @@ function buildPitWindows(drivers: ChartDriver[]): PitWindow[] {
 
 function Empty({ message }: { message: string }) {
   return (
-    <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: '28px 20px', textAlign: 'center', color: '#6B7280', fontFamily: 'Inter, sans-serif', fontSize: 13, lineHeight: 1.6 }}>
+    <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: '28px 20px', textAlign: 'center', color: '#6B7280', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}>
       {message}
     </div>
   )
@@ -230,7 +230,7 @@ function EnvCard({ session, round }: { session: LocalSession | null; round: numb
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div style={{ ...eyebrow }}>Session Environment</div>
         <span style={{
-          padding: '4px 10px', borderRadius: 999, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+          padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
           textTransform: 'uppercase', background: session ? 'rgba(13,148,136,0.1)' : 'rgba(148,163,184,0.12)',
           color: session ? '#0F766E' : '#64748B', fontFamily: MONO,
         }}>
@@ -240,8 +240,8 @@ function EnvCard({ session, round }: { session: LocalSession | null; round: numb
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {rows.map(([label, value]) => (
           <div key={label} style={{ padding: '10px 12px', borderRadius: 12, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', fontFamily: MONO }}>{value}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', fontFamily: MONO }}>{value}</div>
           </div>
         ))}
       </div>
@@ -258,7 +258,7 @@ function PodiumCard({ position, result, index, winnerBest }: {
   if (!result) {
     return (
       <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: 14, flex: 1, minWidth: 140 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', fontFamily: MONO }}>{position} — {POINTS[index]} PTS</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', fontFamily: MONO }}>{position} — {POINTS[index]} PTS</div>
         <div style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF' }}>Awaiting data</div>
       </div>
     )
@@ -272,15 +272,15 @@ function PodiumCard({ position, result, index, winnerBest }: {
       borderRadius: 16, padding: 14, flex: 1, minWidth: 140,
       background: isFirst ? 'linear-gradient(180deg, rgba(13,148,136,0.05), rgba(255,255,255,0))' : '#FFFFFF',
     }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: isFirst ? '#0F766E' : '#111827', fontFamily: MONO }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: isFirst ? '#0F766E' : '#111827', fontFamily: MONO }}>
         {position} — {POINTS[index]} PTS
       </div>
-      <div style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginTop: 12 }}>{result.team_name}</div>
-      <div style={{ margin: '3px 0 8px', fontSize: 19, fontWeight: 600, color: '#111827', fontFamily: SERIF }}>{result.abbreviation}</div>
+      <div style={{ fontSize: 12, color: '#6B7280', fontFamily: 'inherit', fontWeight: 600, marginTop: 12 }}>{result.team_name}</div>
+      <div style={{ margin: '3px 0 8px', fontSize: 18, fontWeight: 600, color: '#111827', fontFamily: SERIF }}>{result.abbreviation}</div>
       {gap != null && (
         <div style={{ fontSize: 11.5, fontWeight: 700, color: accent, fontFamily: MONO }}>{gap}</div>
       )}
-      <div style={{ marginTop: 10, fontSize: 10, color: '#9CA3AF', fontFamily: MONO }}>
+      <div style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF', fontFamily: MONO }}>
         Best Lap: {formatLapTime(result.best_lap_ms ?? winnerBest)}
       </div>
     </div>
@@ -290,10 +290,10 @@ function PodiumCard({ position, result, index, winnerBest }: {
 function BenchmarkRow({ label, value, caption }: { label: string; value: string; caption: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: '11px 0', borderBottom: '1px solid #F3F4F6' }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', fontFamily: 'Inter, sans-serif' }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', fontFamily: 'inherit' }}>{label}</span>
       <span style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#111827', fontFamily: MONO, display: 'block' }}>{value}</span>
-        <span style={{ fontSize: 10, color: '#9CA3AF', fontFamily: 'Inter, sans-serif', marginTop: 2, display: 'block' }}>{caption}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: '#111827', fontFamily: MONO, display: 'block' }}>{value}</span>
+        <span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'inherit', marginTop: 2, display: 'block' }}>{caption}</span>
       </span>
     </div>
   )
@@ -316,7 +316,7 @@ function ClassificationTable({ rows }: { rows: RaceTableRow[] }) {
                 key={h}
                 style={{
                   textAlign: h === 'POS' ? 'center' : h === 'Driver' ? 'left' : 'right',
-                  padding: '10px 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+                  padding: '10px 10px', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
                   textTransform: 'uppercase', color: '#9CA3AF', fontFamily: MONO, whiteSpace: 'nowrap',
                 }}
               >
@@ -330,16 +330,16 @@ function ClassificationTable({ rows }: { rows: RaceTableRow[] }) {
             const accent = teamColour(r.team_colour, r.team_name)
             return (
               <tr key={r.driver_number} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                <td style={{ padding: '12px 10px', textAlign: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 800, color: i === 0 ? '#0F766E' : '#111827' }}>
+                <td style={{ padding: '12px 10px', textAlign: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: i === 0 ? '#0F766E' : '#111827' }}>
                   {r.finish_pos ?? '—'}
                 </td>
                 <td style={{ padding: '12px 10px', textAlign: 'left' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: '#111827' }}>
                     <span style={{ width: 3, height: 22, borderRadius: 999, background: accent, display: 'inline-block' }} />
                     {r.abbreviation}
                   </span>
                 </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'inherit', fontSize: 11.5, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {r.team_name}
                 </td>
                 <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: '#111827', fontWeight: 700 }}>
@@ -362,10 +362,10 @@ function ClassificationTable({ rows }: { rows: RaceTableRow[] }) {
                           background: COMPOUND_COLOURS[t] ?? '#CBD5E1', display: 'inline-block',
                         }}
                       />
-                    )) : <span style={{ color: '#D1D5DB', fontFamily: MONO, fontSize: 10 }}>—</span>}
+                    )) : <span style={{ color: '#D1D5DB', fontFamily: MONO, fontSize: 12 }}>—</span>}
                   </span>
                 </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, fontWeight: 800, color: r.points ? '#0F766E' : '#9CA3AF' }}>
+                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: r.points ? '#0F766E' : '#9CA3AF' }}>
                   {r.points || '—'}
                 </td>
               </tr>
@@ -468,18 +468,18 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
   })
 
   return (
-    <div style={{ maxWidth: 1160, margin: '0 auto', padding: '36px 20px 72px', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ maxWidth: 1160, margin: '0 auto', padding: '36px 20px 72px', fontFamily: 'inherit' }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Link href="/" style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'Inter, sans-serif' }}>
+        <Link href="/" style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'inherit' }}>
           Pitwall
         </Link>
-        <span style={{ fontSize: 11, color: '#D1D5DB' }}>/</span>
-        <Link href="/sessions" style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'Inter, sans-serif' }}>
+        <span style={{ fontSize: 12, color: '#D1D5DB' }}>/</span>
+        <Link href="/sessions" style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'inherit' }}>
           Sessions
         </Link>
-        <span style={{ fontSize: 11, color: '#D1D5DB' }}>/</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', fontFamily: 'Inter, sans-serif' }}>
+        <span style={{ fontSize: 12, color: '#D1D5DB' }}>/</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'inherit' }}>
           {circuitName} {weekend.year}
         </span>
       </div>
@@ -492,16 +492,16 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
             <h1 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(1.8rem, 4vw, 3rem)', lineHeight: 1.05, color: '#111827', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {circuitName}
             </h1>
-            <p style={{ margin: '16px 0 0', fontFamily: SERIF, fontStyle: 'italic', fontSize: 'clamp(1.05rem, 2.4vw, 1.5rem)', lineHeight: 1.5, color: '#6B7280', maxWidth: 620 }}>
+            <p style={{ margin: '16px 0 0', fontFamily: SERIF, fontSize: 'clamp(1.05rem, 2.4vw, 1.5rem)', lineHeight: 1.5, color: '#6B7280', maxWidth: 620 }}>
               Race classification, macro benchmarks and telemetry-adjacent lap analytics for one complete race window.
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, minWidth: 96 }}>
-            <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: '#0F766E', whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: '#0F766E', whiteSpace: 'nowrap' }}>
               R{String(round).padStart(2, '0')}
             </span>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: '#9CA3AF' }}>{circuitName}</span>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: '#9CA3AF' }}>Lap {maxLap}</span>
+            <span style={{ fontFamily: MONO, fontSize: 12, color: '#9CA3AF' }}>{circuitName}</span>
+            <span style={{ fontFamily: MONO, fontSize: 12, color: '#9CA3AF' }}>Lap {maxLap}</span>
           </div>
         </div>
       </header>
@@ -560,7 +560,7 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
           <div style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, color: '#111827' }}>
             {circuitName} <span style={{ color: '#9CA3AF' }}>·</span> {weekend.year}
           </div>
-          <div style={{ marginTop: 5, fontSize: 11.5, color: '#6B7280', fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ marginTop: 5, fontSize: 11.5, color: '#6B7280', fontFamily: 'inherit' }}>
             Data refreshed from live feeds every minute. Source classification subject to change.
           </div>
         </div>
@@ -569,7 +569,7 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
           prefetch={false}
           style={{
             textDecoration: 'none', background: '#111827', color: '#FFFFFF', borderRadius: 999,
-            padding: '12px 20px', fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700,
+            padding: '12px 20px', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
           }}
         >
           Open telemetry →

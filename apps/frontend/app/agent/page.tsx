@@ -252,6 +252,13 @@ export default function AgentPage() {
     agentApi.getLimits(getToken).then(setUsage).catch(() => {})
   }, [getToken])
 
+  // Deep link from the dashboard: /agent?c=<conversation id>
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get('c')
+    const id = raw ? Number(raw) : NaN
+    if (Number.isInteger(id) && id > 0) void loadConversation(id)
+  }, [])
+
   useEffect(() => {
     agentApi.getAdminStats(getToken).then(setAdminStats).catch(() => {})
   }, [getToken])

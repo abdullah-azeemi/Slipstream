@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 function parts(diff: number) {
   const s = Math.floor(diff / 1000)
@@ -13,6 +14,7 @@ function parts(diff: number) {
 }
 
 export default function SessionCountdown({ target }: { target: string }) {
+  const router = useRouter()
   const [now, setNow] = useState<number | null>(null)
 
   useEffect(() => {
@@ -22,6 +24,16 @@ export default function SessionCountdown({ target }: { target: string }) {
   }, [])
 
   const t = new Date(target).getTime()
+
+  // The API keeps a session as "next" until two hours after it starts, then returns the
+  // following one. Ask the server for fresh data just after that window closes.
+  useEffect(() => {
+    if (Number.isNaN(t)) return
+    const wait = t + 2 * 3600 * 1000 + 45000 - Date.now()
+    if (wait <= 0) return
+    const id = window.setTimeout(() => router.refresh(), Math.min(wait, 2 ** 31 - 1))
+    return () => window.clearTimeout(id)
+  }, [t, router])
   if (Number.isNaN(t)) return <p className="body-6 muted">Start time to be confirmed.</p>
 
   if (now === null) {

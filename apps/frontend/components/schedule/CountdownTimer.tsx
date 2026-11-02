@@ -66,7 +66,7 @@ export default function CountdownTimer({ targetDate, sessionName, variant = 'dar
           fontWeight: 600,
           letterSpacing: '0.05em',
           marginBottom: '2px',
-          fontFamily: 'monospace',
+          fontFamily: 'inherit',
         }}>
           {isLive ? 'LIVE NOW — ' : 'NEXT — '}{sessionName.toUpperCase()} {isLive && '•'}
         </span>
@@ -77,10 +77,10 @@ export default function CountdownTimer({ targetDate, sessionName, variant = 'dar
           background: isLight ? '#FFF1F3' : '#E8002D',
           color: isLight ? '#BE123C' : '#fff',
           fontSize: '14px',
-          fontWeight: 800,
+          fontWeight: 700,
           padding: '6px 14px',
           borderRadius: '8px',
-          fontFamily: 'Rajdhani, sans-serif',
+          fontFamily: 'inherit',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
@@ -119,8 +119,8 @@ export default function CountdownTimer({ targetDate, sessionName, variant = 'dar
             }}>
               <span className="countdown-value" style={{
                 fontSize: '18px',
-                fontWeight: 800,
-                fontFamily: 'Rajdhani, sans-serif',
+                fontWeight: 700,
+                fontFamily: 'inherit',
                 color: unit.isRed ? '#E80020' : (isLight ? '#14233C' : '#FFFFFF'),
                 lineHeight: 1
               }}>

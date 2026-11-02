@@ -21,9 +21,11 @@ import HeroMedia from '@/components/landing/HeroMedia'
 import LiveStats from '@/components/landing/LiveStats'
 import TaglineReveal from '@/components/landing/TaglineReveal'
 import PostCard from '@/components/landing/PostCard'
+import PrimaryCta from '@/components/landing/PrimaryCta'
 import { getAllPosts } from '@/lib/blog'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
   title: 'Slipstream: F1 telemetry, tyre strategy and race predictions',
   description:
     'Open source Formula 1 analytics. Compare drivers corner by corner, study tyre strategy, read race predictions and ask the Pitwall agent. Built for fans and analysts.',
@@ -139,14 +141,6 @@ const faqJsonLd = {
   })),
 }
 
-function PrimaryCta({ size = 'button-lg' }: { size?: 'button-lg' | 'button-md' }) {
-  return (
-    <Link href="/sign-up" className={`btn btn-primary ${size}`}>
-      Create free account <ArrowRight size={size === 'button-lg' ? 20 : 16} weight="bold" aria-hidden="true" />
-    </Link>
-  )
-}
-
 export default function LandingPage() {
   const posts = getAllPosts().slice(0, 3)
 
@@ -155,7 +149,7 @@ export default function LandingPage() {
       <LandingNav />
       <RevealController />
 
-      <main id="main">
+      <div id="main">
         {/* Hero */}
         <section className="hero">
           <div className="wrap hero-inner">
@@ -373,7 +367,7 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-      </main>
+      </div>
 
       <LandingFooter />
     </div>

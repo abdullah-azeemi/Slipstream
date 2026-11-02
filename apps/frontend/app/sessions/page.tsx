@@ -16,9 +16,8 @@ import { authHeaders } from '@/lib/auth-token'
 import { sessionTypeLabel } from '@/lib/utils'
 import type { Session } from '@/types/f1'
 
-const serif = "'Playfair Display', Georgia, serif"
 const label = {
-  fontSize: 10,
+  fontSize: 12,
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
@@ -207,7 +206,7 @@ export default function SessionsPage() {
   const yearLabel = year === 'all' ? 'All Championships' : `${year} Championship`
 
   return (
-    <div style={{ minHeight: '100vh', background: '#FFFFFF', color: '#111827', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#FFFFFF', color: '#111827', fontFamily: 'inherit' }}>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1160px', margin: '0 auto', padding: isMobile ? '24px 16px 56px' : '36px 32px 64px' }}>
         {/* ---------------- Hero ---------------- */}
@@ -223,11 +222,11 @@ export default function SessionsPage() {
             <div style={{ maxWidth: '640px' }}>
               <h1 style={{
                 margin: 0, color: '#111827', fontSize: isMobile ? '2.4rem' : 'clamp(2.4rem, 4.6vw, 3.6rem)',
-                lineHeight: 1.12, fontWeight: 400, fontFamily: serif, letterSpacing: '-0.02em',
+                lineHeight: 1.12, fontWeight: 400, fontFamily: 'inherit', letterSpacing: '-0.02em',
               }}>
                 Historical Archive
               </h1>
-              <p style={{ margin: '14px 0 0', color: '#6B7280', fontSize: '14px', lineHeight: 1.7, fontFamily: 'Inter, sans-serif' }}>
+              <p style={{ margin: '14px 0 0', color: '#6B7280', fontSize: '14px', lineHeight: 1.7, fontFamily: 'inherit' }}>
                 Complete telemetry streams, calibrated high-frequency session timelines, and engineered race analytics for every Grand Prix synchronized in the current global telemetry pool.
               </p>
             </div>
@@ -237,26 +236,26 @@ export default function SessionsPage() {
                 <div style={{ ...label, marginBottom: '8px' }}>
                   Grand Prix
                 </div>
-                <div style={{ color: '#111827', fontSize: '24px', fontFamily: 'Inter, sans-serif', fontWeight: 700, lineHeight: 1 }}>{grouped.length}</div>
-                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'Inter, sans-serif', marginTop: '6px' }}>Weekends in view</div>
+                <div style={{ color: '#111827', fontSize: '24px', fontFamily: 'inherit', fontWeight: 700, lineHeight: 1 }}>{grouped.length}</div>
+                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'inherit', marginTop: '6px' }}>Weekends in view</div>
               </div>
 
               <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#F9FAFB', border: '1px solid #F3F4F6', minWidth: '110px' }}>
                 <div style={{ ...label, marginBottom: '8px' }}>
                   Sessions
                 </div>
-                <div style={{ color: '#111827', fontSize: '24px', fontFamily: 'Inter, sans-serif', fontWeight: 700, lineHeight: 1 }}>{filteredByType.length}</div>
-                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'Inter, sans-serif', marginTop: '6px' }}>FP1 → Race</div>
+                <div style={{ color: '#111827', fontSize: '24px', fontFamily: 'inherit', fontWeight: 700, lineHeight: 1 }}>{filteredByType.length}</div>
+                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'inherit', marginTop: '6px' }}>FP1 → Race</div>
               </div>
 
               <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#F9FAFB', border: '1px solid #F3F4F6', minWidth: '150px' }}>
                 <div style={{ ...label, marginBottom: '8px' }}>
                   Scope
                 </div>
-                <div style={{ color: '#111827', fontSize: '18px', fontFamily: 'Inter, sans-serif', fontWeight: 700, lineHeight: 1 }}>
+                <div style={{ color: '#111827', fontSize: '18px', fontFamily: 'inherit', fontWeight: 700, lineHeight: 1 }}>
                   {year === 'all' ? 'All Seasons' : `${year} Season`}
                 </div>
-                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'Inter, sans-serif', marginTop: '6px' }}>Full data set</div>
+                <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'inherit', marginTop: '6px' }}>Full data set</div>
               </div>
             </div>
           </div>
@@ -280,7 +279,7 @@ export default function SessionsPage() {
                     border: active ? '1px solid #111827' : '1px solid #E5E7EB',
                     background: active ? '#111827' : '#FFFFFF',
                     color: active ? '#FFFFFF' : '#6B7280',
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: 'inherit',
                     fontSize: '12.5px',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -304,7 +303,7 @@ export default function SessionsPage() {
                   borderRadius: '999px',
                   border: '1px solid #E5E7EB',
                   background: '#FFFFFF',
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: 'inherit',
                   fontSize: '12.5px',
                   color: '#111827',
                   width: isMobile ? '100%' : '230px',
@@ -320,7 +319,7 @@ export default function SessionsPage() {
                   display: 'flex', alignItems: 'center', gap: '8px',
                   background: '#FFFFFF', border: '1px solid #E5E7EB', color: '#111827',
                   fontSize: '12.5px', padding: '10px 14px', borderRadius: '999px', cursor: 'pointer',
-                  fontFamily: 'Inter, sans-serif', fontWeight: 600, whiteSpace: 'nowrap',
+                  fontFamily: 'inherit', fontWeight: 600, whiteSpace: 'nowrap',
                 }}
               >
                 {yearLabel}
@@ -341,7 +340,7 @@ export default function SessionsPage() {
                         fontSize: '12.5px', cursor: 'pointer',
                         background: year === y ? 'rgba(17,24,39,0.05)' : 'transparent',
                         color: year === y ? '#111827' : '#6B7280',
-                        fontFamily: 'Inter, sans-serif', fontWeight: 600, border: 'none',
+                        fontFamily: 'inherit', fontWeight: 600, border: 'none',
                         borderBottom: '1px solid #F3F4F6',
                       }}
                     >
@@ -356,13 +355,13 @@ export default function SessionsPage() {
 
         {/* ---------------- Rows ---------------- */}
         {loading && (
-          <div style={{ textAlign: 'center', padding: '64px 0', color: '#6B7280', fontFamily: 'Inter, sans-serif', fontSize: '13px' }}>
+          <div style={{ textAlign: 'center', padding: '64px 0', color: '#6B7280', fontFamily: 'inherit', fontSize: '13px' }}>
             Loading archive...
           </div>
         )}
 
         {!loading && visibleGroups.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '64px 0', color: '#6B7280', fontFamily: 'Inter, sans-serif', fontSize: '13px' }}>
+          <div style={{ textAlign: 'center', padding: '64px 0', color: '#6B7280', fontFamily: 'inherit', fontSize: '13px' }}>
             No archive sessions match this filter.
           </div>
         )}
@@ -395,8 +394,8 @@ export default function SessionsPage() {
                     borderRadius: '10px', background: '#F3F4F6', border: '1px solid #F3F4F6',
                     padding: '8px 6px', textAlign: 'center',
                   }}>
-                    <div style={{ fontSize: '8px', color: '#9CA3AF', fontFamily: 'Inter, sans-serif', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Rnd</div>
-                    <div style={{ color: '#111827', fontSize: isMobile ? '16px' : '20px', lineHeight: 1, fontFamily: 'Inter, sans-serif', fontWeight: 700, marginTop: '3px' }}>
+                    <div style={{ fontSize: '8px', color: '#9CA3AF', fontFamily: 'inherit', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Rnd</div>
+                    <div style={{ color: '#111827', fontSize: isMobile ? '16px' : '20px', lineHeight: 1, fontFamily: 'inherit', fontWeight: 700, marginTop: '3px' }}>
                       {String(group.round).padStart(2, '0')}
                     </div>
                   </div>
@@ -404,25 +403,25 @@ export default function SessionsPage() {
                   {/* Name + meta */}
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                      <span style={{ fontSize: isMobile ? '15px' : '17px', color: '#111827', fontFamily: serif, fontWeight: 500 }}>
+                      <span style={{ fontSize: isMobile ? '15px' : '17px', color: '#111827', fontFamily: 'inherit', fontWeight: 500 }}>
                         {group.gp_name}
                       </span>
                       <span style={{
                         padding: '3px 9px', borderRadius: '999px', background: status.bg, color: status.color,
-                        fontSize: '9px', fontFamily: 'Inter, sans-serif', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                        fontSize: '9px', fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
                       }}>
                         {status.label}
                       </span>
                       {!isMobile && (
                         <span style={{
                           padding: '3px 9px', borderRadius: '999px', background: '#F9FAFB', color: '#6B7280',
-                          fontSize: '9px', fontFamily: 'Inter, sans-serif', fontWeight: 600,
+                          fontSize: '9px', fontFamily: 'inherit', fontWeight: 600,
                         }}>
                           {group.sessions.length} Session{group.sessions.length === 1 ? '' : 's'} Logged
                         </span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', color: '#6B7280', fontSize: '11.5px', fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', color: '#6B7280', fontSize: '11.5px', fontFamily: 'inherit', fontWeight: 500 }}>
                       {group.circuit && <span>{group.circuit}</span>}
                       {group.country && <span>· {group.country}</span>}
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -439,8 +438,8 @@ export default function SessionsPage() {
                         Qualifying Pole
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>{pole.driver}</span>
-                        <span style={{ fontSize: '10.5px', color: '#B45309', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{pole.time}</span>
+                        <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'inherit', fontWeight: 700 }}>{pole.driver}</span>
+                        <span style={{ fontSize: '10.5px', color: '#B45309', fontFamily: 'inherit', fontWeight: 600 }}>{pole.time}</span>
                       </div>
                     </div>
                   )}
@@ -451,8 +450,8 @@ export default function SessionsPage() {
                         Race Winner
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>{race.driver}</span>
-                        <span style={{ fontSize: '10.5px', color: '#DC2626', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{race.summary}</span>
+                        <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'inherit', fontWeight: 700 }}>{race.driver}</span>
+                        <span style={{ fontSize: '10.5px', color: '#DC2626', fontFamily: 'inherit', fontWeight: 600 }}>{race.summary}</span>
                       </div>
                     </div>
                   )}
@@ -463,7 +462,7 @@ export default function SessionsPage() {
                       <div style={{ ...label, marginBottom: '5px' }}>
                         Archive State
                       </div>
-                      <div style={{ fontSize: '12px', color: '#111827', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
+                      <div style={{ fontSize: '12px', color: '#111827', fontFamily: 'inherit', fontWeight: 700 }}>
                         {status.stateText}
                       </div>
                     </div>
@@ -502,7 +501,7 @@ export default function SessionsPage() {
                           borderRadius: '999px',
                           padding: '6px 12px',
                           fontSize: '11.5px',
-                          fontFamily: 'Inter, sans-serif',
+                          fontFamily: 'inherit',
                           fontWeight: 600,
                         }}
                       >
@@ -547,13 +546,13 @@ export default function SessionsPage() {
                     <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: '6px', textTransform: 'uppercase' }}>
                       Primary Driver
                     </div>
-                    <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#111827' }}>Driver A</div>
+                    <div style={{ fontSize: '12px', fontFamily: 'inherit', fontWeight: 600, color: '#111827' }}>Driver A</div>
                   </div>
                   <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: '10px', border: '1px solid #F3F4F6' }}>
                     <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: '6px', textTransform: 'uppercase' }}>
                       Comparison Car
                     </div>
-                    <div style={{ fontSize: '12px', fontFamily: 'Inter, sans-serif', fontWeight: 600, color: '#111827' }}>Driver B</div>
+                    <div style={{ fontSize: '12px', fontFamily: 'inherit', fontWeight: 600, color: '#111827' }}>Driver B</div>
                   </div>
                 </div>
 
@@ -566,7 +565,7 @@ export default function SessionsPage() {
 
                 <button style={{
                   marginTop: '14px', width: '100%', padding: '11px', borderRadius: '999px', border: 'none',
-                  background: '#111827', color: '#FFFFFF', fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: '12.5px', cursor: 'pointer',
+                  background: '#111827', color: '#FFFFFF', fontFamily: 'inherit', fontWeight: 600, fontSize: '12.5px', cursor: 'pointer',
                 }}>
                   Run Micro-Sector Matrix
                 </button>
@@ -577,10 +576,10 @@ export default function SessionsPage() {
               <div style={{ ...label, marginBottom: '10px' }}>
                 Engineering Spotlight
               </div>
-              <h2 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '1.9rem', fontWeight: 400, color: '#111827', fontFamily: serif, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '1.9rem', fontWeight: 400, color: '#111827', fontFamily: 'inherit', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
                 {visibleGroups[0].gp_name} Telemetry Breakdown
               </h2>
-              <p style={{ margin: '12px 0 20px', color: '#6B7280', fontSize: '14px', lineHeight: 1.7, fontFamily: 'Inter, sans-serif' }}>
+              <p style={{ margin: '12px 0 20px', color: '#6B7280', fontSize: '14px', lineHeight: 1.7, fontFamily: 'inherit' }}>
                 A closer look at how session pace, tyre management, and sector deltas evolved across the {visibleGroups[0].gp_name} weekend — built from the synchronized session data above.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -590,8 +589,8 @@ export default function SessionsPage() {
                   ['Archive Status', weekendStatus(visibleGroups[0]).label],
                 ].map(([labelText, value]) => (
                   <div key={labelText} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F3F4F6', paddingBottom: '8px' }}>
-                    <span style={{ fontSize: '11.5px', color: '#6B7280', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{labelText}</span>
-                    <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>{value}</span>
+                    <span style={{ fontSize: '11.5px', color: '#6B7280', fontFamily: 'inherit', fontWeight: 600 }}>{labelText}</span>
+                    <span style={{ fontSize: '12.5px', color: '#111827', fontFamily: 'inherit', fontWeight: 700 }}>{value}</span>
                   </div>
                 ))}
               </div>

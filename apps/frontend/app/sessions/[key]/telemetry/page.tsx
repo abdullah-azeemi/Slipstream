@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft } from '@phosphor-icons/react'
 import '@/components/landing/landing.css'
 import { geist, geistMono } from '@/components/landing/font'
+import { TabList, ToggleGroup } from '@/components/landing/Tabs'
 import { api, telemetryApi } from '@/lib/api'
 import {
   getSegmentDriverNumbers,
@@ -1428,24 +1429,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             {/* Sticky controls: segment and drivers */}
             <div className="tel-bar">
               {!isRaceSession(sessionType) && (
-                <div className="tabs" role="tablist" aria-label="Qualifying segment">
-                  {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
-                    const count = qualiSegments?.segments?.[seg]?.length ?? 0
-                    return (
-                      <button
-                        key={seg}
-                        type="button"
-                        role="tab"
-                        aria-selected={selectedSegment === seg}
-                        disabled={count === 0}
-                        className={`tab button-sm ${selectedSegment === seg ? 'on' : ''}`}
-                        onClick={() => setSelectedSegment(seg)}
-                      >
-                        {seg}
-                      </button>
-                    )
-                  })}
-                </div>
+                <ToggleGroup
+                  label="Qualifying segment"
+                  value={selectedSegment}
+                  onChange={setSelectedSegment}
+                  items={(['Q1', 'Q2', 'Q3'] as const).map(seg => ({ key: seg, label: seg, disabled: (qualiSegments?.segments?.[seg]?.length ?? 0) === 0 }))}
+                />
               )}
               <div className="tel-drivers" role="group" aria-label="Drivers to compare">
                 {drivers.map(driver => {
@@ -1490,21 +1479,16 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
             )}
 
             {/* Tabs */}
-            <div className="tabs" role="tablist" aria-label="Analysis view" style={{ marginBottom: 24 }}>
-              {tabs.map(t => (
-                <button
-                  key={t.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t.key}
-                  className={`tab button-sm ${tab === t.key ? 'on' : ''}`}
-                  onClick={() => setTab(t.key)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            <TabList
+              id="analysis"
+              label="Analysis view"
+              value={tab}
+              onChange={setTab}
+              items={tabs.map(t => ({ key: t.key, label: t.label }))}
+              style={{ marginBottom: 24 }}
+            />
 
+            <div role="tabpanel" id="analysis-panel" aria-labelledby={`analysis-tab-${tab}`}>
             {/* Pace */}
             {tab === 'pace' && (
               comparisonReady ? (
@@ -1634,20 +1618,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       title="Qualifying segments"
                       subtitle="Order and elimination line"
                       right={
-                        <div className="tabs" role="tablist" aria-label="Table segment">
-                          {(['Q1', 'Q2', 'Q3'] as const).map(seg => (
-                            <button
-                              key={seg}
-                              type="button"
-                              role="tab"
-                              aria-selected={activeSegment === seg}
-                              className={`tab button-sm ${activeSegment === seg ? 'on' : ''}`}
-                              onClick={() => setActiveSegment(seg)}
-                            >
-                              {seg}
-                            </button>
-                          ))}
-                        </div>
+                        <ToggleGroup
+                          label="Table segment"
+                          value={activeSegment}
+                          onChange={setActiveSegment}
+                          items={(['Q1', 'Q2', 'Q3'] as const).map(seg => ({ key: seg, label: seg }))}
+                        />
                       }
                     />
                     <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
@@ -1697,6 +1673,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                 <LapTimeDistribution sessionKey={sessionKey} />
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

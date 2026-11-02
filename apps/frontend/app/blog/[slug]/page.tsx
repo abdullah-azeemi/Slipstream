@@ -32,8 +32,8 @@ export default async function PostPage({ params }: Params) {
 
   return (
     <div className={`lp ${geist.className}`}>
-      <LandingNav current="blog" />
-      <main id="main" className="wrap">
+      <LandingNav />
+      <div id="main" className="wrap">
         <article className="article">
           <Link href="/blog" className="back body-5">
             <ArrowLeft size={16} weight="bold" aria-hidden="true" /> All posts
@@ -45,10 +45,15 @@ export default async function PostPage({ params }: Params) {
             <span>{post.readingMinutes} min read</span>
           </div>
           <div className="prose">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.body}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{ table: ({ children }) => <div className="table-wrap"><table>{children}</table></div> }}
+            >
+              {post.body}
+            </ReactMarkdown>
           </div>
         </article>
-      </main>
+      </div>
       <LandingFooter />
     </div>
   )

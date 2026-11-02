@@ -15,8 +15,8 @@ export default function BlogIndex() {
   const posts = getAllPosts()
   return (
     <div className={`lp ${geist.className}`}>
-      <LandingNav current="blog" />
-      <main id="main" className="section" style={{ paddingTop: 'calc(var(--sp-900) + var(--sp-600))' }}>
+      <LandingNav />
+      <div id="main" className="section" style={{ paddingTop: 'calc(var(--sp-900) + var(--sp-600))' }}>
         <div className="wrap">
           <div className="section-head">
             <p className="caption-1 muted">Blog</p>
@@ -34,7 +34,7 @@ export default function BlogIndex() {
             </div>
           )}
         </div>
-      </main>
+      </div>
       <LandingFooter />
     </div>
   )

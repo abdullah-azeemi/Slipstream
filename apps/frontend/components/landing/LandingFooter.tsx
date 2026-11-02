@@ -7,6 +7,8 @@ const LINKS = [
   { label: 'Predictions', href: '/predictions' },
   { label: 'Agent', href: '/agent' },
   { label: 'Blog', href: '/blog' },
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
   { label: 'GitHub', href: 'https://github.com/abdullah-azeemi/Slipstream' },
 ]
 

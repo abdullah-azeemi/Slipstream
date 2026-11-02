@@ -45,7 +45,7 @@ type RaceResult = {
 }
 
 const SESSION_ORDER: Record<string, number> = { FP1: 0, FP2: 1, FP3: 2, SQ: 3, SS: 4, Q: 5, S: 6, R: 7 }
-const MONO = 'JetBrains Mono, monospace'
+const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
 function defaultHiddenState(drivers: ChartDriver[], defaultVisible: number): Record<string, boolean> {
   return Object.fromEntries(drivers.slice(defaultVisible).map(d => [d.abbreviation, true]))
@@ -53,7 +53,7 @@ function defaultHiddenState(drivers: ChartDriver[], defaultVisible: number): Rec
 
 function Empty({ message }: { message: string }) {
   return (
-    <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: '28px 20px', textAlign: 'center', color: '#6B7280', fontFamily: 'Inter, sans-serif', fontSize: 13, lineHeight: 1.6 }}>
+    <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: '28px 20px', textAlign: 'center', color: '#6B7280', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}>
       {message}
     </div>
   )
@@ -82,7 +82,7 @@ function SessionStrip({ sessions, currentKey }: { sessions: Session[]; currentKe
               textDecoration: 'none', padding: '8px 14px', borderRadius: 999,
               background: active ? '#111827' : '#FFFFFF', color: active ? '#FFFFFF' : '#374151',
               border: `1px solid ${active ? '#111827' : '#E5E7EB'}`,
-              fontFamily: 'Inter, sans-serif', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap',
+              fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap',
             }}
           >
             {sessionTypeLabel(s.session_type)}
@@ -104,11 +104,11 @@ function StintGantt({ stints, results, maxLap }: { stints: StintPace[]; results:
         return (
           <div key={result.driver_number}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 7 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'Inter, sans-serif' }}>{result.abbreviation}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'inherit' }}>{result.abbreviation}</span>
               <span style={{ fontSize: 10.5, color: '#6B7280', fontFamily: MONO, fontWeight: 600 }}>{gap}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr', gap: 10, alignItems: 'center' }}>
-              <div style={{ height: 26, borderRadius: 8, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6B7280', fontFamily: MONO }}>
+              <div style={{ height: 26, borderRadius: 8, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#6B7280', fontFamily: MONO }}>
                 {result.total_laps} L
               </div>
               <div style={{ display: 'flex', height: 26, borderRadius: 8, overflow: 'hidden', background: '#F3F4F6' }}>
@@ -123,7 +123,7 @@ function StintGantt({ stints, results, maxLap }: { stints: StintPace[]; results:
                         background: COMPOUND_COLOURS[stint.compound] ?? '#CBD5E1',
                         color: '#FFFFFF',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, fontWeight: 800, fontFamily: MONO, textTransform: 'uppercase',
+                        fontSize: 12, fontWeight: 700, fontFamily: MONO, textTransform: 'uppercase',
                         padding: '0 4px', overflow: 'hidden', whiteSpace: 'nowrap',
                       }}
                     >
@@ -131,7 +131,7 @@ function StintGantt({ stints, results, maxLap }: { stints: StintPace[]; results:
                     </div>
                   )
                 }) : (
-                  <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#9CA3AF' }}>
+                  <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#9CA3AF' }}>
                     No clean stint data
                   </div>
                 )}
@@ -194,10 +194,10 @@ function ConsistencyChart({ drivers, colors }: { drivers: ChartDriver[]; colors:
               )
             })}
             <line x1="0" y1={H - 16} x2={W} y2={H - 16} stroke="#E5E7EB" strokeWidth="1" />
-            <text x={10} y={H - 30} fontSize="8" fontFamily={MONO} fill="#9CA3AF">{formatLapTime(d.max)}</text>
-            <text x={10} y={H - 4} fontSize="8" fontFamily={MONO} fill="#9CA3AF">{formatLapTime(d.min)}</text>
+            <text x={10} y={H - 30} fontSize="12" fontFamily={MONO} fill="#9CA3AF">{formatLapTime(d.max)}</text>
+            <text x={10} y={H - 4} fontSize="12" fontFamily={MONO} fill="#9CA3AF">{formatLapTime(d.min)}</text>
           </svg>
-          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: '#111827', fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'inherit' }}>
             {d.abbr}
           </div>
           <div style={{ fontSize: 10.5, fontFamily: MONO, color: d.std != null ? '#0F766E' : '#9CA3AF', fontWeight: 700 }}>
@@ -249,7 +249,7 @@ export default function RacePacePanel({
         right={<SessionStrip sessions={sessions} currentKey={currentKey} />}
       >
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginRight: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginRight: 6 }}>
             Drivers
           </span>
           <button
@@ -258,7 +258,7 @@ export default function RacePacePanel({
             style={{
               padding: '5px 12px', borderRadius: 999, cursor: 'pointer',
               background: allShown ? '#111827' : '#FFFFFF', color: allShown ? '#FFFFFF' : '#6B7280',
-              border: '1px solid #E5E7EB', fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 700,
+              border: '1px solid #E5E7EB', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
             }}
           >
             ALL
@@ -269,7 +269,7 @@ export default function RacePacePanel({
             style={{
               padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
               background: '#FFFFFF', color: '#6B7280',
-              border: '1px solid #E5E7EB', fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600,
+              border: '1px solid #E5E7EB', fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
             }}
           >
             Reset
@@ -287,7 +287,7 @@ export default function RacePacePanel({
                   cursor: 'pointer', background: '#FFFFFF',
                   color: off ? '#9CA3AF' : color,
                   border: `1px solid ${off ? '#E5E7EB' : color}`,
-                  fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 700,
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
                   opacity: off ? 0.55 : 1,
                 }}
               >

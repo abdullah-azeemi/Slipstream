@@ -141,12 +141,12 @@ export default function LapEvolutionChart({
           ))}
 
           {yTicks.map(ms => (
-            <text key={`yt${ms}`} x={PAD.left - 8} y={scaleY(ms) + 3} textAnchor="end" fontSize="9" fontFamily="JetBrains Mono, monospace" fill="#9CA3AF">
+            <text key={`yt${ms}`} x={PAD.left - 8} y={scaleY(ms) + 3} textAnchor="end" fontSize="12" fontFamily="var(--font-geist-mono), ui-monospace, monospace" fill="#9CA3AF">
               {formatLapTime(Math.round(ms))}
             </text>
           ))}
           {xTicks.map(lap => (
-            <text key={`xt${lap}`} x={scaleX(lap)} y={HEIGHT - PAD.bottom + 16} textAnchor="middle" fontSize="9" fontFamily="JetBrains Mono, monospace" fill="#9CA3AF">
+            <text key={`xt${lap}`} x={scaleX(lap)} y={HEIGHT - PAD.bottom + 16} textAnchor="middle" fontSize="12" fontFamily="var(--font-geist-mono), ui-monospace, monospace" fill="#9CA3AF">
               {lap}
             </text>
           ))}
@@ -163,7 +163,7 @@ export default function LapEvolutionChart({
                   height={HEIGHT - PAD.top - PAD.bottom}
                   fill="rgba(245,158,11,0.09)"
                 />
-                <text x={(x1 + x2) / 2} y={PAD.top - 7} textAnchor="middle" fontSize="8" fontFamily="JetBrains Mono, monospace" fill="#B45309" letterSpacing="0.06em">
+                <text x={(x1 + x2) / 2} y={PAD.top - 7} textAnchor="middle" fontSize="12" fontFamily="var(--font-geist-mono), ui-monospace, monospace" fill="#B45309" letterSpacing="0.06em">
                   {w.label}
                 </text>
               </g>
@@ -204,7 +204,7 @@ export default function LapEvolutionChart({
             boxShadow: '0 12px 28px rgba(17,24,39,0.12)', padding: '10px 12px', minWidth: 170,
             pointerEvents: 'none', zIndex: 5, maxHeight: 320, overflow: 'hidden',
           }}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8, fontFamily: 'JetBrains Mono, monospace' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' }}>
               Lap {tooltipLap}
             </div>
             {tooltipPts.map(p => {
@@ -212,14 +212,14 @@ export default function LapEvolutionChart({
               const delta = (p.ms ?? 0) - bestAtLap
               return (
                 <div key={p.abbr} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, padding: '3px 0' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#111827', fontFamily: 'Inter, sans-serif' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#111827', fontFamily: 'inherit' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
                     {p.abbr}
                   </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: '#111827' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: '#111827' }}>
                     {formatLapTime(p.ms)}
                   </span>
-                  <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: delta === 0 ? '#9CA3AF' : '#B45309', minWidth: 52, textAlign: 'right' }}>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: delta === 0 ? '#9CA3AF' : '#B45309', minWidth: 52, textAlign: 'right' }}>
                     {delta === 0 ? 'best' : `+${(delta / 1000).toFixed(3)}s`}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export default function LapEvolutionChart({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {Object.entries(COMPOUND_DOT).map(([key, val]) => (
-            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 600, color: '#9CA3AF', fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase' }}>
+            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 600, color: '#9CA3AF', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', textTransform: 'uppercase' }}>
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FFF', border: `2px solid ${val}`, display: 'inline-block' }} />
               {key}
             </span>

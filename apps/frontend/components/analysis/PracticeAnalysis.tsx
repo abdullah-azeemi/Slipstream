@@ -463,7 +463,10 @@ export default function PracticeAnalysis({
     })
     ctx.globalAlpha = 1
 
+    const lapSpacing = Math.abs(toX(1) - toX(0)) || 1
+    const labelStep = Math.max(1, Math.ceil(24 / lapSpacing))
     for (let lapIdx = 0; lapIdx <= maxLapInStint; lapIdx += 1) {
+      if (lapIdx % labelStep !== 0) continue
       const x = toX(lapIdx)
       ctx.fillStyle = TEXT_DIM
       ctx.font = '500 12px ui-sans-serif, system-ui, sans-serif'

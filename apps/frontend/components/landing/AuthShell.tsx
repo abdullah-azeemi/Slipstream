@@ -56,7 +56,7 @@ export default function AuthShell({
             />
           </div>
         </section>
-        <main id="main" className="auth-form">{children}</main>
+        <div id="main" className="auth-form">{children}</div>
       </div>
     </div>
   )

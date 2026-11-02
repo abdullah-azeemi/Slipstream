@@ -59,25 +59,25 @@ export default function TyreDegradationChart({ result }: Props) {
               dataKey="age"
               type="number"
               domain={[0, 'dataMax']}
-              tick={{ fontSize: 9 }}
-              label={{ value: 'tyre age (laps)', position: 'insideBottom', offset: -4, fontSize: 9 }}
+              tick={{ fontSize: 12 }}
+              label={{ value: 'tyre age (laps)', position: 'insideBottom', offset: -4, fontSize: 12 }}
             />
             <YAxis
               dataKey="ms"
               domain={['dataMin - 400', 'dataMax + 400']}
-              tick={{ fontSize: 9 }}
+              tick={{ fontSize: 12 }}
               width={34}
               tickFormatter={toSeconds}
             />
             <Tooltip
               isAnimationActive={false}
-              contentStyle={{ fontSize: 11 }}
+              contentStyle={{ fontSize: 12 }}
               formatter={(value, name) => [
                 `${(Number(value ?? 0) / 1000).toFixed(1)}s`,
                 String(name),
               ]}
             />
-            <Legend wrapperStyle={{ fontSize: 10 }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
             {stints.map((stint: StintSummary, index) => {
               const color = STINT_COLORS[index % STINT_COLORS.length]
               const fit = degradationFit(stint)

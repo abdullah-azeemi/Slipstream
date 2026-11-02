@@ -13,6 +13,9 @@ export interface Session {
   air_temp_c?: number | null
   humidity_pct?: number | null
   rainfall?: boolean | null
+  has_laps?: boolean
+  pole_driver?: string | null
+  winner_driver?: string | null
 }
 
 export interface Driver {

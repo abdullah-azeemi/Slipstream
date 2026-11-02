@@ -64,11 +64,11 @@ function ChannelMini({
               dataKey="distance_m"
               type="number"
               domain={[0, 'dataMax']}
-              tick={{ fontSize: 8 }}
+              tick={{ fontSize: 12 }}
               tickFormatter={shortDistance}
             />
-            <YAxis domain={domain} tick={{ fontSize: 8 }} width={30} />
-            <Tooltip isAnimationActive={false} contentStyle={{ fontSize: 10 }} />
+            <YAxis domain={domain} tick={{ fontSize: 12 }} width={30} />
+            <Tooltip isAnimationActive={false} contentStyle={{ fontSize: 12 }} />
             <Line
               type="monotone"
               dataKey={dataKey}
@@ -124,19 +124,19 @@ export default function TelemetryOverlayChart({ result }: Props) {
                 dataKey="distance_m"
                 type="number"
                 domain={[0, 'dataMax']}
-                tick={{ fontSize: 9 }}
+                tick={{ fontSize: 12 }}
                 tickFormatter={shortDistance}
               />
               <YAxis
                 yAxisId="speed"
                 domain={[0, 'dataMax']}
-                tick={{ fontSize: 9 }}
+                tick={{ fontSize: 12 }}
                 width={34}
                 unit=""
               />
               <Tooltip
                 isAnimationActive={false}
-                contentStyle={{ fontSize: 11 }}
+                contentStyle={{ fontSize: 12 }}
                 formatter={(value, name) => [`${value ?? 0} km/h`, String(name)]}
               />
               {result.traces.map((trace, index) => (

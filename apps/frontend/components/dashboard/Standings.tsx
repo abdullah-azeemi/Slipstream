@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { TabList, TabPanel } from '@/components/landing/Tabs'
 
 export interface DriverStanding {
   position: string | number
@@ -44,13 +45,17 @@ export default function Standings({
   constructors,
   round,
   year,
+  driversFailed = false,
+  constructorsFailed = false,
 }: {
   drivers: DriverStanding[]
   constructors: ConstructorStanding[]
   round: number | null
   year: number
+  driversFailed?: boolean
+  constructorsFailed?: boolean
 }) {
-  const [tab, setTab] = useState<'drivers' | 'constructors'>('drivers')
+  const [tab, setTab] = useState<'drivers' | 'constructors'>(drivers.length === 0 && constructors.length > 0 ? 'constructors' : 'drivers')
   const [all, setAll] = useState(false)
 
   const rows =
@@ -69,23 +74,21 @@ export default function Standings({
             {round ? `After round ${round}` : 'Season not started'}
           </p>
         </div>
-        <div className="tabs" role="tablist" aria-label="Standings type">
-          {(['drivers', 'constructors'] as const).map(t => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              className={`tab button-sm ${tab === t ? 'on' : ''}`}
-              onClick={() => { setTab(t); setAll(false) }}
-            >
-              {t === 'drivers' ? 'Drivers' : 'Constructors'}
-            </button>
-          ))}
-        </div>
+        <TabList
+          id="standings"
+          label="Standings type"
+          value={tab}
+          onChange={t => { setTab(t); setAll(false) }}
+          items={[{ key: 'drivers', label: 'Drivers' }, { key: 'constructors', label: 'Constructors' }]}
+        />
       </div>
 
-      {rows.length === 0 ? (
+      <TabPanel id="standings" tab={tab}>
+      {(tab === 'drivers' ? driversFailed : constructorsFailed) ? (
+        <p className="body-6 muted" role="status">
+          {tab === 'drivers' ? 'Driver' : 'Constructor'} standings could not be loaded. Refresh the page in a moment.
+        </p>
+      ) : rows.length === 0 ? (
         <div className="empty">
           <h3 className="heading-6">No standings yet</h3>
           <p className="body-6">Standings appear after the first race of the season.</p>
@@ -119,6 +122,7 @@ export default function Standings({
           )}
         </>
       )}
+      </TabPanel>
     </div>
   )
 }

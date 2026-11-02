@@ -5,25 +5,27 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { usePathname } from 'next/navigation'
 import './globals.css'
-import BottomNav from '@/components/layout/BottomNav'
+import { geist, geistMono } from '@/components/landing/font'
 import TopBar from '@/components/layout/TopBar'
 import AuthTokenSync from '@/components/auth/AuthTokenSync'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isDashboard = pathname?.startsWith('/dashboard')
-  const isLanding = pathname === '/' || pathname?.startsWith('/blog')
+  const isLanding =
+    pathname === '/' ||
+    pathname?.startsWith('/blog') ||
+    pathname?.startsWith('/privacy') ||
+    pathname?.startsWith('/terms')
   const isAuthPage = pathname?.startsWith('/sign-in') || pathname?.startsWith('/sign-up')
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body style={{ background: '#FFFFFF', color: '#0F172A', minHeight: '100vh' }} suppressHydrationWarning>
+        <body className={`${geist.className} ${geistMono.variable}`} style={{ background: '#FFFFFF', color: '#0A0A0A', minHeight: '100vh' }} suppressHydrationWarning>
           <AuthTokenSync />
           {!isAuthPage && !isLanding && <TopBar />}
-          <main style={{ minHeight: '100vh', paddingTop: isDashboard ? 0 : undefined, paddingBottom: isDashboard ? 0 : undefined }}>
+          <main id={isLanding || isAuthPage ? undefined : 'main'} style={{ minHeight: '100vh', paddingTop: isLanding || isAuthPage ? 0 : 72 }}>
             {children}
           </main>
-          {!isAuthPage && !isLanding && <BottomNav />}
           <Analytics />
           <SpeedInsights />
         </body>

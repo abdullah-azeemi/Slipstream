@@ -134,12 +134,12 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
         <div className="next-race-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#9fb2c6', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#9fb2c6', letterSpacing: '0.08em', fontFamily: 'inherit' }}>
                 NEXT UP — ROUND {race.round}
               </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {race.flag && <span style={{ fontSize: '28px', lineHeight: 1 }}>{race.flag}</span>}
-              <h2 className="next-race-title" style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '0.02em', fontFamily: 'Rajdhani, sans-serif', textTransform: 'uppercase' }}>
+              <h2 className="next-race-title" style={{ fontSize: '28px', fontWeight: 700, color: '#FFFFFF', margin: 0, letterSpacing: '0.02em', fontFamily: 'inherit', textTransform: 'uppercase' }}>
                 {race.event_name}
               </h2>
             </div>
@@ -168,8 +168,8 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
               }}>
                 <span className="next-race-timer-value" style={{ 
                   fontSize: '28px', 
-                  fontWeight: 800, 
-                  fontFamily: 'Rajdhani, sans-serif', 
+                  fontWeight: 700, 
+                  fontFamily: 'inherit', 
                   color: unit.isRed ? '#E80020' : '#FFFFFF',
                   lineHeight: 1
                 }}>
@@ -208,7 +208,7 @@ export default function NextRaceCard({ data }: { data: NextRaceData }) {
                 padding: '4px 12px',
                 borderRadius: '16px',
                 fontSize: '13px',
-                fontFamily: 'monospace',
+                fontFamily: 'inherit',
                 background: 'rgba(7,17,27,0.42)',
                 ...style
               }}>

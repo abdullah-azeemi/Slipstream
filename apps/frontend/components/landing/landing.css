@@ -31,12 +31,17 @@
   overflow-x: clip;
 }
 
+.lp.lp-bare { min-height: 0; background: transparent; overflow: visible; }
+
 .lp *,
 .lp *::before,
 .lp *::after {
   box-sizing: border-box;
   font-style: normal;
 }
+
+/* Restore emphasis that the reset above removed (Markdown em in blog posts). */
+.lp em { font-style: italic; }
 
 .lp a {
   color: inherit;
@@ -167,9 +172,10 @@
 }
 .lp .nav-logo { font-size: 16px; line-height: 24px; font-weight: 600; }
 .lp .nav-links { display: flex; align-items: center; gap: var(--sp-200); }
-.lp .nav-links a { padding: var(--sp-50) var(--sp-75); color: var(--lp-muted); transition: opacity 300ms var(--ease); }
+.lp .nav-links a { white-space: nowrap; padding: var(--sp-50) var(--sp-75); color: var(--lp-muted); transition: opacity 300ms var(--ease); }
 .lp .nav-links a:hover { color: var(--lp-text); }
 .lp .nav-actions { display: flex; align-items: center; gap: var(--sp-50); }
+.lp .nav-user { display: inline-flex; align-items: center; padding: 0 var(--sp-50); }
 .lp .nav-toggle { display: none; }
 
 .lp .menu-icon {
@@ -362,7 +368,6 @@
 }
 .lp .tagline .word {
   display: inline-block;
-  margin-right: 0.25em;
   opacity: 0.3;
   transition: opacity 500ms var(--ease);
 }
@@ -517,12 +522,15 @@
 .lp .prose h3 { font-size: 24px; line-height: 32px; font-weight: 600; margin-top: var(--sp-400); text-wrap: balance; }
 .lp .prose p, .lp .prose li { font-size: 16px; line-height: 24px; text-wrap: pretty; }
 .lp .prose ul, .lp .prose ol { padding-left: var(--sp-300); display: flex; flex-direction: column; gap: var(--sp-75); }
+.lp .prose ul { list-style: disc; }
+.lp .prose ol { list-style: decimal; }
 .lp .prose a { text-decoration: underline; text-underline-offset: 4px; }
 .lp .prose code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; padding: var(--sp-25) var(--sp-75); background: #f3f3f3; border-radius: 4px; }
 .lp .prose pre { padding: var(--sp-200); background: #f3f3f3; border-radius: 12px; overflow-x: auto; }
 .lp .prose pre code { padding: 0; background: transparent; }
 .lp .prose blockquote { padding: var(--sp-100) var(--sp-200); border: 1px solid var(--lp-border); border-radius: 12px; color: var(--lp-muted); }
 .lp .prose img { max-width: 100%; border-radius: 16px; }
+.lp .prose .table-wrap { overflow-x: auto; }
 .lp .prose table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .lp .prose th, .lp .prose td { padding: var(--sp-75) var(--sp-100); border: 1px solid var(--lp-border); text-align: left; }
 .lp .back { display: inline-flex; align-items: center; gap: var(--sp-75); color: var(--lp-muted); }
@@ -575,7 +583,7 @@
 }
 
 /* ── Dashboard ───────────────────────────────────────────────── */
-.lp .dash { padding: var(--sp-600) 0 0; }
+.lp .dash { padding: var(--sp-300) 0 0; }
 .lp .dash-head { margin-bottom: var(--sp-500); }
 .lp .dash-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--sp-200); margin-bottom: var(--sp-200); }
 .lp .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-200); }
@@ -616,7 +624,7 @@
 /* ── Telemetry analysis ──────────────────────────────────────── */
 .lp .tel-bar {
   position: sticky;
-  top: 56px;
+  top: 72px;
   z-index: 20;
   display: flex;
   flex-wrap: wrap;
@@ -666,3 +674,43 @@
 .lp .search:focus-within { border-color: var(--lp-text); }
 .lp .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 600px) { .lp .search { margin-left: 0; width: 100%; } .lp .search input { flex: 1; } }
+
+/* ── Data visualisation ──────────────────────────────────────── */
+.lp .viz-scroll { position: relative; overflow-x: auto; }
+.lp .viz-legend { display: flex; flex-wrap: wrap; gap: var(--sp-200); margin-top: var(--sp-100); font-size: 12px; line-height: 16px; color: var(--lp-muted); }
+.lp .viz-legend span { display: inline-flex; align-items: center; gap: var(--sp-75); }
+.viz-tip {
+  position: fixed;
+  z-index: 80;
+  min-width: 160px;
+  max-width: 260px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 12px;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 16px;
+}
+.viz-tip-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0a0a0a; margin-bottom: 4px; }
+.viz-tip-line { width: 12px; height: 3px; border-radius: 2px; }
+.viz-tip-row { display: flex; align-items: baseline; gap: 8px; }
+.viz-tip-val { font-size: 14px; line-height: 20px; font-weight: 600; color: #0a0a0a; font-variant-numeric: tabular-nums; }
+.viz-tip-label { color: #666666; }
+.lp .pred-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-200); align-items: start; }
+.lp .pred-podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-200); }
+.lp .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-200); margin-top: var(--sp-300); }
+.lp .metric .v { font-size: 20px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lp .metric .l { font-size: 12px; line-height: 16px; color: var(--lp-muted); }
+.lp .data-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.lp .data-table th { text-align: left; padding: var(--sp-100) var(--sp-200); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--lp-muted); border-bottom: 1px solid var(--lp-border); white-space: nowrap; }
+.lp .data-table td { padding: var(--sp-100) var(--sp-200); border-bottom: 1px solid var(--lp-border); }
+.lp .data-table tr:last-child td { border-bottom: 0; }
+.lp .bar-cell { display: flex; align-items: center; gap: var(--sp-100); min-width: 140px; }
+.lp .bar-cell .track { flex: 1; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; }
+.lp .bar-cell .fill { height: 100%; background: var(--lp-text); border-radius: 4px; }
+.lp .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-200); }
+@media (max-width: 1024px) {
+  .lp .pred-grid, .lp .pred-podium { grid-template-columns: 1fr; }
+  .lp .steps { grid-template-columns: 1fr; }
+}
