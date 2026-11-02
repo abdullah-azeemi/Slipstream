@@ -150,10 +150,10 @@ def pick_meeting(meetings: list[dict], gp: str) -> dict | None:
 
 def find_session(year: int, gp: str, session: str) -> tuple[dict, dict] | None:
     code = CODE_ALIASES.get(session.upper(), session.upper())
-    meeting = pick_meeting(of1.fetch_meetings(year), gp)
+    meeting = pick_meeting(of1.fetch_meetings(year, strict=True), gp)
     if meeting is None:
         return None
-    for sess in of1.fetch_sessions(meeting["meeting_key"]):
+    for sess in of1.fetch_sessions(meeting["meeting_key"], strict=True):
         if NAME_TO_CODE.get(sess.get("session_name")) == code and not sess.get("is_cancelled"):
             return meeting, sess
     return None
@@ -177,6 +177,41 @@ def build_drivers(rows: list[dict], session_key: int) -> list[dict]:
             "team_colour": r.get("team_colour"),
         }
     return list(out.values())
+
+
+def match_deletions(
+    rc: list[dict], laps_by_driver: dict[int, list[dict]]
+) -> dict[tuple[int, int], str]:
+    """Map race-control "TIME ... DELETED" messages to (driver, lap_number).
+
+    Each message deletes at most one lap, and two messages for the same car
+    and time delete two different laps. Candidates are the driver's laps with
+    the same duration; when several match, the latest one that started before
+    the message wins (the message follows the lap it deletes).
+    """
+    events = []
+    for e in rc:
+        m = _DELETED_RE.search(e.get("message") or "")
+        when = _dt(e.get("date"))
+        if m and when:
+            events.append((when, int(m["num"]), _lap_time_text_to_ms(m["time"]), m["why"].strip()))
+    events.sort(key=lambda t: t[0])
+
+    matched: dict[tuple[int, int], str] = {}
+    for when, driver, t_ms, why in events:
+        cands = [
+            lap
+            for lap in sorted(laps_by_driver.get(driver, []), key=lambda r: int(r["lap_number"]))
+            if lap.get("lap_duration") is not None
+            and abs(_ms(lap["lap_duration"]) - t_ms) < 1.0
+            and (driver, int(lap["lap_number"])) not in matched
+        ]
+        if not cands:
+            continue
+        before = [lap for lap in cands if (_dt(lap.get("date_start")) or when) <= when]
+        pick = before[-1] if before else cands[0]
+        matched[(driver, int(pick["lap_number"]))] = why
+    return matched
 
 
 def stint_for_lap(stints: list[dict], lap: int) -> dict | None:
@@ -345,11 +380,7 @@ def build_laps(
         times.append(d)
         vals.append(int(p["position"]))
 
-    deleted: dict[tuple[int, float], str] = {}
-    for e in rc:
-        m = _DELETED_RE.search(e.get("message") or "")
-        if m:
-            deleted[(int(m["num"]), _lap_time_text_to_ms(m["time"]))] = m["why"].strip()
+    deleted_laps = match_deletions(rc, by_driver)
 
     phases = sorted(
         (_dt(e["date"]), int(e["qualifying_phase"]))
@@ -409,12 +440,7 @@ def build_laps(
                 and n > 1
                 and status == "1"
             )
-            del_reason = None
-            if duration_ms is not None:
-                for (num, t_ms), why in deleted.items():
-                    if num == driver and abs(t_ms - duration_ms) < 1.0:
-                        del_reason = why
-                        break
+            del_reason = deleted_laps.get((driver, n))
             is_pb = False
             if duration_ms is not None and del_reason is None and not in_pit and pit_out_marker is None:
                 if best_ms is None or duration_ms < best_ms:
@@ -594,6 +620,20 @@ def annotate_laps(rows: list[dict], laps: list[dict]) -> None:
 # ── orchestration ─────────────────────────────────────────────────────────────
 
 
+_SESSION_TABLES = (
+    "lap_times",
+    "drivers",
+    "race_control_events",
+    "weather_events",
+    "team_radio",
+    "track_status_periods",
+    "session_results",
+    "session_intervals",
+    "position_changes",
+    "pit_stops",
+)
+
+
 def _session_has_laps(session_key: int) -> bool:
     with _get_engine().connect() as conn:
         return bool(
@@ -604,13 +644,41 @@ def _session_has_laps(session_key: int) -> bool:
         )
 
 
+def _session_exists(session_key: int) -> bool:
+    with _get_engine().connect() as conn:
+        return bool(
+            conn.execute(
+                text("SELECT 1 FROM sessions WHERE session_key = :sk"), {"sk": session_key}
+            ).first()
+        )
+
+
+def _purge_session(session_key: int) -> None:
+    """Remove a session and everything loaded for it (FK order: children first).
+
+    Table names come from the fixed ``_SESSION_TABLES`` tuple, never input.
+    """
+    with _get_engine().begin() as conn:
+        for table in _SESSION_TABLES:
+            conn.execute(text(f"DELETE FROM {table} WHERE session_key = :sk"), {"sk": session_key})
+        conn.execute(text("DELETE FROM sessions WHERE session_key = :sk"), {"sk": session_key})
+
+
 def ingest_openf1_session(
     meeting: dict, sess: dict, *, force: bool = False
 ) -> int | None:
     """Ingest one session from OpenF1. Returns the session_key, or None when the
-    session is not ready (no laps yet / still running) or is skipped."""
+    session is not ready (no laps yet / still running) or is skipped.
+
+    Every required dataset is fetched (strictly: an outage raises
+    ``OpenF1Error`` rather than looking like "no data") before anything is
+    written. If a write then fails for a session this call created, the
+    half-written session is removed again, so ``auto_ingest`` (which trusts the
+    ``sessions`` table) retries it instead of treating it as done.
+    """
     info = build_session_info(meeting, sess)
-    if info is None:
+    start = _dt(sess.get("date_start"))
+    if info is None or start is None:
         return None
     key, code = info["session_key"], info["session_type"]
 
@@ -622,62 +690,68 @@ def ingest_openf1_session(
         log.info("openf1.not_finished", session_key=key)
         return None
 
-    raw_laps = of1.fetch_laps(key)
+    # ---- fetch phase (no writes) ----
+    raw_laps = of1.fetch_laps(key, strict=True)
     if not raw_laps:
         log.info("openf1.no_laps", session_key=key)
         return None
+    drivers = build_drivers(of1.fetch_drivers(key, strict=True), key)
+    stints = of1.fetch_stints(key, strict=True)
+    rc = of1.fetch_race_control(key, strict=True)
+    weather_raw = of1.fetch_weather(key, strict=True)
+    results_raw = of1.fetch_session_result(key, strict=True)
+    pits = of1.fetch_pit_stops(key, strict=True)
+    positions = of1.fetch_positions(key, strict=True) if code in RACE_LIKE else []
+    intervals = of1.fetch_intervals(key, strict=True) if code in RACE_LIKE else []
+    grid = of1.fetch_starting_grid(key)  # best effort: not published for every session
+    radio = of1.fetch_team_radio(key)  # best effort
 
-    start = _dt(sess.get("date_start"))
-    drivers = build_drivers(of1.fetch_drivers(key), key)
-    stints = of1.fetch_stints(key)
-    pits = of1.fetch_pit_stops(key)
-    rc = of1.fetch_race_control(key)
-    positions = of1.fetch_positions(key) if code in RACE_LIKE else []
-
+    # ---- build phase (pure) ----
     incidents = derive_incident_periods(rc, end)
     laps = build_laps(raw_laps, stints, pits, positions, incidents, rc, start, code, key)
     lap_starts = earliest_lap_starts(raw_laps)
-
-    upsert_session(info)
-    load_drivers(drivers)
-    lap_count = load_laps(laps, key)
-
-    weather_raw = of1.fetch_weather(key)
     wx_rows = build_weather_events(weather_raw, lap_starts, key)
-    load_weather_events(wx_rows, key)
-    if weather_raw:
-        last = weather_raw[-1]
-        update_session_weather(
-            key,
-            track_temp=last.get("track_temperature"),
-            air_temp=last.get("air_temperature"),
-            humidity=last.get("humidity"),
-            rainfall=bool(last.get("rainfall")),
-            wind_speed=last.get("wind_speed"),
-        )
-
-    load_race_control(build_race_control(rc, key), key)
-    load_track_status(build_track_status_rows(incidents, start, lap_starts, key), key)
-    load_session_results(
-        build_session_results(
-            of1.fetch_session_result(key), drivers, of1.fetch_starting_grid(key), code, key
-        ),
-        key,
-    )
-
-    radio = of1.fetch_team_radio(key)
+    track_rows = build_track_status_rows(incidents, start, lap_starts, key)
+    result_rows = build_session_results(results_raw, drivers, grid, code, key)
     annotate_laps(radio, raw_laps)
-    load_team_radio(radio, key)
+    annotate_laps(intervals, raw_laps)
+    pos_rows = [dict(p) for p in positions]
+    annotate_laps(pos_rows, raw_laps)
 
+    # ---- write phase ----
+    created = not _session_exists(key)
     timing = {"intervals": 0, "positions": 0, "pit_stops": 0}
-    if code in RACE_LIKE:
-        intervals = of1.fetch_intervals(key)
-        annotate_laps(intervals, raw_laps)
-        timing["intervals"] = load_session_intervals(intervals, key)
-        pos_rows = [dict(p) for p in positions]
-        annotate_laps(pos_rows, raw_laps)
-        timing["positions"] = load_position_changes(pos_rows, key)
-        timing["pit_stops"] = load_pit_stops(pits, key)
+    try:
+        upsert_session(info)
+        load_drivers(drivers)
+        lap_count = load_laps(laps, key)
+        load_weather_events(wx_rows, key)
+        if weather_raw:
+            last = weather_raw[-1]
+            update_session_weather(
+                key,
+                track_temp=last.get("track_temperature"),
+                air_temp=last.get("air_temperature"),
+                humidity=last.get("humidity"),
+                rainfall=bool(last.get("rainfall")),
+                wind_speed=last.get("wind_speed"),
+            )
+        load_race_control(build_race_control(rc, key), key)
+        load_track_status(track_rows, key)
+        load_session_results(result_rows, key)
+        load_team_radio(radio, key)
+        if code in RACE_LIKE:
+            timing["intervals"] = load_session_intervals(intervals, key)
+            timing["positions"] = load_position_changes(pos_rows, key)
+            timing["pit_stops"] = load_pit_stops(pits, key)
+    except Exception:
+        if created:
+            try:
+                _purge_session(key)
+                log.warning("openf1.partial_ingest_removed", session_key=key)
+            except Exception as cleanup_exc:  # keep the original error as the cause
+                log.error("openf1.cleanup_failed", session_key=key, error=str(cleanup_exc))
+        raise
 
     log.info(
         "openf1.ingest_done",
@@ -705,10 +779,10 @@ def ingest_session_openf1(
 def backfill_year(year: int, *, force: bool = False) -> dict[str, int]:
     """Ingest every finished session of ``year`` that is not in the DB yet."""
     counts = {"ingested": 0, "skipped": 0, "failed": 0}
-    for meeting in of1.fetch_meetings(year):
+    for meeting in of1.fetch_meetings(year, strict=True):
         if "testing" in meeting["meeting_name"].casefold():
             continue
-        for sess in of1.fetch_sessions(meeting["meeting_key"]):
+        for sess in of1.fetch_sessions(meeting["meeting_key"], strict=True):
             if NAME_TO_CODE.get(sess.get("session_name")) is None:
                 continue
             try:

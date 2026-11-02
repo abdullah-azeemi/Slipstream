@@ -61,10 +61,24 @@ def load_manifest(path: Path) -> list[dict]:
     return items
 
 
+MAX_PDF_BYTES = 100 * 1024 * 1024  # generous for FIA regulations; stops runaway responses
+
+
 def fetch_pdf(client: httpx.Client, url: str) -> bytes:
-    resp = client.get(url, follow_redirects=True, timeout=60)
-    resp.raise_for_status()
-    data = resp.content
+    """Download a PDF, refusing anything larger than ``MAX_PDF_BYTES``.
+
+    The body is streamed so a huge or endless response cannot exhaust memory.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    with client.stream("GET", url, follow_redirects=True, timeout=60) as resp:
+        resp.raise_for_status()
+        for chunk in resp.iter_bytes():
+            total += len(chunk)
+            if total > MAX_PDF_BYTES:
+                raise DocumentError(f"{url} is larger than {MAX_PDF_BYTES} bytes")
+            chunks.append(chunk)
+    data = b"".join(chunks)
     if not data.startswith(b"%PDF"):
         raise DocumentError(f"{url} did not return a PDF")
     return data
@@ -110,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Confirm you may use these documents; without it nothing is stored",
     )
     args = parser.parse_args(argv)
+    if not args.approve:
+        # Without approval every item would be downloaded and then rejected.
+        parser.error("--approve is required: FIA documents are copyrighted, see the module docstring")
     counts = ingest_manifest(load_manifest(args.manifest), approve=args.approve)
     print(json.dumps(counts))
     return 1 if counts["failed"] else 0

@@ -336,7 +336,10 @@ class TrackStatusResult:
     safety_car_periods: int = 0
     vsc_periods: int = 0
     red_flag_periods: int = 0
-    yellow_periods: int = 0
+    # None = yellow flags are not tracked for this session (OpenF1-ingested
+    # sessions never write yellow periods), so 0 would wrongly read as
+    # "there were none". An int is a real count.
+    yellow_periods: int | None = 0
 
 
 @dataclass(frozen=True)

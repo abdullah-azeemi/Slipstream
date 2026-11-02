@@ -46,6 +46,12 @@ def _get(path: str, params: dict) -> dict:
                 time.sleep(2.0 * (attempt + 1))
                 continue
             raise
+        except (urllib.error.URLError, TimeoutError):
+            # Transient network trouble: same backoff as a throttled response.
+            if attempt < 3:
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            raise
     raise RuntimeError("unreachable")
 
 
@@ -56,7 +62,11 @@ def _paged_races(year: int, kind_path: str) -> list[dict]:
     offset = 0
     while True:
         data = _get(f"{year}/{kind_path}", {"limit": PAGE_SIZE, "offset": offset})
-        mr = data.get("MRData", {})
+        mr = data.get("MRData")
+        if not isinstance(mr, dict) or "total" not in mr:
+            # Never read a malformed answer as "zero races": that would log the
+            # season as done with no rows, and a re-run would not retry it.
+            raise RuntimeError(f"Jolpica response for {year}/{kind_path} has no MRData.total")
         for race in mr.get("RaceTable", {}).get("Races", []):
             key = race["round"]
             if key in races:
@@ -66,7 +76,7 @@ def _paged_races(year: int, kind_path: str) -> list[dict]:
             else:
                 races[key] = race
         offset += PAGE_SIZE
-        if offset >= int(mr.get("total", 0)):
+        if offset >= int(mr["total"]):
             break
         time.sleep(REQUEST_GAP_S)
     return list(races.values())
@@ -168,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start-year", type=int, default=2000)
     parser.add_argument("--end-year", type=int, default=date.today().year)
     args = parser.parse_args(argv)
+    if args.start_year > args.end_year:
+        parser.error("--start-year must not be later than --end-year")
 
     total = 0
     for year in range(args.start_year, args.end_year + 1):

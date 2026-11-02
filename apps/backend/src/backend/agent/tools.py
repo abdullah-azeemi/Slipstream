@@ -374,7 +374,15 @@ def fetch_track_status(inp: types.TrackStatusInput) -> types.TrackStatusResult:
     Unlike race-control messages (text events), these are closed periods with
     start/end, so "how long was the safety car out" is a subtraction.
     """
+    if inp.from_lap is not None and inp.to_lap is not None and inp.from_lap > inp.to_lap:
+        # An inverted window contains no laps; don't let spanning periods match.
+        return types.TrackStatusResult(
+            from_lap=inp.from_lap, to_lap=inp.to_lap, periods=()
+        )
     with extensions.engine.connect() as conn:
+        # start_lap / end_lap are NULL for times before lap 1 starts, so NULL
+        # means "lap 0" rather than "unknown". The final period is open-ended:
+        # it is marked by end_ms IS NULL (its end_lap is NULL too).
         sql = """
             SELECT status_code, status_label, start_ms, end_ms, start_lap, end_lap
             FROM track_status_periods
@@ -382,13 +390,22 @@ def fetch_track_status(inp: types.TrackStatusInput) -> types.TrackStatusResult:
         """
         binds: dict = {"sk": inp.session_key}
         if inp.to_lap is not None:
-            sql += " AND (start_lap IS NULL OR start_lap <= :tl)"
+            sql += " AND COALESCE(start_lap, 0) <= :tl"
             binds["tl"] = inp.to_lap
         if inp.from_lap is not None:
-            sql += " AND (end_lap IS NULL OR end_lap >= :fl)"
+            sql += " AND (end_ms IS NULL OR COALESCE(end_lap, 0) >= :fl)"
             binds["fl"] = inp.from_lap
         sql += " ORDER BY start_ms ASC, id ASC"
         rows = conn.execute(text(sql), binds).mappings().all()
+        has_yellow_data = bool(
+            conn.execute(
+                text(
+                    "SELECT 1 FROM track_status_periods "
+                    "WHERE session_key = :sk AND status_code = '2' LIMIT 1"
+                ),
+                {"sk": inp.session_key},
+            ).first()
+        )
 
     periods = tuple(
         types.TrackStatusPeriod(
@@ -412,7 +429,8 @@ def fetch_track_status(inp: types.TrackStatusInput) -> types.TrackStatusResult:
         safety_car_periods=count("4"),
         vsc_periods=count("6"),
         red_flag_periods=count("5"),
-        yellow_periods=count("2"),
+        # Sessions with no yellow row at all were not tracked for yellows.
+        yellow_periods=count("2") if has_yellow_data else None,
     )
 
 

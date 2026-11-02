@@ -9,8 +9,10 @@ from ml.features import _shrink, compute_circuit_priors
 class _FakeConn:
     def __init__(self, sc, dnf):
         self._rows = [sc, dnf]
+        self.calls = []
 
-    def execute(self, *_a, **_k):
+    def execute(self, sql, params=None):
+        self.calls.append((str(sql), params))
         return SimpleNamespace(one=lambda row=self._rows.pop(0): row)
 
     def __enter__(self):
@@ -23,9 +25,12 @@ class _FakeConn:
 class _FakeEngine:
     def __init__(self, sc, dnf):
         self.sc, self.dnf = sc, dnf
+        self.conns = []
 
     def connect(self):
-        return _FakeConn(self.sc, self.dnf)
+        conn = _FakeConn(self.sc, self.dnf)
+        self.conns.append(conn)
+        return conn
 
 
 class _BrokenEngine:
@@ -53,6 +58,13 @@ def test_observed_rates_override_prior_with_shrinkage():
         SimpleNamespace(entries=80, dnfs=0),
     )
     p = compute_circuit_priors("Monaco Grand Prix", engine, BEFORE)
+    calls = engine.conns[0].calls
+    assert len(calls) == 2
+    for sql, params in calls:  # point-in-time and per-circuit, bound not interpolated
+        assert "s.gp_name = :gp" in sql and "s.date_start < :before" in sql
+        assert params["gp"] == "Monaco Grand Prix"
+        assert params["before"] == BEFORE.to_pydatetime()
+    assert "Disqualified" in calls[1][0]  # a DSQ is not a reliability retirement
     assert p["sc_probability"] < 0.80  # pulled down by data
     assert p["sc_probability"] > 0.0  # but not all the way
     assert p["dnf_rate_circuit"] < 0.18

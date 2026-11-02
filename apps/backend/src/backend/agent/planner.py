@@ -143,7 +143,7 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         "fetch_track_status",
         "Safety car / VSC / red flag / yellow periods with start and end laps, from timing data.",
         types.TrackStatusInput,
-        "Returns track-status periods and counts of SC, VSC, red-flag and yellow periods.",
+        "Returns track-status periods and counts of SC, VSC, red-flag and yellow periods (yellow_periods is null when yellow flags are not tracked for the session).",
     ),
     "fetch_session_results": ToolSpec.from_dataclass(
         "fetch_session_results",

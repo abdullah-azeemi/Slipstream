@@ -91,7 +91,7 @@ NEW_FEATURES = [
     "fp1_long_run_pace_ms",  # FP1 long-run average pace
     "sprint_finish_position",  # sprint result where available, neutral otherwise
     "sprint_position_delta",  # sprint gain/loss vs start proxy
-    "sc_probability",  # circuit safety-car prior
+    "sc_probability",  # circuit safety-car / VSC prior (rate of races with a neutralisation)
     "overtake_difficulty",  # 0-1 circuit passing difficulty prior
     "dnf_rate_circuit",  # circuit reliability/DNF prior
     # Derived qualifying quality signals
@@ -718,7 +718,13 @@ def _shrink(successes: int, n: int, prior: float, m: int = PRIOR_STRENGTH_RACES)
 def compute_empirical_circuit_rates(
     engine, gp_name: str, before_date: pd.Timestamp
 ) -> dict:
-    """Observed safety-car and DNF rates at this circuit from PRIOR races only.
+    """Observed neutralisation and DNF rates at this circuit from PRIOR races only.
+
+    "Safety car" here means any neutralisation: a real safety car (status 4) or
+    a virtual one (status 6), matching how the hand-set ``sc_probability``
+    priors are used. DNFs exclude "Finished", lapped classifications, "Did not
+    start" and "Disqualified" (a disqualified car finished the race; it is not
+    a reliability retirement).
 
     Point-in-time: only races strictly before ``before_date``, so training rows
     never see their own race (no leakage). Races whose track status / results
@@ -750,7 +756,8 @@ def compute_empirical_circuit_rates(
                        COUNT(*) FILTER (
                            WHERE NOT (r.status ILIKE 'Finished'
                                       OR r.status ILIKE 'Lapped'
-                                      OR r.status LIKE '+%')
+                                      OR r.status LIKE '+%'
+                                      OR r.status ILIKE 'Disqualified')
                        ) AS dnfs
                 FROM session_results r
                 JOIN sessions s ON s.session_key = r.session_key

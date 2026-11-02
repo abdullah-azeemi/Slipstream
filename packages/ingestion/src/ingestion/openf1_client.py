@@ -100,17 +100,28 @@ def _throttle() -> None:
     _last_request_at = time.monotonic()
 
 
-def _get_json(endpoint: str, params: dict, base_url: str | None = None) -> list[dict]:
-    """GET ``/v1/<endpoint>`` with a couple of retries for 429/5xx.
+class OpenF1Error(RuntimeError):
+    """A request failed after retries (as opposed to a successful empty answer)."""
 
-    The free tier is rate limited, so back off briefly instead of failing the
-    whole session ingest. Returns [] when it still cannot be fetched.
+
+def _get_json(
+    endpoint: str, params: dict, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    """GET ``/v1/<endpoint>`` with a few retries for 429/5xx and transport errors.
+
+    OpenF1 answers 404 ``{"detail": "No results found."}`` for an empty result,
+    which is a normal answer and always returns []. Any other failure returns []
+    in the default best-effort mode, so a flaky live feed never aborts an
+    ingestion run; with ``strict=True`` it raises :class:`OpenF1Error` instead,
+    so callers that must not mistake an outage for "no data" can tell the two
+    apart.
     """
     import time
 
     url = f"{base_url or settings.openf1_base_url}/v1/{endpoint}?" + urllib.parse.urlencode(
         params
     )
+    last_error = "unknown error"
     for attempt in range(3):
         _throttle()
         try:
@@ -120,16 +131,22 @@ def _get_json(endpoint: str, params: dict, base_url: str | None = None) -> list[
                 payload = json.loads(resp.read().decode("utf-8"))
             return payload if isinstance(payload, list) else []
         except urllib.error.HTTPError as exc:
-            if exc.code == 404:  # OpenF1 answers 404 {"detail": "No results found."}
+            if exc.code == 404:
                 return []
+            last_error = f"HTTP {exc.code}"
             if exc.code in (429, 500, 502, 503) and attempt < 2:
                 time.sleep(1.5 * (attempt + 1))
                 continue
-            log.warning("openf1.request_failed", endpoint=endpoint, status=exc.code)
-            return []
-        except Exception as exc:
-            log.warning("openf1.request_failed", endpoint=endpoint, error=str(exc))
-            return []
+            break
+        except Exception as exc:  # timeouts, connection resets, bad JSON
+            last_error = str(exc)
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    log.warning("openf1.request_failed", endpoint=endpoint, error=last_error)
+    if strict:
+        raise OpenF1Error(f"OpenF1 /{endpoint} failed: {last_error}")
     return []
 
 
@@ -146,10 +163,12 @@ def _gap_parts(val) -> tuple[float | None, str | None]:
         return None, s or None
 
 
-def fetch_intervals(session_key: int, base_url: str | None = None) -> list[dict]:
+def fetch_intervals(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
     """Gap to leader and to the car ahead, ~every 4 s per driver."""
     rows = []
-    for row in _get_json("intervals", {"session_key": session_key}, base_url):
+    for row in _get_json("intervals", {"session_key": session_key}, base_url, strict=strict):
         date, driver = _clean_str(row.get("date")), row.get("driver_number")
         if not date or driver is None:
             continue
@@ -169,10 +188,12 @@ def fetch_intervals(session_key: int, base_url: str | None = None) -> list[dict]
     return rows
 
 
-def fetch_positions(session_key: int, base_url: str | None = None) -> list[dict]:
+def fetch_positions(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
     """Race order, one row each time a driver's position changes."""
     rows = []
-    for row in _get_json("position", {"session_key": session_key}, base_url):
+    for row in _get_json("position", {"session_key": session_key}, base_url, strict=strict):
         date, driver, pos = (
             _clean_str(row.get("date")),
             row.get("driver_number"),
@@ -185,13 +206,15 @@ def fetch_positions(session_key: int, base_url: str | None = None) -> list[dict]
     return rows
 
 
-def fetch_pit_stops(session_key: int, base_url: str | None = None) -> list[dict]:
+def fetch_pit_stops(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
     """Pit stops with lane duration in seconds.
 
     OpenF1 has used ``pit_duration`` and, later, ``lane_duration``; accept both.
     """
     rows = []
-    for row in _get_json("pit", {"session_key": session_key}, base_url):
+    for row in _get_json("pit", {"session_key": session_key}, base_url, strict=strict):
         driver, lap = row.get("driver_number"), row.get("lap_number")
         if driver is None or lap is None:
             continue
@@ -214,28 +237,40 @@ def fetch_pit_stops(session_key: int, base_url: str | None = None) -> list[dict]
 # ``ingestion.openf1_ingest`` so it can be unit-tested without the network.
 
 
-def fetch_meetings(year: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("meetings", {"year": year}, base_url)
+def fetch_meetings(
+    year: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("meetings", {"year": year}, base_url, strict=strict)
 
 
-def fetch_sessions(meeting_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("sessions", {"meeting_key": meeting_key}, base_url)
+def fetch_sessions(
+    meeting_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("sessions", {"meeting_key": meeting_key}, base_url, strict=strict)
 
 
-def fetch_drivers(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("drivers", {"session_key": session_key}, base_url)
+def fetch_drivers(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("drivers", {"session_key": session_key}, base_url, strict=strict)
 
 
-def fetch_laps(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("laps", {"session_key": session_key}, base_url)
+def fetch_laps(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("laps", {"session_key": session_key}, base_url, strict=strict)
 
 
-def fetch_stints(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("stints", {"session_key": session_key}, base_url)
+def fetch_stints(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("stints", {"session_key": session_key}, base_url, strict=strict)
 
 
-def fetch_session_result(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("session_result", {"session_key": session_key}, base_url)
+def fetch_session_result(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("session_result", {"session_key": session_key}, base_url, strict=strict)
 
 
 def fetch_starting_grid(session_key: int, base_url: str | None = None) -> list[dict]:
@@ -243,9 +278,13 @@ def fetch_starting_grid(session_key: int, base_url: str | None = None) -> list[d
     return _get_json("starting_grid", {"session_key": session_key}, base_url)
 
 
-def fetch_race_control(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("race_control", {"session_key": session_key}, base_url)
+def fetch_race_control(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("race_control", {"session_key": session_key}, base_url, strict=strict)
 
 
-def fetch_weather(session_key: int, base_url: str | None = None) -> list[dict]:
-    return _get_json("weather", {"session_key": session_key}, base_url)
+def fetch_weather(
+    session_key: int, base_url: str | None = None, *, strict: bool = False
+) -> list[dict]:
+    return _get_json("weather", {"session_key": session_key}, base_url, strict=strict)

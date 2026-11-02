@@ -1,11 +1,14 @@
 """fetch_track_status / fetch_session_results read the 0026 tables."""
 
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import text
 
 from backend.agent import orchestrator, planner, tools, types
 
 SK = 89001
+SK_NO_YELLOW = 89002  # a session whose yellow flags are not tracked (OpenF1 path)
 
 _DDL = [
     """CREATE TABLE IF NOT EXISTS session_results (
@@ -33,9 +36,10 @@ def seeded(app, db_engine):
         conn.execute(
             text(
                 "INSERT INTO sessions (session_key, year, gp_name, session_type, session_name) "
-                "VALUES (:sk, 2099, 'Test Grand Prix', 'R', 'Race') ON CONFLICT DO NOTHING"
+                "VALUES (:sk, 2099, 'Test Grand Prix', 'R', 'Race'), "
+                "(:sk2, 2099, 'Other Grand Prix', 'R', 'Race') ON CONFLICT DO NOTHING"
             ),
-            {"sk": SK},
+            {"sk": SK, "sk2": SK_NO_YELLOW},
         )
         conn.execute(
             text(
@@ -44,9 +48,13 @@ def seeded(app, db_engine):
                    VALUES (:sk,'1','AllClear',0,100,1,10),
                           (:sk,'4','SafetyCar',100,200,10,14),
                           (:sk,'1','AllClear',200,300,14,30),
-                          (:sk,'6','VirtualSafetyCar',300,NULL,30,NULL)"""
+                          (:sk,'6','VirtualSafetyCar',300,400,30,32),
+                          (:sk,'2','Yellow',400,450,32,33),
+                          (:sk,'5','Red',450,500,33,35),
+                          (:sk,'1','AllClear',500,NULL,35,NULL),
+                          (:sk2,'1','AllClear',0,NULL,NULL,NULL)"""
             ),
-            {"sk": SK},
+            {"sk": SK, "sk2": SK_NO_YELLOW},
         )
         conn.execute(
             text(
@@ -59,20 +67,56 @@ def seeded(app, db_engine):
         )
     yield
     with db_engine.begin() as conn:
-        conn.execute(text("DELETE FROM track_status_periods WHERE session_key=:sk"), {"sk": SK})
-        conn.execute(text("DELETE FROM session_results WHERE session_key=:sk"), {"sk": SK})
-        conn.execute(text("DELETE FROM sessions WHERE session_key=:sk"), {"sk": SK})
+        keys = {"a": SK, "b": SK_NO_YELLOW}
+        conn.execute(text("DELETE FROM track_status_periods WHERE session_key IN (:a, :b)"), keys)
+        conn.execute(text("DELETE FROM session_results WHERE session_key IN (:a, :b)"), keys)
+        conn.execute(text("DELETE FROM sessions WHERE session_key IN (:a, :b)"), keys)
 
 
 def test_track_status_counts_each_kind(seeded):
     res = tools.fetch_track_status(types.TrackStatusInput(session_key=SK))
-    assert (res.safety_car_periods, res.vsc_periods, res.red_flag_periods) == (1, 1, 0)
-    assert len(res.periods) == 4 and res.periods[-1].end_ms is None
+    assert (res.safety_car_periods, res.vsc_periods, res.red_flag_periods) == (1, 1, 1)
+    assert res.yellow_periods == 1
+    assert len(res.periods) == 7 and res.periods[-1].end_ms is None
 
 
 def test_track_status_lap_window_filters_overlap(seeded):
     res = tools.fetch_track_status(types.TrackStatusInput(session_key=SK, from_lap=11, to_lap=13))
     assert [p.status_label for p in res.periods] == ["SafetyCar"]
+
+
+def test_open_ended_final_period_matches_late_windows(seeded):
+    res = tools.fetch_track_status(types.TrackStatusInput(session_key=SK, from_lap=40))
+    assert [p.status_label for p in res.periods] == ["AllClear"]  # only the open-ended one
+
+
+def test_inverted_lap_window_is_empty(seeded):
+    res = tools.fetch_track_status(types.TrackStatusInput(session_key=SK, from_lap=13, to_lap=11))
+    assert res.periods == () and res.safety_car_periods == 0
+
+
+def test_pre_first_lap_periods_do_not_match_a_later_window(seeded, db_engine):
+    # NULL start_lap/end_lap mean "before lap 1"; such a period (here a safety
+    # car before the start) must not be returned for a window like laps 11-13.
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                """INSERT INTO track_status_periods
+                   (session_key, status_code, status_label, start_ms, end_ms, start_lap, end_lap)
+                   VALUES (:sk,'4','SafetyCar',-50,0,NULL,NULL)"""
+            ),
+            {"sk": SK},
+        )
+    windowed = tools.fetch_track_status(types.TrackStatusInput(session_key=SK, from_lap=11, to_lap=13))
+    assert windowed.safety_car_periods == 1  # the real lap 10-14 one only
+    whole = tools.fetch_track_status(types.TrackStatusInput(session_key=SK))
+    assert whole.safety_car_periods == 2
+
+
+def test_yellow_count_is_unknown_when_session_has_no_yellow_data(seeded):
+    res = tools.fetch_track_status(types.TrackStatusInput(session_key=SK_NO_YELLOW))
+    assert res.yellow_periods is None  # "not tracked", not "there were none"
+    assert res.safety_car_periods == 0
 
 
 def test_session_results_orders_and_computes_gain(seeded):
@@ -89,3 +133,13 @@ def test_tools_are_registered_for_planner_and_executor():
         assert name.value in planner.TOOL_REGISTRY
         assert name in orchestrator._TOOLS
         assert name in orchestrator._BINDERS
+
+
+def test_binders_build_track_status_and_session_results_inputs():
+    env = {"session": SimpleNamespace(session_key=SK)}
+    track = orchestrator._BINDERS[types.ToolName.FETCH_TRACK_STATUS](
+        {"from_lap": 11, "to_lap": 13}, env
+    )
+    assert (track.session_key, track.from_lap, track.to_lap) == (SK, 11, 13)
+    results = orchestrator._BINDERS[types.ToolName.FETCH_SESSION_RESULTS]({}, env)
+    assert results.session_key == SK and results.driver_number is None
