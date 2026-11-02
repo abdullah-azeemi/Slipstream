@@ -112,7 +112,7 @@ function CornerTable({ stats }: { stats: DriverTelemetryStats[] }) {
   const cornerNums = Array.from({ length: maxCorners }, (_, i) => i + 1)
 
   return (
-    <div style={{ background: `linear-gradient(180deg, ${C.surface} 0%, #F4F8FC 100%)`, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 12px 28px rgba(37,54,82,0.07), inset 0 1px 0 rgba(255,255,255,0.78)' }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 12px 28px rgba(37,54,82,0.07), inset 0 1px 0 rgba(255,255,255,0.78)' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${C.border}` }}>
         <div>

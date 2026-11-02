@@ -38,3 +38,9 @@ def test_get_session_includes_drivers(client, seed_session):
 def test_get_session_not_found(client):
     response = client.get("/api/v1/sessions/000000")
     assert response.status_code == 404
+
+
+def test_list_sessions_reports_whether_laps_are_loaded(client, seed_session):
+    """The telemetry picker hides sessions whose laps have not loaded yet."""
+    data = client.get("/api/v1/sessions").get_json()
+    assert all(isinstance(s["has_laps"], bool) for s in data)

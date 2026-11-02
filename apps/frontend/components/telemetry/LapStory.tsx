@@ -135,14 +135,13 @@ export default function LapStory({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ── Verdict banner ───────────────────────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg, #1E293B 0%, #162033 55%, #24324A 100%)',
+        background: '#1E293B',
         borderRadius: 18,
         padding: isMobile ? '18px 18px' : '22px 24px',
         boxShadow: '0 16px 34px rgba(19,35,61,0.16)',
         position: 'relative',
         overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 34%)' }} />
         <div style={{ position: 'relative' }}>
           <div style={{ fontSize: 12, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'inherit', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
             Where the lap was won

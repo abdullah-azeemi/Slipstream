@@ -112,7 +112,7 @@ const VERDICT_STYLE = {
 // All charts share identical left/right padding so x-axes align pixel-perfect
 const PAD = { top: 24, right: 110, bottom: 44, left: 72 }
 
-const SURFACE = 'linear-gradient(180deg, rgba(248,250,255,0.98) 0%, rgba(242,246,252,0.98) 100%)'
+const SURFACE = '#FAFAFA'
 const BORDER = 'rgba(204,218,236,0.95)'
 const TEXT_DARK = '#14233C'
 
@@ -754,7 +754,7 @@ export default function RaceAnalysis({
               {overallFastest && (
                 <Card style={{ padding: '18px 20px' }}>
                   <SectionTitle title="Fastest Lap" subtitle="Session benchmark" />
-                  <div style={{ marginTop: '14px', padding: '18px', borderRadius: '20px', background: 'linear-gradient(180deg, #16243D 0%, #101A2D 100%)', color: '#fff', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+                  <div style={{ marginTop: '14px', padding: '18px', borderRadius: '20px', background: '#16243D', color: '#fff', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                       <div>
                         <div style={{ fontSize: '12px', fontFamily: 'inherit', letterSpacing: '0.08em', color: '#' + overallFastest.team_colour }}>{overallFastest.abbreviation}</div>

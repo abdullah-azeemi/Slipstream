@@ -16,7 +16,7 @@ export interface Post extends PostMeta {
 
 const DIR = path.join(process.cwd(), 'content', 'blog')
 
-function parse(slug: string, raw: string): (Post & { draft: boolean }) | null {
+export function parsePost(slug: string, raw: string): (Post & { draft: boolean }) | null {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
   if (!m) return null
   const data: Record<string, string> = {}
@@ -45,7 +45,7 @@ export function getAllPosts(): Post[] {
   return fs
     .readdirSync(DIR)
     .filter(f => f.endsWith('.md'))
-    .map(f => parse(f.replace(/\.md$/, ''), fs.readFileSync(path.join(DIR, f), 'utf8')))
+    .map(f => parsePost(f.replace(/\.md$/, ''), fs.readFileSync(path.join(DIR, f), 'utf8')))
     .filter((p): p is Post & { draft: boolean } => p !== null && !p.draft)
     .sort((a, b) => b.date.localeCompare(a.date))
 }
