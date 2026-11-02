@@ -61,6 +61,8 @@ class ToolName(str, Enum):
     ESTIMATE_PIT_LOSS = "estimate_pit_loss"
     COMPARE_STRATEGY_SCENARIOS = "compare_strategy_scenarios"
     SEARCH_STRATEGY_SOURCES = "search_strategy_sources"
+    FETCH_TRACK_STATUS = "fetch_track_status"
+    FETCH_SESSION_RESULTS = "fetch_session_results"
 
 
 @dataclass(frozen=True)
@@ -301,6 +303,72 @@ class RaceControlWindowResult:
     to_lap: int | None
     events: tuple[RaceControlEvent, ...]
     safety_car_periods: int = 0
+
+
+@dataclass(frozen=True)
+class TrackStatusInput:
+    """Optional lap window (inclusive) for track-status periods."""
+
+    session_key: int
+    from_lap: int | None = None
+    to_lap: int | None = None
+
+
+@dataclass(frozen=True)
+class TrackStatusPeriod:
+    """One contiguous period under a single track status (SC, VSC, red, ...)."""
+
+    status_code: str
+    status_label: str
+    start_ms: float
+    end_ms: float | None
+    start_lap: int | None
+    end_lap: int | None
+
+
+@dataclass(frozen=True)
+class TrackStatusResult:
+    """Track-status periods plus per-kind counts, from timing data."""
+
+    from_lap: int | None
+    to_lap: int | None
+    periods: tuple[TrackStatusPeriod, ...]
+    safety_car_periods: int = 0
+    vsc_periods: int = 0
+    red_flag_periods: int = 0
+    yellow_periods: int = 0
+
+
+@dataclass(frozen=True)
+class SessionResultsInput:
+    """Final classification for a session, optionally one driver."""
+
+    session_key: int
+    driver_number: int | None = None
+
+
+@dataclass(frozen=True)
+class SessionResultEntry:
+    driver_number: int
+    abbreviation: str | None
+    team_name: str | None
+    grid_position: int | None
+    position: int | None
+    classified_position: str | None
+    status: str | None
+    points: float | None
+    laps_completed: int | None
+    race_time_ms: float | None
+    q1_ms: float | None
+    q2_ms: float | None
+    q3_ms: float | None
+    # grid_position - position when both are known (positive = gained places)
+    positions_gained: int | None = None
+
+
+@dataclass(frozen=True)
+class SessionResultsResult:
+    entries: tuple[SessionResultEntry, ...]
 
 
 @dataclass(frozen=True)

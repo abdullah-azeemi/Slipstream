@@ -49,6 +49,8 @@ _TOOLS: dict[types.ToolName, Callable] = {
     types.ToolName.ESTIMATE_PIT_LOSS: tools.estimate_pit_loss,
     types.ToolName.COMPARE_STRATEGY_SCENARIOS: tools.compare_strategy_scenarios,
     types.ToolName.SEARCH_STRATEGY_SOURCES: tools.search_strategy_sources,
+    types.ToolName.FETCH_TRACK_STATUS: tools.fetch_track_status,
+    types.ToolName.FETCH_SESSION_RESULTS: tools.fetch_session_results,
     types.ToolName.VERIFY_EVIDENCE: tools.verify_evidence,
 }
 _MAX_WORKERS = 4
@@ -209,6 +211,24 @@ def _bind_race_control(params, env):
         driver_number=env["driver"].driver_number,
         from_lap=from_lap,
         to_lap=to_lap,
+    )
+
+
+@_register(types.ToolName.FETCH_TRACK_STATUS)
+def _bind_track_status(params, env):
+    return types.TrackStatusInput(
+        session_key=env["session"].session_key,
+        from_lap=params.get("from_lap"),
+        to_lap=params.get("to_lap"),
+    )
+
+
+@_register(types.ToolName.FETCH_SESSION_RESULTS)
+def _bind_session_results(params, env):
+    driver = env.get("driver")
+    return types.SessionResultsInput(
+        session_key=env["session"].session_key,
+        driver_number=getattr(driver, "driver_number", None),
     )
 
 

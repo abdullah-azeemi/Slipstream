@@ -486,3 +486,134 @@ def extract_telemetry(
 
     log.info("telemetry.extracted", session_key=session_key, total=len(results))
     return results
+
+
+# ── Session results & track status ───────────────────────────────────────────
+
+TRACK_STATUS_LABELS = {
+    "1": "AllClear",
+    "2": "Yellow",
+    "3": "Unknown",
+    "4": "SafetyCar",
+    "5": "Red",
+    "6": "VirtualSafetyCar",
+    "7": "VSCEnding",
+}
+
+
+def _timedelta_ms(val) -> float | None:
+    """Timedelta -> ms; NaT/None/garbage -> None."""
+    if val is None:
+        return None
+    try:
+        if pd.isna(val):
+            return None
+        return float(pd.Timedelta(val).total_seconds() * 1000)
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_session_results(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    """Final classification: grid, finish, points, status and Q1/Q2/Q3 times.
+
+    These are the labels for race-prediction training and the retirement model.
+    Columns missing in older FastF1 versions are simply None.
+    """
+    try:
+        res = session.results
+    except Exception as e:
+        log.warning("results.extract_failed", error=str(e))
+        return []
+    if res is None or res.empty:
+        log.info("results.empty", session_key=session_key)
+        return []
+
+    rows = []
+    for _, row in res.iterrows():
+        driver_number = _to_int(row.get("DriverNumber"))
+        if driver_number is None:
+            continue
+        rows.append(
+            {
+                "session_key": session_key,
+                "driver_number": driver_number,
+                "abbreviation": _clean(row.get("Abbreviation")),
+                "team_name": _clean(row.get("TeamName")),
+                "grid_position": _to_int(row.get("GridPosition")),
+                "position": _to_int(row.get("Position")),
+                "classified_position": _clean(row.get("ClassifiedPosition")),
+                "status": _clean(row.get("Status")),
+                "points": _to_float(row.get("Points")),
+                "laps_completed": _to_int(row.get("Laps")),
+                "race_time_ms": _timedelta_ms(row.get("Time")),
+                "q1_ms": _timedelta_ms(row.get("Q1")),
+                "q2_ms": _timedelta_ms(row.get("Q2")),
+                "q3_ms": _timedelta_ms(row.get("Q3")),
+            }
+        )
+    log.info("results.extracted", session_key=session_key, count=len(rows))
+    return rows
+
+
+def _relative_lap_starts(session) -> list[tuple[int, pd.Timedelta]]:
+    """(lap_number, earliest LapStartTime across drivers), sorted by time.
+
+    Uses the session-relative ``LapStartTime`` clock, which is the same clock
+    ``track_status`` uses -- so no tz / absolute-vs-relative conversion needed.
+    """
+    laps = session.laps
+    if laps is None or laps.empty or "LapStartTime" not in laps:
+        return []
+    sub = laps[["LapNumber", "LapStartTime"]].dropna()
+    if sub.empty:
+        return []
+    earliest = sub.groupby("LapNumber")["LapStartTime"].min().sort_values()
+    return [(int(lap), start) for lap, start in earliest.items()]
+
+
+def _lap_at(lap_starts: list[tuple[int, pd.Timedelta]], t: pd.Timedelta) -> int | None:
+    best = None
+    for lap, start in lap_starts:
+        if start <= t:
+            best = lap
+        else:
+            break
+    return best
+
+
+def extract_track_status(session: fastf1.core.Session, session_key: int) -> list[dict]:
+    """Turn FastF1's status change log into closed [start, end) periods.
+
+    ``session.track_status`` has one row per *change* (Time, Status, Message).
+    Each row opens a period that ends where the next one starts; the last
+    period has end_ms=None. Needed to simulate safety-car probability.
+    """
+    try:
+        ts = session.track_status
+    except Exception as e:
+        log.warning("track_status.extract_failed", error=str(e))
+        return []
+    if ts is None or ts.empty:
+        log.info("track_status.empty", session_key=session_key)
+        return []
+
+    ts = ts.sort_values("Time").reset_index(drop=True)
+    lap_starts = _relative_lap_starts(session)
+    periods = []
+    for i, row in ts.iterrows():
+        start = pd.Timedelta(row["Time"])
+        end = pd.Timedelta(ts.loc[i + 1, "Time"]) if i + 1 < len(ts) else None
+        code = str(row["Status"]).strip()
+        periods.append(
+            {
+                "session_key": session_key,
+                "status_code": code,
+                "status_label": TRACK_STATUS_LABELS.get(code, "Unknown"),
+                "start_ms": start.total_seconds() * 1000,
+                "end_ms": end.total_seconds() * 1000 if end is not None else None,
+                "start_lap": _lap_at(lap_starts, start),
+                "end_lap": _lap_at(lap_starts, end) if end is not None else None,
+            }
+        )
+    log.info("track_status.extracted", session_key=session_key, count=len(periods))
+    return periods

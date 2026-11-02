@@ -20,6 +20,9 @@ class Settings(CommonSettings):
     openf1_base_url: str = "https://api.openf1.org"
     openf1_timeout_seconds: int = 10
 
+    # Jolpica (Ergast successor) historical results
+    jolpica_base_url: str = "https://api.jolpi.ca/ergast/f1"
+
     # How many rows to insert at once (batching is faster than one-by-one)
     db_batch_size: int = 500
 
