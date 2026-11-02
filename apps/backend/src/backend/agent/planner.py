@@ -139,6 +139,18 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         types.RaceControlWindowInput,
         "Returns race control events and safety car period count.",
     ),
+    "fetch_track_status": ToolSpec.from_dataclass(
+        "fetch_track_status",
+        "Safety car / VSC / red flag / yellow periods with start and end laps, from timing data.",
+        types.TrackStatusInput,
+        "Returns track-status periods and counts of SC, VSC, red-flag and yellow periods (yellow_periods is null when yellow flags are not tracked for the session).",
+    ),
+    "fetch_session_results": ToolSpec.from_dataclass(
+        "fetch_session_results",
+        "Official classification: grid, finishing position, status (DNF reason), points, Q1/Q2/Q3 times.",
+        types.SessionResultsInput,
+        "Returns per-driver results with positions gained.",
+    ),
     "fetch_radio_messages": ToolSpec.from_dataclass(
         "fetch_radio_messages",
         "Team radio clips and transcripts for a driver in a lap window.",

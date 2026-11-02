@@ -8,6 +8,8 @@ from ingestion.fastf1_client import (
     extract_telemetry,
     extract_race_control,
     extract_weather_events,
+    extract_session_results,
+    extract_track_status,
     _lap_start_times,
     _lap_for_timestamp,
 )
@@ -20,8 +22,18 @@ from ingestion.loader import (
     load_race_control,
     load_team_radio,
     load_weather_events,
+    load_session_results,
+    load_track_status,
+    load_session_intervals,
+    load_position_changes,
+    load_pit_stops,
 )
-from ingestion.openf1_client import fetch_team_radio
+from ingestion.openf1_client import (
+    fetch_team_radio,
+    fetch_intervals,
+    fetch_positions,
+    fetch_pit_stops,
+)
 
 log = structlog.get_logger()
 
@@ -54,6 +66,43 @@ NAME_TO_CODE = {
 TELEMETRY_SESSIONS = {"Q", "SQ", "R"}
 
 
+# Sessions where race-order timing (gaps, positions, pit stops) is meaningful
+RACE_TIMING_SESSIONS = {"R", "SS"}
+
+
+def _annotate_laps(rows: list[dict], session_obj) -> None:
+    """Add lap_number to timestamped OpenF1 rows, in place.
+
+    Lap windows are looked up per driver: a single mixed list of every driver's
+    lap starts would put a backmarker's lap N start after the leader's lap N+1.
+    """
+    cache: dict[int, list] = {}
+    for r in rows:
+        drv = r["driver_number"]
+        if drv not in cache:
+            cache[drv] = _lap_start_times(session_obj, driver_number=drv)
+        r["lap_number"] = _lap_for_timestamp(cache[drv], r["date"])
+
+
+def _ingest_race_timing(session_obj, session_key: int) -> dict[str, int]:
+    """OpenF1 gaps / positions / pit stops. Best-effort: never fails the ingest
+    (OpenF1 has nothing before 2023, and fetchers return [] on any error)."""
+    counts = {"intervals": 0, "positions": 0, "pit_stops": 0}
+    try:
+        intervals = fetch_intervals(session_key)
+        _annotate_laps(intervals, session_obj)
+        counts["intervals"] = load_session_intervals(intervals, session_key)
+
+        positions = fetch_positions(session_key)
+        _annotate_laps(positions, session_obj)
+        counts["positions"] = load_position_changes(positions, session_key)
+
+        counts["pit_stops"] = load_pit_stops(fetch_pit_stops(session_key), session_key)
+    except Exception as exc:
+        log.warning("race_timing.failed", session_key=session_key, error=str(exc))
+    return counts
+
+
 def extract_weather(session) -> dict:
     """
     Extract weather snapshot from end of session.
@@ -75,6 +124,29 @@ def extract_weather(session) -> dict:
     except Exception as e:
         log.warning("weather.extraction_failed", error=str(e))
         return {}
+
+
+# OpenF1 only has data from the 2023 season onwards.
+OPENF1_FIRST_YEAR = 2023
+
+
+def _openf1_fallback(year: int, gp: str, code: str) -> int | None:
+    """Try the FastF1-free path when FastF1 cannot load a session.
+
+    FastF1 fails for any session missing from its cache now that F1's static
+    feed needs a login. Never raises: on any problem the caller falls through
+    to the normal "not ready" handling.
+    """
+    try:
+        from ingestion.openf1_ingest import ingest_session_openf1
+
+        key = ingest_session_openf1(year, gp, code)
+        if key is not None:
+            log.info("ingest.openf1_fallback_used", session_key=key, gp=gp, session=code)
+        return key
+    except Exception as exc:
+        log.warning("ingest.openf1_fallback_failed", gp=gp, session=code, error=str(exc))
+        return None
 
 
 def ingest_session(
@@ -142,6 +214,19 @@ def ingest_session(
         wx_events = extract_weather_events(session_obj, session_key)
         wx_count = load_weather_events(wx_events, session_key)
 
+        results_count = load_session_results(
+            extract_session_results(session_obj, session_key), session_key
+        )
+        track_status_count = load_track_status(
+            extract_track_status(session_obj, session_key), session_key
+        )
+
+        timing = (
+            _ingest_race_timing(session_obj, session_key)
+            if code in RACE_TIMING_SESSIONS
+            else {}
+        )
+
         radio_rows = fetch_team_radio(session_key)
         for r in radio_rows:
             r["lap_number"] = _lap_for_timestamp(
@@ -160,6 +245,9 @@ def ingest_session(
             race_control=rc_count,
             weather_events=wx_count,
             team_radio=radio_count,
+            results=results_count,
+            track_status=track_status_count,
+            **{f"openf1_{k}": v for k, v in timing.items()},
         )
         return session_key
     except Exception as exc:
@@ -168,13 +256,23 @@ def ingest_session(
             or "DataNotLoadedError" in str(type(exc))
             or "not been loaded yet" in str(exc).lower()
         )
+        if is_data_not_loaded and year >= OPENF1_FIRST_YEAR:
+            key = _openf1_fallback(year, gp, code)
+            if key is not None:
+                return key
         if is_data_not_loaded:
             log.warning(
                 "ingest.not_ready",
                 year=year,
                 gp=gp,
                 session=session,
-                reason="FastF1 data has not been loaded yet (timing data may not be published upstream)",
+                reason=(
+                    "FastF1 data has not been loaded yet. Either the timing data "
+                    "is not published upstream, or F1's livetiming feed rejected "
+                    "the request: it now returns 401 without an F1TV login, so "
+                    "sessions missing from the FastF1 cache need FastF1>=3.9 and "
+                    "F1_USERNAME/F1_PASSWORD (see docs/repository.md)"
+                ),
             )
             raise
 

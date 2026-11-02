@@ -620,3 +620,229 @@ def load_telemetry(rows: list[dict], session_key: int) -> int:
             conn.execute(text(_TEL_INSERT), batch)
     log.info("loader.telemetry_loaded", count=len(rows), session_key=session_key)
     return len(rows)
+
+
+# ── Results, track status, OpenF1 timing, Jolpica history ────────────────────
+
+
+def _replace_for_session(
+    table: str, session_key: int, insert_sql: str, rows: list[dict]
+) -> int:
+    """Delete a session's rows in ``table`` and insert ``rows`` atomically.
+
+    ``table`` is only ever a hard-coded literal from this module (never user
+    input), so the f-string is safe; all values stay bound parameters.
+    """
+    if not rows:
+        return 0
+    engine = _get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(f"DELETE FROM {table} WHERE session_key = :sk"), {"sk": session_key}
+        )
+        for i in range(0, len(rows), 2000):
+            conn.execute(text(insert_sql), rows[i : i + 2000])
+    log.info("loader.rows_loaded", table=table, count=len(rows), session_key=session_key)
+    return len(rows)
+
+
+def load_session_results(rows: list[dict], session_key: int) -> int:
+    clean = [
+        {
+            "session_key": session_key,
+            "driver_number": _clean_int(r.get("driver_number")),
+            "abbreviation": _clean_str(r.get("abbreviation")),
+            "team_name": _clean_str(r.get("team_name")),
+            "grid_position": _clean_int(r.get("grid_position")),
+            "position": _clean_int(r.get("position")),
+            "classified_position": _clean_str(r.get("classified_position")),
+            "status": _clean_str(r.get("status")),
+            "points": _clean_float(r.get("points")),
+            "laps_completed": _clean_int(r.get("laps_completed")),
+            "race_time_ms": _clean_float(r.get("race_time_ms")),
+            "q1_ms": _clean_float(r.get("q1_ms")),
+            "q2_ms": _clean_float(r.get("q2_ms")),
+            "q3_ms": _clean_float(r.get("q3_ms")),
+        }
+        for r in rows
+        if _clean_int(r.get("driver_number")) is not None
+    ]
+    return _replace_for_session(
+        "session_results",
+        session_key,
+        """
+        INSERT INTO session_results (
+            session_key, driver_number, abbreviation, team_name, grid_position,
+            position, classified_position, status, points, laps_completed,
+            race_time_ms, q1_ms, q2_ms, q3_ms
+        ) VALUES (
+            :session_key, :driver_number, :abbreviation, :team_name, :grid_position,
+            :position, :classified_position, :status, :points, :laps_completed,
+            :race_time_ms, :q1_ms, :q2_ms, :q3_ms
+        )
+        """,
+        clean,
+    )
+
+
+def load_track_status(rows: list[dict], session_key: int) -> int:
+    clean = [
+        {
+            "session_key": session_key,
+            "status_code": _clean_str(r.get("status_code")),
+            "status_label": _clean_str(r.get("status_label")) or "Unknown",
+            "start_ms": _clean_float(r.get("start_ms")),
+            "end_ms": _clean_float(r.get("end_ms")),
+            "start_lap": _clean_int(r.get("start_lap")),
+            "end_lap": _clean_int(r.get("end_lap")),
+        }
+        for r in rows
+        if _clean_str(r.get("status_code")) and _clean_float(r.get("start_ms")) is not None
+    ]
+    return _replace_for_session(
+        "track_status_periods",
+        session_key,
+        """
+        INSERT INTO track_status_periods (
+            session_key, status_code, status_label, start_ms, end_ms,
+            start_lap, end_lap
+        ) VALUES (
+            :session_key, :status_code, :status_label, :start_ms, :end_ms,
+            :start_lap, :end_lap
+        )
+        """,
+        clean,
+    )
+
+
+def load_session_intervals(rows: list[dict], session_key: int) -> int:
+    clean = [
+        {
+            "session_key": session_key,
+            "driver_number": _clean_int(r.get("driver_number")),
+            "date": r.get("date"),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "gap_to_leader_s": _clean_float(r.get("gap_to_leader_s")),
+            "interval_s": _clean_float(r.get("interval_s")),
+            "gap_to_leader_raw": _clean_str(r.get("gap_to_leader_raw")),
+            "interval_raw": _clean_str(r.get("interval_raw")),
+        }
+        for r in rows
+        if r.get("date") and _clean_int(r.get("driver_number")) is not None
+    ]
+    return _replace_for_session(
+        "session_intervals",
+        session_key,
+        """
+        INSERT INTO session_intervals (
+            session_key, driver_number, date, lap_number, gap_to_leader_s,
+            interval_s, gap_to_leader_raw, interval_raw
+        ) VALUES (
+            :session_key, :driver_number, :date, :lap_number, :gap_to_leader_s,
+            :interval_s, :gap_to_leader_raw, :interval_raw
+        )
+        """,
+        clean,
+    )
+
+
+def load_position_changes(rows: list[dict], session_key: int) -> int:
+    clean = [
+        {
+            "session_key": session_key,
+            "driver_number": _clean_int(r.get("driver_number")),
+            "date": r.get("date"),
+            "lap_number": _clean_int(r.get("lap_number")),
+            "position": _clean_int(r.get("position")),
+        }
+        for r in rows
+        if r.get("date")
+        and _clean_int(r.get("driver_number")) is not None
+        and _clean_int(r.get("position")) is not None
+    ]
+    return _replace_for_session(
+        "position_changes",
+        session_key,
+        """
+        INSERT INTO position_changes (
+            session_key, driver_number, date, lap_number, position
+        ) VALUES (
+            :session_key, :driver_number, :date, :lap_number, :position
+        )
+        """,
+        clean,
+    )
+
+
+def load_pit_stops(rows: list[dict], session_key: int) -> int:
+    # (session, driver, lap) is unique; OpenF1 occasionally repeats a row.
+    seen: dict[tuple, dict] = {}
+    for r in rows:
+        driver, lap = _clean_int(r.get("driver_number")), _clean_int(r.get("lap_number"))
+        if driver is None or lap is None:
+            continue
+        seen[(driver, lap)] = {
+            "session_key": session_key,
+            "driver_number": driver,
+            "lap_number": lap,
+            "date": r.get("date"),
+            "pit_duration_s": _clean_float(r.get("pit_duration_s")),
+        }
+    return _replace_for_session(
+        "pit_stops",
+        session_key,
+        """
+        INSERT INTO pit_stops (
+            session_key, driver_number, lap_number, date, pit_duration_s
+        ) VALUES (
+            :session_key, :driver_number, :lap_number, :date, :pit_duration_s
+        )
+        """,
+        list(seen.values()),
+    )
+
+
+def load_historical_results(rows: list[dict]) -> int:
+    """Upsert Jolpica rows. Idempotent: safe to re-run for the same years."""
+    if not rows:
+        return 0
+    engine = _get_engine()
+    with engine.begin() as conn:
+        for i in range(0, len(rows), 1000):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO historical_results (
+                        year, round, kind, race_name, circuit_id, circuit_name,
+                        country, race_date, driver_id, driver_code, driver_name,
+                        constructor_id, constructor_name, grid, position,
+                        position_text, points, laps, status, q1, q2, q3
+                    ) VALUES (
+                        :year, :round, :kind, :race_name, :circuit_id, :circuit_name,
+                        :country, :race_date, :driver_id, :driver_code, :driver_name,
+                        :constructor_id, :constructor_name, :grid, :position,
+                        :position_text, :points, :laps, :status, :q1, :q2, :q3
+                    )
+                    ON CONFLICT (year, round, kind, driver_id) DO UPDATE SET
+                        race_name = EXCLUDED.race_name,
+                        circuit_id = EXCLUDED.circuit_id,
+                        circuit_name = EXCLUDED.circuit_name,
+                        country = EXCLUDED.country,
+                        race_date = EXCLUDED.race_date,
+                        driver_code = EXCLUDED.driver_code,
+                        driver_name = EXCLUDED.driver_name,
+                        constructor_id = EXCLUDED.constructor_id,
+                        constructor_name = EXCLUDED.constructor_name,
+                        grid = EXCLUDED.grid,
+                        position = EXCLUDED.position,
+                        position_text = EXCLUDED.position_text,
+                        points = EXCLUDED.points,
+                        laps = EXCLUDED.laps,
+                        status = EXCLUDED.status,
+                        q1 = EXCLUDED.q1, q2 = EXCLUDED.q2, q3 = EXCLUDED.q3
+                    """
+                ),
+                rows[i : i + 1000],
+            )
+    log.info("loader.historical_results_loaded", count=len(rows))
+    return len(rows)

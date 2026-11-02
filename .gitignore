@@ -42,3 +42,6 @@ Thumbs.db
 # Agent files
 .claude/
 .ruff_cache/
+
+# Private planning
+docs/plan.md

@@ -368,6 +368,105 @@ def fetch_race_control_window(
     )
 
 
+def fetch_track_status(inp: types.TrackStatusInput) -> types.TrackStatusResult:
+    """Safety car / VSC / red flag / yellow periods from the timing feed.
+
+    Unlike race-control messages (text events), these are closed periods with
+    start/end, so "how long was the safety car out" is a subtraction.
+    """
+    if inp.from_lap is not None and inp.to_lap is not None and inp.from_lap > inp.to_lap:
+        # An inverted window contains no laps; don't let spanning periods match.
+        return types.TrackStatusResult(
+            from_lap=inp.from_lap, to_lap=inp.to_lap, periods=()
+        )
+    with extensions.engine.connect() as conn:
+        # start_lap / end_lap are NULL for times before lap 1 starts, so NULL
+        # means "lap 0" rather than "unknown". The final period is open-ended:
+        # it is marked by end_ms IS NULL (its end_lap is NULL too).
+        sql = """
+            SELECT status_code, status_label, start_ms, end_ms, start_lap, end_lap
+            FROM track_status_periods
+            WHERE session_key = :sk
+        """
+        binds: dict = {"sk": inp.session_key}
+        if inp.to_lap is not None:
+            sql += " AND COALESCE(start_lap, 0) <= :tl"
+            binds["tl"] = inp.to_lap
+        if inp.from_lap is not None:
+            sql += " AND (end_ms IS NULL OR COALESCE(end_lap, 0) >= :fl)"
+            binds["fl"] = inp.from_lap
+        sql += " ORDER BY start_ms ASC, id ASC"
+        rows = conn.execute(text(sql), binds).mappings().all()
+        has_yellow_data = bool(
+            conn.execute(
+                text(
+                    "SELECT 1 FROM track_status_periods "
+                    "WHERE session_key = :sk AND status_code = '2' LIMIT 1"
+                ),
+                {"sk": inp.session_key},
+            ).first()
+        )
+
+    periods = tuple(
+        types.TrackStatusPeriod(
+            status_code=r["status_code"],
+            status_label=r["status_label"],
+            start_ms=r["start_ms"],
+            end_ms=r["end_ms"],
+            start_lap=r["start_lap"],
+            end_lap=r["end_lap"],
+        )
+        for r in rows
+    )
+
+    def count(code: str) -> int:
+        return sum(1 for p in periods if p.status_code == code)
+
+    return types.TrackStatusResult(
+        from_lap=inp.from_lap,
+        to_lap=inp.to_lap,
+        periods=periods,
+        safety_car_periods=count("4"),
+        vsc_periods=count("6"),
+        red_flag_periods=count("5"),
+        # Sessions with no yellow row at all were not tracked for yellows.
+        yellow_periods=count("2") if has_yellow_data else None,
+    )
+
+
+def fetch_session_results(
+    inp: types.SessionResultsInput,
+) -> types.SessionResultsResult:
+    """Official classification: grid, finish, status, points, Q1/Q2/Q3."""
+    with extensions.engine.connect() as conn:
+        sql = """
+            SELECT driver_number, abbreviation, team_name, grid_position,
+                   position, classified_position, status, points,
+                   laps_completed, race_time_ms, q1_ms, q2_ms, q3_ms
+            FROM session_results
+            WHERE session_key = :sk
+        """
+        binds: dict = {"sk": inp.session_key}
+        if inp.driver_number is not None:
+            sql += " AND driver_number = :dn"
+            binds["dn"] = inp.driver_number
+        sql += " ORDER BY position ASC NULLS LAST, driver_number ASC"
+        rows = conn.execute(text(sql), binds).mappings().all()
+
+    entries = tuple(
+        types.SessionResultEntry(
+            **dict(r),
+            positions_gained=(
+                r["grid_position"] - r["position"]
+                if r["grid_position"] and r["position"]
+                else None
+            ),
+        )
+        for r in rows
+    )
+    return types.SessionResultsResult(entries=entries)
+
+
 def _radio_lap_counts(messages: tuple[types.RadioMessage, ...]) -> int:
     return len(messages)
 
