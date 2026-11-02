@@ -38,7 +38,7 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
         <span style={{ 
           fontSize: '10px', 
-          fontFamily: 'Space Grotesk, sans-serif', 
+          fontFamily: 'inherit', 
           fontWeight: 700, 
           letterSpacing: '0.12em', 
           textTransform: 'uppercase', 
@@ -53,7 +53,7 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
             padding: '2px 8px',
             borderRadius: '6px',
             fontSize: '10px',
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
             fontWeight: 700
           }}>
             {isNegative ? '' : '+'}{deltaValue}s
@@ -63,8 +63,8 @@ export default function SectorCard({ label, time, delta, color }: SectorCardProp
 
       <div style={{ 
         fontSize: '24px', 
-        fontFamily: 'Inter, sans-serif', 
-        fontWeight: 900, 
+        fontFamily: 'inherit', 
+        fontWeight: 700, 
         color: C.textBright, 
         letterSpacing: '-0.03em', 
         lineHeight: 1 

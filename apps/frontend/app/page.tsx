@@ -1,450 +1,389 @@
-'use client'
-
-import Image from 'next/image'
+import type { Metadata } from 'next'
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-import { Zap, ChevronDown } from 'lucide-react'
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CalendarBlank,
+  Check,
+  Code,
+  Flag,
+  GithubLogo,
+  Robot,
+  Speedometer,
+  ChartLineUp,
+} from '@phosphor-icons/react/dist/ssr'
+import '@/components/landing/landing.css'
+import { geist } from '@/components/landing/font'
+import LandingNav from '@/components/landing/LandingNav'
+import LandingFooter from '@/components/landing/LandingFooter'
+import RevealController from '@/components/landing/RevealController'
+import HeroMedia from '@/components/landing/HeroMedia'
+import LiveStats from '@/components/landing/LiveStats'
+import TaglineReveal from '@/components/landing/TaglineReveal'
+import PostCard from '@/components/landing/PostCard'
+import { getAllPosts } from '@/lib/blog'
 
-function LandingHeroMedia() {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [shouldRenderVideo, setShouldRenderVideo] = useState(false)
-  const [videoReady, setVideoReady] = useState(false)
+export const metadata: Metadata = {
+  title: 'Slipstream: F1 telemetry, tyre strategy and race predictions',
+  description:
+    'Open source Formula 1 analytics. Compare drivers corner by corner, study tyre strategy, read race predictions and ask the Pitwall agent. Built for fans and analysts.',
+  openGraph: {
+    title: 'Slipstream: see why races are won, lap by lap',
+    description:
+      'Open source Formula 1 analytics for fans, developers and analysts.',
+    type: 'website',
+    images: [{ url: '/LandingPage3-poster.jpg', width: 1280, height: 720 }],
+  },
+  twitter: { card: 'summary_large_image' },
+}
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+const FEATURES = [
+  {
+    icon: Speedometer,
+    title: 'Corner by corner comparison',
+    body: 'Overlay two drivers on the same lap and see the exact corners where time is gained or lost.',
+    href: '/telemetry',
+    cta: 'Open telemetry',
+  },
+  {
+    icon: ChartLineUp,
+    title: 'Tyre strategy and wear',
+    body: 'Follow every stint and see how each compound degraded across the race.',
+    href: '/sessions',
+    cta: 'Browse sessions',
+  },
+  {
+    icon: Flag,
+    title: 'Race predictions',
+    body: 'Model driven predictions for upcoming sessions, kept next to the results they are judged against.',
+    href: '/predictions',
+    cta: 'See predictions',
+  },
+  {
+    icon: Robot,
+    title: 'The Pitwall agent',
+    body: 'Ask a question in plain English. The agent calls read only analysis tools and shows the evidence behind each answer.',
+    href: '/agent',
+    cta: 'Ask Pitwall',
+  },
+  {
+    icon: CalendarBlank,
+    title: 'Sessions and calendar',
+    body: 'Browse practice, qualifying and races, with pole sitters, winners and the full season calendar.',
+    href: '/schedule',
+    cta: 'View schedule',
+  },
+  {
+    icon: Code,
+    title: 'Open source from the start',
+    body: 'Read the code, run it on your own machine and extend the analysis with your own tools.',
+    href: 'https://github.com/abdullah-azeemi/Slipstream',
+    cta: 'View on GitHub',
+  },
+]
 
-    const syncMotionPreference = () => {
-      setShouldRenderVideo(!mediaQuery.matches)
-    }
+const STEPS = [
+  { title: 'Create your account', body: 'Sign up so your conversations and analysis stay in one place.' },
+  { title: 'Pick a session', body: 'Choose any race weekend session from the archive, or the next one on the calendar.' },
+  { title: 'Compare, study or ask', body: 'Overlay drivers, read stint by stint tyre wear, or put a question to the Pitwall agent.' },
+]
 
-    syncMotionPreference()
-    mediaQuery.addEventListener('change', syncMotionPreference)
+const SOURCES = [
+  { name: 'FastF1', body: 'Timing and telemetry for laps, sectors and car data, ingested into the Slipstream database.' },
+  { name: 'OpenF1', body: 'Open session data that fills in details around each weekend.' },
+  { name: 'Jolpica', body: 'Results, standings and calendar information for every round.' },
+]
 
-    return () => {
-      mediaQuery.removeEventListener('change', syncMotionPreference)
-    }
-  }, [])
+const FAQ = [
+  {
+    q: 'What is Slipstream?',
+    a: 'Slipstream is an open source Formula 1 analytics platform. It combines lap and telemetry comparisons, tyre strategy, race predictions and an optional AI assistant called Pitwall, all built on public motorsport data.',
+  },
+  {
+    q: 'Where does the data come from?',
+    a: 'Sessions are ingested with FastF1, and the project also uses OpenF1 and Jolpica for session details, results and the calendar. Everything you see is computed from that stored data.',
+  },
+  {
+    q: 'Do I need an account?',
+    a: 'You can read this page and the blog without one. The telemetry, sessions, predictions and agent views need a free account so your work and conversations are saved to you.',
+  },
+  {
+    q: 'How does the Pitwall agent work?',
+    a: 'The agent classifies your question, plans which analysis tools to run, then executes them. Tools are read only and numbers in an answer must come from tool output. If the data is missing, the agent says so instead of guessing.',
+  },
+  {
+    q: 'How current is the data?',
+    a: 'A session appears once it has finished and its data is available from the public sources. The live counters above show what is in the archive right now.',
+  },
+  {
+    q: 'Can I run Slipstream myself?',
+    a: 'Yes. Clone the repository, run make install, make up and make migrate, then start the backend and frontend. The README lists the requirements: Python 3.11, uv, Node.js 20, pnpm and Docker Compose.',
+  },
+  {
+    q: 'Is there an API?',
+    a: 'The Flask backend exposes the sessions, laps, telemetry, strategy and predictions endpoints the app uses. Product endpoints require a signed in user token, so for your own experiments the easiest route is to run the stack locally.',
+  },
+  {
+    q: 'Is Slipstream affiliated with Formula 1?',
+    a: 'No. It is an independent project built on public data and is not endorsed by Formula 1, any team or any driver.',
+  },
+]
 
-  useEffect(() => {
-    const video = videoRef.current
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map(f => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+}
 
-    if (!video || !shouldRenderVideo) {
-      setVideoReady(false)
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          void video.play().catch(() => {})
-          return
-        }
-
-        video.pause()
-      },
-      { threshold: 0.35 },
-    )
-
-    observer.observe(video)
-
-    return () => {
-      observer.disconnect()
-      video.pause()
-    }
-  }, [shouldRenderVideo])
-
+function PrimaryCta({ size = 'button-lg' }: { size?: 'button-lg' | 'button-md' }) {
   return (
-    <>
-      <Image
-        src="/LandingPage3-poster.jpg"
-        alt="Pitwall landing page hero preview"
-        fill
-        priority
-        sizes="(max-width: 768px) 100vw, 1000px"
-        style={{ objectFit: 'cover' }}
-      />
-      {shouldRenderVideo ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          poster="/LandingPage3-poster.jpg"
-          aria-hidden="true"
-          onCanPlay={() => setVideoReady(true)}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            opacity: videoReady ? 1 : 0,
-            transition: 'opacity 300ms ease',
-          }}
-        >
-          <source src="/LandingPage3.webm" type="video/webm" />
-          <source src="/LandingPage3.mp4" type="video/mp4" />
-        </video>
-      ) : null}
-    </>
+    <Link href="/sign-up" className={`btn btn-primary ${size}`}>
+      Create free account <ArrowRight size={size === 'button-lg' ? 20 : 16} weight="bold" aria-hidden="true" />
+    </Link>
   )
 }
 
 export default function LandingPage() {
-  const [activeObjective, setActiveObjective] = useState<number>(0)
-
-  const objectives = [
-    {
-      title: 'Automated Lap Delta Analysis',
-      subtitle: 'Identify exact corner numbers where drivers gain or lose lap time.',
-      matchup: 'VER (Red Bull) vs NOR (McLaren)',
-      metric: '-0.142s Delta',
-      discipline: 'High Frequency 100Hz Sync',
-    },
-    {
-      title: 'Tyre Degradation & Compound Wear',
-      subtitle: 'Real-time thermal degradation curves for Soft, Medium, and Hard compounds.',
-      matchup: 'LEC (Ferrari) vs RUS (Mercedes)',
-      metric: '0.08s / lap wear rate',
-      discipline: 'Pirelli C3 Soft Model',
-    },
-    {
-      title: 'Predictive Pit Stop Windows',
-      subtitle: 'Undercut and overcut window warnings calculated live during the race.',
-      matchup: 'HAM (Ferrari) vs PIA (McLaren)',
-      metric: 'Lap 24-27 Pit Window',
-      discipline: 'Monte Carlo 10k Sims',
-    },
-  ]
+  const posts = getAllPosts().slice(0, 3)
 
   return (
-    <div style={{ background: '#FFFFFF', color: '#111827', width: '100%', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+    <div className={`lp ${geist.className}`}>
+      <LandingNav />
+      <RevealController />
 
-      {/* Responsive Stylesheet */}
-      <style>{`
-        @media (max-width: 1024px) {
-          .hero-section { padding: 4px 20px 24px !important; }
-          .spotlight-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
-          .spotlight-left { grid-column: span 12 !important; padding: 32px 24px !important; min-height: auto !important; }
-          .spotlight-right { grid-column: span 12 !important; }
-        }
-
-        @media (max-width: 768px) {
-          .landing-header { padding: 0 16px !important; height: 52px !important; }
-          .hidden-mobile { display: none !important; }
-          .hero-title { font-size: 1.8rem !important; margin-bottom: 16px !important; line-height: 1.15 !important; }
-          .hero-video-box { height: auto !important; aspect-ratio: 16 / 9 !important; border-radius: 16px !important; margin-bottom: 24px !important; }
-          .hero-subtitle { font-size: 13.5px !important; margin-bottom: 40px !important; }
-          .partners-band { padding: 16px 16px !important; margin-bottom: 48px !important; }
-          .partners-grid { justify-content: center !important; gap: 16px 24px !important; }
-          .spotlight-section { margin-bottom: 64px !important; padding: 0 16px !important; }
-          .spotlight-left { padding: 20px 14px !important; border-radius: 18px !important; }
-          .mockup-card { padding: 18px 14px !important; border-radius: 14px !important; }
-          .mockup-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
-          .landing-footer { flex-direction: column !important; text-align: center !important; gap: 16px !important; padding: 24px 16px !important; }
-        }
-
-        @media (max-width: 480px) {
-          .hidden-xs { display: none !important; }
-          .get-started-btn { padding: 7px 14px !important; font-size: 12px !important; }
-          .hero-title { font-size: 1.6rem !important; }
-        }
-      `}</style>
-
-      {/* ── HERO SECTION ─────────────────────────────────────────────────── */}
-      <section className="hero-section" style={{
-        maxWidth: 1040,
-        margin: '0 auto',
-        padding: '4px 24px 24px',
-      }}>
-        {/* Main Title in Playfair Display Serif */}
-        <h1 className="hero-title" style={{
-          fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: 'clamp(2.4rem, 4.2vw, 3.6rem)',
-          fontWeight: 400,
-          letterSpacing: '-0.02em',
-          color: '#111827',
-          lineHeight: 1.12,
-          maxWidth: 840,
-          marginBottom: 28,
-        }}>
-          Master Precision in Motorsport Intelligence
-        </h1>
-
-        {/* Hero Video Card (Fluidly Responsive) */}
-        <div className="hero-video-box" style={{
-          position: 'relative',
-          width: '100%',
-          maxWidth: 1000,
-          height: 'clamp(280px, 50vh, 460px)',
-          margin: '0 auto 36px',
-          borderRadius: 22,
-          overflow: 'hidden',
-          background: '#F3F4F6',
-          boxShadow: '0 6px 28px rgba(0, 0, 0, 0.07)',
-        }}>
-          <LandingHeroMedia />
-        </div>
-
-        {/* Subtitle Paragraph */}
-        <div className="hero-subtitle" style={{ maxWidth: 640, marginBottom: 56 }}>
-          <p style={{
-            fontSize: 14,
-            lineHeight: 1.7,
-            color: '#6B7280',
-            fontWeight: 400,
-          }}>
-            This comprehensive platform strips away the unnecessary, focusing on core principles of spatial track relationship, high-frequency telemetry, and real-time pit strategy. Discover how sub-millisecond precision creates superior race execution.
-          </p>
-        </div>
-      </section>
-
-      {/* ── LOGO MARQUEE / PARTNERS BAND ────────────────────────────────────── */}
-      <section className="partners-band" style={{
-        background: '#FAFAFA',
-        borderTop: '1px solid #F3F4F6',
-        borderBottom: '1px solid #F3F4F6',
-        padding: '20px 5vw',
-        marginBottom: 80,
-      }}>
-        <div className="partners-grid" style={{
-          maxWidth: 1040,
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 32,
-          flexWrap: 'wrap',
-          opacity: 0.6,
-        }}>
-          {['FASTF1', 'OPENF1', 'JOLPICA', 'TIMESCALEDB', 'KAFKA', 'FASTF1'].map((brand, i) => (
-            <span key={i} style={{
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: '0.12em',
-              color: '#374151',
-              fontFamily: 'Inter, sans-serif',
-            }}>
-              {brand}
+      <main id="main">
+        {/* Hero */}
+        <section className="hero">
+          <div className="wrap hero-inner">
+            <span className="badge caption-1">
+              <GithubLogo size={16} aria-hidden="true" /> Open source F1 analytics
             </span>
-          ))}
-        </div>
-      </section>
+            <h1 className="heading-1">See why races are won, lap by lap</h1>
+            <p className="lede body-3">
+              Slipstream turns public timing and telemetry into corner level comparisons, tyre
+              strategy and race predictions. Built for fans who want the story and analysts who
+              want the data.
+            </p>
+            <div className="hero-cta">
+              <PrimaryCta />
+              <span className="caption-4 muted">
+                Open source. Built on public data from FastF1, OpenF1 and Jolpica.
+              </span>
+            </div>
+            <HeroMedia />
+          </div>
+        </section>
 
-      {/* ── FEATURE SPOTLIGHT (SMART INSIGHTS) ────────────────────────────── */}
-      <section className="spotlight-section" style={{
-        maxWidth: 1040,
-        margin: '0 auto 120px',
-        padding: '0 24px',
-      }}>
-        <div className="spotlight-grid" style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(12, 1fr)',
-          gap: 56,
-          alignItems: 'center',
-        }}>
+        <LiveStats />
 
-          {/* Left Side: Soft Gray Frame with Floating UI Card */}
-          <div className="spotlight-left" style={{
-            gridColumn: 'span 7',
-            background: '#F3F4F6',
-            borderRadius: 24,
-            padding: 40,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 440,
-          }}>
-            {/* White Floating UI Card */}
-            <div className="mockup-card" style={{
-              width: '100%',
-              maxWidth: 420,
-              background: '#FFFFFF',
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.06)',
-              border: '1px solid #E5E7EB',
-            }}>
+        {/* Tagline reveal */}
+        <section className="tagline" aria-label="What Slipstream is for">
+          <div className="wrap">
+            <TaglineReveal text="Every corner hides a few hundredths of a second. Slipstream shows you where they went, which tyre took them, and what the next stint is likely to cost." />
+          </div>
+        </section>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#9CA3AF' }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
-                  Generate Insight
-                </span>
-              </div>
-
-              {/* Form Inputs */}
-              <div className="mockup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Matchup
-                  </div>
-                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', fontWeight: 500, border: '1px solid #F3F4F6' }}>
-                    {objectives[activeObjective].matchup}
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Metric
-                  </div>
-                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#111827', fontWeight: 600, border: '1px solid #F3F4F6' }}>
-                    {objectives[activeObjective].metric}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mockup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Discipline
-                  </div>
-                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #F3F4F6' }}>
-                    Telemetry <ChevronDown size={12} color="#9CA3AF" />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Research Direction
-                  </div>
-                  <div style={{ background: '#F9FAFB', padding: '9px 11px', borderRadius: 8, fontSize: 11, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #F3F4F6' }}>
-                    Synthesize <ChevronDown size={12} color="#9CA3AF" />
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 6, textTransform: 'uppercase' }}>
-                  What do you want to know from the insight?
-                </div>
-                <div style={{ background: '#F9FAFB', padding: 12, borderRadius: 8, fontSize: 11, color: '#4B5563', lineHeight: 1.5, minHeight: 64, border: '1px solid #F3F4F6' }}>
-                  {objectives[activeObjective].subtitle}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontSize: 12, color: '#6B7280', cursor: 'pointer', fontWeight: 500 }}>
-                  Cancel
-                </span>
-                <button style={{
-                  padding: '9px 18px',
-                  background: '#000000',
-                  color: '#FFFFFF',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 9999,
-                  border: 'none',
-                  cursor: 'pointer',
-                }}>
-                  Create insight
-                </button>
-              </div>
-
+        {/* Features */}
+        <section id="features" className="section alt">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <p className="caption-1 muted">Features</p>
+              <h2 className="heading-2">Everything you need to read a race</h2>
+              <p className="body-3">
+                One place for the lap data, the strategy and the predictions, with every number
+                traceable to a session.
+              </p>
+            </div>
+            <div className="grid-3">
+              {FEATURES.map((f, i) => {
+                const Icon = f.icon
+                const external = f.href.startsWith('http')
+                return (
+                  <Link
+                    key={f.title}
+                    href={f.href}
+                    className="card reveal"
+                    style={{ ['--d' as string]: (i % 3) * 80 }}
+                    {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  >
+                    <span className="card-icon"><Icon size={20} aria-hidden="true" /></span>
+                    <h3 className="heading-6">{f.title}</h3>
+                    <p className="body-6">{f.body}</p>
+                    <span className="card-link button-sm">
+                      {f.cta}
+                      {external
+                        ? <ArrowUpRight size={16} weight="bold" aria-hidden="true" />
+                        : <ArrowRight size={16} weight="bold" aria-hidden="true" />}
+                    </span>
+                  </Link>
+                )
+              })}
             </div>
           </div>
+        </section>
 
-          {/* Right Side: Editorial Text & Objective Selector */}
-          <div className="spotlight-right" style={{ gridColumn: 'span 5' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Zap size={16} color="#111827" />
-              <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: '#111827', letterSpacing: '-0.02em' }}>
-                Smart Insights
-              </h2>
+        {/* Audiences */}
+        <section className="section" aria-labelledby="audience-title">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <p className="caption-1 muted">Who it is for</p>
+              <h2 id="audience-title" className="heading-2">Two ways to use Slipstream</h2>
             </div>
+            <div className="grid-2">
+              <article className="audience reveal">
+                <p className="caption-1">For fans</p>
+                <h3 className="heading-4">Understand what you just watched</h3>
+                <ul className="body-3">
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> See who gained time in which corner, without reading a spreadsheet.</li>
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> Follow tyre strategy stint by stint and spot why a stop worked.</li>
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> Ask Pitwall a plain English question and get an answer with its evidence.</li>
+                </ul>
+              </article>
+              <article className="audience reveal" style={{ ['--d' as string]: 80 }}>
+                <p className="caption-1">For developers and analysts</p>
+                <h3 className="heading-4">Start from the data, not the screenshots</h3>
+                <ul className="body-3">
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> Read the ingestion code and the SQL behind every chart.</li>
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> Run the full stack locally with Postgres, Flask and Next.js.</li>
+                  <li><Check size={20} weight="bold" aria-hidden="true" /> Add your own tools to the agent. Tools are typed, read only and testable.</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
 
-            <p style={{
-              fontSize: 14,
-              color: '#6B7280',
-              lineHeight: 1.7,
-              marginBottom: 28,
-            }}>
-              Your environment will surface patterns and uncover root causes, then offer pathways on how to structure your studies to improve race execution based on the telemetry objectives you choose.
-            </p>
+        {/* How it works */}
+        <section id="how-it-works" className="section alt">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <p className="caption-1 muted">How it works</p>
+              <h2 className="heading-2">From sign up to insight in three steps</h2>
+            </div>
+            <ol className="grid-3" style={{ listStyle: 'none', padding: 0 }}>
+              {STEPS.map((s, i) => (
+                <li key={s.title} className="card reveal" style={{ ['--d' as string]: i * 80 }}>
+                  <span className="step-num title-3" aria-hidden="true">{i + 1}</span>
+                  <h3 className="heading-6">{s.title}</h3>
+                  <p className="body-6">{s.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
 
-            <button style={{
-              padding: '11px 24px',
-              borderRadius: 9999,
-              border: '1px solid #E5E7EB',
-              background: '#FFFFFF',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#111827',
-              cursor: 'pointer',
-              marginBottom: 36,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            }}>
-              Explore Smart Insights
-            </button>
-
-            {/* Divider Line */}
-            <div style={{ height: 1, background: '#E5E7EB', marginBottom: 24 }} />
-
-            {/* Objective Options List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {objectives.map((obj, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setActiveObjective(idx)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div style={{
-                    fontSize: 14,
-                    fontWeight: activeObjective === idx ? 700 : 500,
-                    color: activeObjective === idx ? '#111827' : '#9CA3AF',
-                    marginBottom: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}>
-                    {activeObjective === idx && (
-                      <span style={{ width: 16, height: 2, background: '#111827' }} />
-                    )}
-                    {obj.title}
-                  </div>
+        {/* Sources */}
+        <section className="section" aria-labelledby="sources-title">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <p className="caption-1 muted">Data</p>
+              <h2 id="sources-title" className="heading-2">Built on open motorsport data</h2>
+              <p className="body-3">
+                Everything starts from public sources and is stored in the Slipstream database,
+                so every analysis can be repeated.
+              </p>
+            </div>
+            <div className="grid-3">
+              {SOURCES.map((s, i) => (
+                <div key={s.name} className="card reveal" style={{ ['--d' as string]: i * 80 }}>
+                  <h3 className="heading-6">{s.name}</h3>
+                  <p className="body-6">{s.body}</p>
                 </div>
               ))}
             </div>
-
           </div>
+        </section>
 
-        </div>
-      </section>
+        {/* Blog */}
+        <section id="blog" className="section alt" aria-labelledby="blog-title">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <p className="caption-1 muted">Blog</p>
+              <h2 id="blog-title" className="heading-2">Notes from the pit wall</h2>
+              <p className="body-3">
+                Build notes, race breakdowns and guides to the Pitwall agent.
+              </p>
+            </div>
+            {posts.length > 0 ? (
+              <>
+                <div className="grid-3">
+                  {posts.map((p, i) => (
+                    <div key={p.slug} className="reveal" style={{ ['--d' as string]: i * 80, display: 'flex' }}>
+                      <div style={{ display: 'flex', width: '100%' }}>
+                        <PostCard post={p} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ marginTop: 'var(--sp-400)' }}>
+                  <Link href="/blog" className="btn btn-outline button-md">
+                    All posts <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <div className="empty reveal">
+                <h3 className="heading-6">The first posts are on the way</h3>
+                <p className="body-6">Follow the project on GitHub to hear when they land.</p>
+              </div>
+            )}
+          </div>
+        </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer className="landing-footer" style={{
-        borderTop: '1px solid #F3F4F6',
-        padding: '32px 5vw',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 20,
-        fontSize: 12,
-        color: '#6B7280',
-      }}>
-        <div style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>
-          Slipstream
-        </div>
+        {/* FAQ */}
+        <section id="faq" className="section" aria-labelledby="faq-title">
+          <div className="wrap">
+            <div className="section-head reveal" style={{ margin: '0 auto var(--sp-600)', textAlign: 'center' }}>
+              <p className="caption-1 muted">FAQ</p>
+              <h2 id="faq-title" className="heading-2">Questions, answered</h2>
+            </div>
+            <div className="faq reveal">
+              {FAQ.map(f => (
+                <details key={f.q}>
+                  <summary className="title-2">
+                    {f.q}
+                    <PlusIcon />
+                  </summary>
+                  <p className="answer body-3">{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          />
+        </section>
 
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['Telemetry', 'Sessions', 'Schedule', 'Predictions', 'GitHub'].map(link => (
-            <Link key={link} href={link === 'GitHub' ? 'https://github.com/abdullah-azeemi/Slipstream' : `/${link.toLowerCase()}`} style={{
-              color: '#6B7280',
-              textDecoration: 'none',
-            }}>
-              {link}
-            </Link>
-          ))}
-        </div>
+        {/* Final CTA */}
+        <section aria-labelledby="final-title">
+          <div className="wrap">
+            <div className="final reveal">
+              <h2 id="final-title" className="heading-2 gradient-text">See why races are won, lap by lap</h2>
+              <p className="lede body-3">
+                Create a free account and open your first session today.
+              </p>
+              <div className="hero-cta">
+                <PrimaryCta />
+                <span className="caption-4 muted">Open source. Built on public data.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
 
-        <div>
-          © 2026 Motorsport Platform. Built with intention.
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+      <path d="M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z" />
+    </svg>
   )
 }

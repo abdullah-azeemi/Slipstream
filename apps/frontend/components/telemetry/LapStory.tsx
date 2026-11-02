@@ -144,22 +144,22 @@ export default function LapStory({
       }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 34%)' }} />
         <div style={{ position: 'relative' }}>
-          <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'inherit', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
             Where the lap was won
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: isMobile ? 22 : 28, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
+            <span style={{ fontSize: isMobile ? 22 : 28, fontFamily: 'inherit', fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
               {fast.abbr}
             </span>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontFamily: 'JetBrains Mono, monospace' }}>beats</span>
-            <span style={{ fontSize: isMobile ? 18 : 22, fontFamily: 'Inter, sans-serif', fontWeight: 800, color: 'rgba(255,255,255,0.85)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' }}>beats</span>
+            <span style={{ fontSize: isMobile ? 18 : 22, fontFamily: 'inherit', fontWeight: 700, color: 'rgba(255,255,255,0.85)', letterSpacing: '-0.02em', lineHeight: 1 }}>
               {slow.abbr}
             </span>
-            <span style={{ marginLeft: 'auto', padding: '5px 12px', background: 'rgba(232,0,45,0.16)', border: '1px solid rgba(232,0,45,0.35)', borderRadius: 999, fontSize: isMobile ? 16 : 20, color: '#fff', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>
+            <span style={{ marginLeft: 'auto', padding: '5px 12px', background: 'rgba(232,0,45,0.16)', border: '1px solid rgba(232,0,45,0.35)', borderRadius: 999, fontSize: isMobile ? 16 : 20, color: '#fff', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700 }}>
               {fmtSeconds(totalGapMs)}
             </span>
           </div>
-          <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,0.78)', fontFamily: 'Inter, sans-serif', maxWidth: 680 }}>
+          <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.78)', fontFamily: 'inherit', maxWidth: 680 }}>
             {decisiveSector && decisiveSector.delta != null && decisiveSector.delta > 0 ? (
               <>
                 The lap is won in <strong style={{ color: '#fff' }}>{decisiveSector.label}</strong>, where {fast.abbr} banks{' '}
@@ -182,14 +182,14 @@ export default function LapStory({
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(19,35,61,0.03)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>Mini-Sector Dominance</span>
-            <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{MINI_SECTORS} segments · {lapLen} m lap</span>
+            <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>Mini-Sector Dominance</span>
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textDim }}>{MINI_SECTORS} segments · {lapLen} m lap</span>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             {[fast, slow].map(d => (
               <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 3, background: d.colour }} />
-                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textMid }}>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: C.textMid }}>
                   {d.abbr} {d.abbr === fast.abbr ? fastWins : MINI_SECTORS - fastWins}
                 </span>
               </div>
@@ -214,7 +214,7 @@ export default function LapStory({
               )
             })}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textDim }}>
             <span>START / S1</span>
             <span>S2</span>
             <span>S3</span>
@@ -227,7 +227,7 @@ export default function LapStory({
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
         {/* Sector deltas */}
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: '16px 18px', boxShadow: '0 8px 24px rgba(19,35,61,0.03)' }}>
-          <div style={{ fontSize: 11, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase', marginBottom: 14 }}>
             Sector Gains · {fast.abbr} vs {slow.abbr}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -238,8 +238,8 @@ export default function LapStory({
               return (
                 <div key={row.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textSub }}>{row.label}</span>
-                    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: fastGains ? fast.colour : slow.colour }}>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: C.textSub }}>{row.label}</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: fastGains ? fast.colour : slow.colour }}>
                       {row.delta != null ? `${fmtDelta(-Math.abs(row.delta))}s → ${fastGains ? fast.abbr : slow.abbr}` : '—'}
                     </span>
                   </div>
@@ -266,16 +266,16 @@ export default function LapStory({
 
         {/* Monaco skill metrics */}
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: '16px 18px', boxShadow: '0 8px 24px rgba(19,35,61,0.03)' }}>
-          <div style={{ fontSize: 11, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase', marginBottom: 4 }}>
+          <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase', marginBottom: 4 }}>
             Skill Read-Out
           </div>
-          <div style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textDim, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontFamily: 'inherit', color: C.textDim, marginBottom: 14 }}>
             Slowest-corner apex, tunnel top speed, and lap spent flat-out.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px 14px', alignItems: 'center' }}>
-            <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase' }}>Driver</span>
-            <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', textAlign: 'right' }}>Apex</span>
-            <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', textAlign: 'right' }}>Top</span>
+            <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase' }}>Driver</span>
+            <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', textAlign: 'right' }}>Apex</span>
+            <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', textAlign: 'right' }}>Top</span>
             {skill.map(s => (
               <Row key={s.abbr} s={s} apexLeaderAbbr={apexLeader?.abbr} />
             ))}
@@ -285,8 +285,8 @@ export default function LapStory({
               {skill.map(s => s.fullThrottle == null ? null : (
                 <div key={s.abbr}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textMid }}>{s.abbr} · full throttle</span>
-                    <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textSub }}>{s.fullThrottle.toFixed(1)}%</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textMid }}>{s.abbr} · full throttle</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: C.textSub }}>{s.fullThrottle.toFixed(1)}%</span>
                   </div>
                   <div style={{ height: 6, background: C.surfaceAlt, borderRadius: 999, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${s.fullThrottle}%`, background: s.colour, borderRadius: 999, opacity: 0.8 }} />
@@ -313,12 +313,12 @@ function Row({
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.colour }} />
-        <span style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: '#13233D' }}>{s.abbr}</span>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: '#13233D' }}>{s.abbr}</span>
       </div>
-      <span style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: isApexLeader ? 800 : 500, color: isApexLeader ? '#10B981' : '#56657C', textAlign: 'right' }}>
+      <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: isApexLeader ? 800 : 500, color: isApexLeader ? '#10B981' : '#56657C', textAlign: 'right' }}>
         {s.minSpeed}
       </span>
-      <span style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: 500, color: '#56657C', textAlign: 'right' }}>
+      <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 500, color: '#56657C', textAlign: 'right' }}>
         {s.topSpeed}
       </span>
     </>

@@ -33,7 +33,7 @@ export default function SvgSpeedTrace({ driverData, tooltipNx, onMouseMove, onMo
       <div style={{ minWidth: 600, position: 'relative' }}>
         <div style={{ position: 'absolute', left: 0, top: 0, width: 44, height: H + 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '8px 0', pointerEvents: 'none' }}>
           {[300, 250, 200, 150, 100].map(v => (
-            <div key={v} style={{ fontSize: 8, fontWeight: 700, color: '#9CA3AF', textAlign: 'right', paddingRight: 8, fontFamily: 'monospace' }}>{v}</div>
+            <div key={v} style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', textAlign: 'right', paddingRight: 8, fontFamily: 'inherit' }}>{v}</div>
           ))}
         </div>
 

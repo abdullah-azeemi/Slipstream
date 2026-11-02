@@ -34,6 +34,7 @@ def create_app() -> Flask:
     from backend.api.v1.analysis import analysis_bp
     from backend.api.v1.predictions import predictions_bp
     from backend.api.v1.schedule import schedule_bp
+    from backend.api.v1.stats import stats_bp
     from backend.health import health_bp
     from backend.api.v1.agent import agent_bp
 
@@ -46,6 +47,7 @@ def create_app() -> Flask:
     app.register_blueprint(analysis_bp, url_prefix="/api/v1")
     app.register_blueprint(predictions_bp, url_prefix="/api/v1")
     app.register_blueprint(schedule_bp, url_prefix="/api/v1")
+    app.register_blueprint(stats_bp, url_prefix="/api/v1")
     app.register_blueprint(agent_bp, url_prefix="/api/v1")
 
     @app.errorhandler(404)

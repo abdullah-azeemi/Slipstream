@@ -58,8 +58,8 @@ export default function PerformanceMatrix({
     }}>
       <h3 style={{ 
         fontSize: '14px', 
-        fontFamily: 'Space Grotesk, sans-serif', 
-        fontWeight: 800, 
+        fontFamily: 'inherit', 
+        fontWeight: 700, 
         color: C.textBright,
         margin: 0,
         marginBottom: '4px'
@@ -78,7 +78,7 @@ export default function PerformanceMatrix({
           }}>
             <span style={{ 
               fontSize: '11px', 
-              fontFamily: 'Space Grotesk, sans-serif', 
+              fontFamily: 'inherit', 
               fontWeight: 600, 
               color: C.textDim,
               letterSpacing: '0.05em'
@@ -87,7 +87,7 @@ export default function PerformanceMatrix({
             </span>
             <span style={{ 
               fontSize: '15px', 
-              fontFamily: 'JetBrains Mono, monospace', 
+              fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', 
               fontWeight: row.bold ? 800 : 500, 
               color: row.color,
               letterSpacing: '-0.02em'

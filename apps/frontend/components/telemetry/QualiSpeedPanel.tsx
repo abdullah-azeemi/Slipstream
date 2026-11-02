@@ -122,12 +122,12 @@ function SectionHeader({
         <div style={{ width: 3, height: 28, borderRadius: 2, background: C.red, flexShrink: 0 }} />
         <div>
           <div style={{
-            fontSize: 13, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800,
+            fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
             letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textBright,
           }}>
             {title}
           </div>
-          <div style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textDim, marginTop: 2 }}>
+          <div style={{ fontSize: 12, fontFamily: 'inherit', color: C.textDim, marginTop: 2 }}>
             {subtitle}
           </div>
         </div>
@@ -171,8 +171,8 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
       }}>
         {['#', 'DRV', 'SPEED TRAP', 'TIME', 'I1', 'I2', 'FL', 'ST'].map(h => (
           <span key={h} style={{
-            fontSize: 8, color: C.textDim,
-            fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+            fontSize: 12, color: C.textDim,
+            fontFamily: 'inherit', fontWeight: 700,
             letterSpacing: '0.12em', textTransform: 'uppercase',
             textAlign: ['TIME', 'I1', 'I2', 'FL', 'ST'].includes(h) ? 'right' : 'left',
           }}>{h}</span>
@@ -197,7 +197,7 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
             }}>
               {/* Rank */}
               <span style={{
-                fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                 color: isFastest ? colour : C.textDim,
                 fontWeight: isFastest ? 700 : 400,
               }}>
@@ -208,7 +208,7 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 3, height: 12, borderRadius: 2, background: colour, flexShrink: 0 }} />
                 <span style={{
-                  fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                   color: C.textBright, fontWeight: 700,
                 }}>
                   {entry.abbreviation}
@@ -229,7 +229,7 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
                 </div>
                 {stDelta > 0 && (
                   <span style={{
-                    fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                     color: C.textDim, whiteSpace: 'nowrap',
                   }}>
                     -{stDelta.toFixed(0)}
@@ -240,14 +240,14 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
               {/* Lap time */}
               <div style={{ textAlign: 'right' }}>
                 <div style={{
-                  fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                   color: C.textBright, fontWeight: 600,
                 }}>
                   {fmtLap(entry.lap_time_ms)}
                 </div>
                 {entry.gap_to_pole_ms !== null && entry.gap_to_pole_ms > 0 && (
                   <div style={{
-                    fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                     color: C.textDim,
                   }}>
                     {fmtGap(entry.gap_to_pole_ms)}
@@ -260,7 +260,7 @@ function SpeedTrapLeaderboard({ data }: { data: SpeedTrapEntry[] }) {
                 const isSTCol = si === 3
                 return (
                   <span key={si} style={{
-                    fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                     color: isSTCol
                       ? (isFastest ? C.teal : C.textBright)
                       : C.textMid,
@@ -341,15 +341,15 @@ function LapProgressionChart({
       const y  = toY(ms)
       ctx.beginPath(); ctx.strokeStyle = i === 0 ? C.borderMid : C.border; ctx.lineWidth = 1
       ctx.moveTo(left, y); ctx.lineTo(left + cW, y); ctx.stroke()
-      ctx.fillStyle = C.textDim; ctx.font = '600 10px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillText(fmtLap(ms), left - 6, y + 3)
     }
     const lapStep = Math.max(1, Math.ceil(maxLap / 10))
     for (let lap = 1; lap <= maxLap; lap += lapStep) {
-      ctx.fillStyle = C.textDim; ctx.font = '600 10px "JetBrains Mono", monospace'; ctx.textAlign = 'center'
+      ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
       ctx.fillText(String(lap), toX(lap), H - 10)
     }
-    ctx.fillStyle = C.textDim; ctx.font = '600 10px "JetBrains Mono", monospace'; ctx.textAlign = 'center'
+    ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
     ctx.fillText('LAP', left + cW / 2, H - 1)
 
     // Crosshair
@@ -444,7 +444,7 @@ function LapProgressionChart({
               border:     `1px solid ${isSel ? colour + '55' : C.border}`,
               background: isSel ? `${colour}12` : C.surfaceAlt,
               color:      isSel ? C.textBright : C.textMid,
-              fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
               fontWeight: isSel ? 700 : 400,
             }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: colour }} />
@@ -472,16 +472,16 @@ function LapProgressionChart({
             borderRadius: 10, padding: '8px 12px', minWidth: 140,
             boxShadow: '0 8px 20px rgba(19,35,61,0.10)',
           }}>
-            <div style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textDim, fontWeight: 700, marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textDim, fontWeight: 700, marginBottom: 6 }}>
               LAP {tooltip.lap}
             </div>
             {tooltip.entries.map(e => (
               <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <div style={{ width: 3, height: 28, borderRadius: 2, background: e.colour, flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 9, color: e.colour, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>{e.abbr}</div>
-                  <div style={{ fontSize: 14, fontFamily: 'JetBrains Mono, monospace', color: C.textBright, fontWeight: 700, lineHeight: 1.2 }}>
-                    {e.deleted ? <span style={{ color: C.red, fontSize: 10 }}>DELETED</span> : e.ms !== null ? fmtLap(e.ms) : '—'}
+                  <div style={{ fontSize: 12, color: e.colour, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700 }}>{e.abbr}</div>
+                  <div style={{ fontSize: 14, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textBright, fontWeight: 700, lineHeight: 1.2 }}>
+                    {e.deleted ? <span style={{ color: C.red, fontSize: 12 }}>DELETED</span> : e.ms !== null ? fmtLap(e.ms) : '—'}
                   </div>
                 </div>
               </div>
@@ -513,7 +513,7 @@ function InsightCards({ insights }: { insights: Insight[] }) {
             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: style.accent, borderRadius: '3px 0 0 3px' }} />
             <div style={{ paddingLeft: 8 }}>
               <span style={{
-                fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+                fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
                 letterSpacing: '0.14em', textTransform: 'uppercase',
                 color: style.accent, padding: '2px 6px', borderRadius: 4,
                 background: `${style.accent}12`, border: `1px solid ${style.accent}20`,
@@ -521,10 +521,10 @@ function InsightCards({ insights }: { insights: Insight[] }) {
               }}>
                 {ins.tier}
               </span>
-              <div style={{ fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: 700, color: C.textBright, marginTop: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: C.textBright, marginTop: 8, marginBottom: 4 }}>
                 {ins.title}
               </div>
-              <div style={{ fontSize: 11.5, fontFamily: 'Inter, sans-serif', color: C.textMid, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 11.5, fontFamily: 'inherit', color: C.textMid, lineHeight: 1.6 }}>
                 {ins.detail}
               </div>
             </div>
@@ -571,7 +571,7 @@ export default function QualiSpeedPanel({ sessionKey }: { sessionKey: number }) 
   }, [])
 
   if (loading) return (
-    <div style={{ padding: 24, border: `1px solid ${C.border}`, borderRadius: 18, background: C.surface, color: C.textDim, fontFamily: 'Inter, sans-serif', fontSize: 13 }}>
+    <div style={{ padding: 24, border: `1px solid ${C.border}`, borderRadius: 18, background: C.surface, color: C.textDim, fontFamily: 'inherit', fontSize: 12 }}>
       Loading speed analysis...
     </div>
   )

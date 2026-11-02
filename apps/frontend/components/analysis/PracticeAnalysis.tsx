@@ -285,7 +285,7 @@ export default function PracticeAnalysis({
       const y = toY(g)
       ctx.beginPath(); ctx.strokeStyle = g === 0 ? '#13233D33' : '#F0F4FA'; ctx.lineWidth = 1
       ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-      ctx.fillStyle = TEXT_DIM; ctx.font = '500 10px Inter'; ctx.textAlign = 'right'
+      ctx.fillStyle = TEXT_DIM; ctx.font = '500 12px ui-sans-serif, system-ui, sans-serif'; ctx.textAlign = 'right'
       ctx.fillText(g === 0 ? 'P1' : `+${(g / 1000).toFixed(1)}s`, PAD.left - 10, y + 3)
     })
 
@@ -399,7 +399,7 @@ export default function PracticeAnalysis({
       ctx.stroke()
 
       ctx.fillStyle = TEXT_DIM
-      ctx.font = '500 10px Inter'
+      ctx.font = '500 12px ui-sans-serif, system-ui, sans-serif'
       ctx.textAlign = 'right'
       const labelValue = isZero ? 0 : value
       const sign = labelValue > 0 ? '+' : ''
@@ -451,7 +451,7 @@ export default function PracticeAnalysis({
 
         if (index === stint.laps.length - 1) {
           ctx.fillStyle = col
-          ctx.font = '700 10px Inter'
+          ctx.font = '700 12px ui-sans-serif, system-ui, sans-serif'
           ctx.textAlign = 'left'
           ctx.fillText(
             `${stint.abbreviation} ${stint.isPrimary ? '' : `S${stint.stint_num}`}`.trim(),
@@ -466,13 +466,13 @@ export default function PracticeAnalysis({
     for (let lapIdx = 0; lapIdx <= maxLapInStint; lapIdx += 1) {
       const x = toX(lapIdx)
       ctx.fillStyle = TEXT_DIM
-      ctx.font = '500 10px Inter'
+      ctx.font = '500 12px ui-sans-serif, system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.fillText(String(lapIdx + 1), x, H - PAD.bottom + 18)
     }
 
     ctx.fillStyle = TEXT_DIM
-    ctx.font = '500 10px Inter'
+    ctx.font = '500 12px ui-sans-serif, system-ui, sans-serif'
     ctx.textAlign = 'left'
     ctx.fillText('DELTA TO FIRST CLEAN LAP', PAD.left, PAD.top - 12)
     ctx.textAlign = 'center'
@@ -520,7 +520,7 @@ export default function PracticeAnalysis({
   if (loading) return <div style={{ textAlign: 'center', padding: '100px', color: TEXT_DIM, fontFamily: 'Inter' }}>Initializing Dashboard...</div>
 
   return (
-    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: isMobile ? '12px' : '24px', fontFamily: 'Inter, sans-serif' }}>
+    <div ref={containerRef} style={{ background: '#F8F9FC', minHeight: '100vh', padding: isMobile ? '12px' : '24px', fontFamily: 'inherit' }}>
 
       {/* ── Dashboard Header ─────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
@@ -540,7 +540,7 @@ export default function PracticeAnalysis({
               {session?.date_start ? new Date(session.date_start).toLocaleDateString() : 'Active Session'}
             </span>
           </div>
-          <h1 style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 900, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 700, color: TEXT_DARK, margin: 0, letterSpacing: '-0.04em' }}>
             GAP ANALYSIS
           </h1>
         </div>
@@ -571,7 +571,7 @@ export default function PracticeAnalysis({
         {/* Left Col: Gap Analysis Chart */}
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: TEXT_DARK }}>Gap to Session Best</h3>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: TEXT_DARK }}>Gap to Session Best</h3>
             <div style={{ display: 'flex', gap: '16px' }}>
               {selected.map((dn, i) => (
                 <div key={dn} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -587,7 +587,7 @@ export default function PracticeAnalysis({
           {scatterTip && (
             <Tooltip x={scatterTip.x} y={scatterTip.y}>
               <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>LAP {scatterTip.lap.lap_number}</div>
-              <div style={{ fontSize: '16px', fontWeight: 900, color: TEXT_DARK }}>{formatLapTime(scatterTip.lap.lap_time_ms)}</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: TEXT_DARK }}>{formatLapTime(scatterTip.lap.lap_time_ms)}</div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: scatterTip.gapMs < 10 ? '#10B981' : '#E8002D' }}>
                 {scatterTip.gapMs < 10 ? 'SESSION BEST' : `+${(scatterTip.gapMs / 1000).toFixed(3)}s`}
               </div>
@@ -619,7 +619,7 @@ export default function PracticeAnalysis({
 
         {/* Strategy Analysis */}
         <div style={{ background: '#13233D', border: '1px solid #1A2E4B', borderRadius: '24px', padding: '24px', color: '#fff', boxShadow: '0 8px 32px rgba(19,35,61,0.2)' }}>
-          <h3 style={{ margin: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 800, color: '#D9E3EF' }}>Compound Strategy Analysis</h3>
+          <h3 style={{ margin: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 700, color: '#D9E3EF' }}>Compound Strategy Analysis</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {compounds.slice(0, 4).map(team => {
               const mainCmp = Object.keys(team.compounds).sort((a, b) => team.compounds[b].laps - team.compounds[a].laps)[0]
@@ -646,7 +646,7 @@ export default function PracticeAnalysis({
         <div style={{ background: '#fff', border: '1px solid #D9E3EF', borderRadius: '24px', padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: TEXT_DARK }}>Tyre Degradation Analysis</h3>
               <div style={{ marginTop: '6px', fontSize: '11px', color: TEXT_DIM, fontWeight: 600 }}>
                 Normalized to the first clean lap of each stint. Solid lines are each driver&apos;s primary long run; dashed lines show extra stints.
               </div>
@@ -680,7 +680,7 @@ export default function PracticeAnalysis({
               <div style={{ fontSize: '10px', color: TEXT_DIM, fontWeight: 700, marginBottom: '4px' }}>
                 {degTip.stint.abbreviation} · STINT {degTip.stint.stint_num}
               </div>
-              <div style={{ fontSize: '16px', fontWeight: 900, color: TEXT_DARK }}>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: TEXT_DARK }}>
                 {degTip.lap.delta_ms >= 0 ? '+' : ''}{(degTip.lap.delta_ms / 1000).toFixed(3)}s
               </div>
               <div style={{ fontSize: '12px', color: TEXT_DIM, fontWeight: 700 }}>

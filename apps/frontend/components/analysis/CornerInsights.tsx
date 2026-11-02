@@ -89,16 +89,16 @@ export default function CornerInsights({
       }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 34%)' }} />
         <div style={{ position: 'relative' }}>
-          <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'inherit', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
             CORNER ANALYSIS DEBRIEF
           </div>
-          <div style={{ fontSize: 20, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff', lineHeight: 1.25, letterSpacing: '-0.02em' }}>
+          <div style={{ fontSize: 20, fontFamily: 'inherit', fontWeight: 700, color: '#fff', lineHeight: 1.25, letterSpacing: '-0.02em' }}>
             {data.headline}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             {data.insights.filter(i => i.tier === 'CRITICAL').length > 0 && (
               <span style={{
-                fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700,
                 padding: '4px 10px', borderRadius: 999,
                 background: 'rgba(232,0,45,0.18)', color: '#FF6B8A', border: '1px solid rgba(232,0,45,0.25)',
               }}>
@@ -107,7 +107,7 @@ export default function CornerInsights({
             )}
             {data.insights.filter(i => i.tier === 'NOTABLE').length > 0 && (
               <span style={{
-                fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700,
                 padding: '4px 10px', borderRadius: 999,
                 background: 'rgba(245,158,11,0.15)', color: '#FBBF24', border: '1px solid rgba(245,158,11,0.22)',
               }}>
@@ -115,7 +115,7 @@ export default function CornerInsights({
               </span>
             )}
             <span style={{
-              fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
               padding: '4px 10px', borderRadius: 999,
               background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)',
             }}>
@@ -141,10 +141,10 @@ export default function CornerInsights({
           alignItems: 'center',
         }}>
           <div>
-            <div style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>
               Engineering Insights
             </div>
-            <div style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textDim, marginTop: 2 }}>
+            <div style={{ fontSize: 12, fontFamily: 'inherit', color: C.textDim, marginTop: 2 }}>
               Rules-based analysis from corner telemetry data
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function CornerInsights({
                 {/* Header row: tier + category + winner */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, paddingLeft: 6 }}>
                   <span style={{
-                    fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+                    fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
                     letterSpacing: '0.14em', textTransform: 'uppercase',
                     color: tier.accent, padding: '2px 7px', borderRadius: 4,
                     background: `${tier.accent}12`, border: `1px solid ${tier.accent}20`,
@@ -182,14 +182,14 @@ export default function CornerInsights({
                     {tier.label}
                   </span>
                   <span style={{
-                    fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600,
+                    fontSize: 12, fontFamily: 'inherit', fontWeight: 600,
                     letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim,
                   }}>
                     {catIcon} {insight.category}
                   </span>
                   <div style={{ flex: 1 }} />
                   <span style={{
-                    fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                    fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700,
                     color: winnerColour, padding: '2px 8px', borderRadius: 999,
                     background: `${winnerColour}12`, border: `1px solid ${winnerColour}22`,
                   }}>
@@ -199,7 +199,7 @@ export default function CornerInsights({
 
                 {/* Title */}
                 <div style={{
-                  fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: 700,
+                  fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
                   color: C.textBright, marginBottom: 6, paddingLeft: 6, lineHeight: 1.3,
                 }}>
                   {insight.title}
@@ -207,7 +207,7 @@ export default function CornerInsights({
 
                 {/* Detail */}
                 <div style={{
-                  fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 400,
+                  fontSize: 12, fontFamily: 'inherit', fontWeight: 400,
                   color: C.textMid, lineHeight: 1.65, paddingLeft: 6,
                 }}>
                   {insight.detail}
@@ -218,13 +218,13 @@ export default function CornerInsights({
                   marginTop: 10, paddingLeft: 6, display: 'flex', alignItems: 'center', gap: 8,
                 }}>
                   <span style={{
-                    fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600,
+                    fontSize: 12, fontFamily: 'inherit', fontWeight: 600,
                     letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim,
                   }}>
                     METRIC
                   </span>
                   <span style={{
-                    fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+                    fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 600,
                     color: C.textSub, padding: '3px 10px', borderRadius: 8,
                     background: C.surfaceAlt, border: `1px solid ${C.border}`,
                   }}>
@@ -232,7 +232,7 @@ export default function CornerInsights({
                   </span>
                   {insight.corner && (
                     <span style={{
-                      fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+                      fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 600,
                       color: C.red, padding: '3px 8px', borderRadius: 8,
                       background: 'rgba(232,0,45,0.06)', border: '1px solid rgba(232,0,45,0.12)',
                     }}>
@@ -259,10 +259,10 @@ export default function CornerInsights({
             padding: '14px 18px',
             borderBottom: `1px solid ${C.border}`,
           }}>
-            <div style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>
               Driver Corner Profiles
             </div>
-            <div style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textDim, marginTop: 2 }}>
+            <div style={{ fontSize: 12, fontFamily: 'inherit', color: C.textDim, marginTop: 2 }}>
               Driving style characterisation from braking and throttle data
             </div>
           </div>
@@ -294,12 +294,12 @@ export default function CornerInsights({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ width: 4, height: 20, borderRadius: 2, background: driverColour }} />
-                      <span style={{ fontSize: 16, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textBright }}>
+                      <span style={{ fontSize: 16, fontFamily: 'inherit', fontWeight: 700, color: C.textBright }}>
                         {abbr}
                       </span>
                     </div>
                     <span style={{
-                      fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+                      fontSize: 12, fontFamily: 'inherit', fontWeight: 700,
                       letterSpacing: '0.12em', textTransform: 'uppercase',
                       color: styleCfg.colour, padding: '4px 10px', borderRadius: 999,
                       background: `${styleCfg.colour}12`, border: `1px solid ${styleCfg.colour}22`,
@@ -310,7 +310,7 @@ export default function CornerInsights({
 
                   {/* Description */}
                   <div style={{
-                    fontSize: 11.5, fontFamily: 'Inter, sans-serif', fontWeight: 400,
+                    fontSize: 11.5, fontFamily: 'inherit', fontWeight: 400,
                     color: C.textMid, lineHeight: 1.55,
                   }}>
                     {profile.description}
@@ -320,10 +320,10 @@ export default function CornerInsights({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>
+                        <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>
                           ENTRY
                         </span>
-                        <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.red }}>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: C.red }}>
                           {profile.entry_score}
                         </span>
                       </div>
@@ -338,10 +338,10 @@ export default function CornerInsights({
 
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>
+                        <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>
                           EXIT
                         </span>
-                        <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.green }}>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: C.green }}>
                           {profile.exit_score}
                         </span>
                       </div>
@@ -387,10 +387,10 @@ export default function CornerInsights({
               boxShadow: '0 8px 18px rgba(19,35,61,0.12)',
             }}>
               <div>
-                <div style={{ fontSize: 7, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.14em', textAlign: 'center' }}>
+                <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.14em', textAlign: 'center' }}>
                   CORNER
                 </div>
-                <div style={{ fontSize: 20, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff', textAlign: 'center', lineHeight: 1 }}>
+                <div style={{ fontSize: 20, fontFamily: 'inherit', fontWeight: 700, color: '#fff', textAlign: 'center', lineHeight: 1 }}>
                   {data.key_corner}
                 </div>
               </div>
@@ -398,10 +398,10 @@ export default function CornerInsights({
 
             {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.red, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.red, marginBottom: 4 }}>
                 HIGHEST LAP TIME IMPACT
               </div>
-              <div style={{ fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 500, color: C.textMid, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 500, color: C.textMid, lineHeight: 1.5 }}>
                 {cornerInsight.detail.split('.').slice(0, 2).join('.') + '.'}
               </div>
             </div>
@@ -412,12 +412,12 @@ export default function CornerInsights({
             }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: winnerColour }} />
               <span style={{
-                fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800,
+                fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700,
                 color: winnerColour,
               }}>
                 {cornerInsight.winner}
               </span>
-              <span style={{ fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', color: C.textDim, fontWeight: 600 }}>
+              <span style={{ fontSize: 12, fontFamily: 'inherit', color: C.textDim, fontWeight: 600 }}>
                 ADVANTAGE
               </span>
             </div>

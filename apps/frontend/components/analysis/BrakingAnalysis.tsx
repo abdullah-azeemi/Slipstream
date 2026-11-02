@@ -214,7 +214,7 @@ export default function BrakingAnalysis({
       const side: 'left' | 'right' = x < W * 0.52 ? 'right' : 'left'
 
       ctx.beginPath()
-      ctx.font = '900 18px Inter, sans-serif'
+      ctx.font = '700 18px ui-sans-serif, system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.lineWidth = 3
@@ -271,7 +271,7 @@ export default function BrakingAnalysis({
   if (drivers.length < 2 || loading || error || !data) {
     if (loading) {
       return (
-        <div style={{ padding: 20, border: '1px solid #D9E3EF', borderRadius: 18, background: '#FFFFFF', color: '#7D8BA2', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>
+        <div style={{ padding: 20, border: '1px solid #D9E3EF', borderRadius: 18, background: '#FFFFFF', color: '#7D8BA2', fontFamily: 'inherit', fontSize: 12 }}>
           Loading braking analysis...
         </div>
       )
@@ -279,7 +279,7 @@ export default function BrakingAnalysis({
 
     if (error) {
       return (
-        <div style={{ padding: 20, border: '1px solid #FECACA', borderRadius: 18, background: '#FEF2F2', color: '#B91C1C', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>
+        <div style={{ padding: 20, border: '1px solid #FECACA', borderRadius: 18, background: '#FEF2F2', color: '#B91C1C', fontFamily: 'inherit', fontSize: 12 }}>
           {error}
         </div>
       )
@@ -309,16 +309,16 @@ export default function BrakingAnalysis({
     <div style={{ background: '#FFFFFF', border: '1px solid #D9E3EF', borderRadius: compact ? 16 : 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(19,35,61,0.04)', height: '100%' }}>
       <div style={{ padding: compact ? '12px 14px' : '14px 18px', borderBottom: '1px solid #D9E3EF', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: compact ? 13 : 14, fontFamily: 'Inter, sans-serif', fontWeight: 800, color: '#13233D' }}>Braking Analysis</div>
-          <div style={{ fontSize: compact ? 10 : 11, fontFamily: 'Inter, sans-serif', color: '#56657C', marginTop: 2, lineHeight: 1.35 }}>
+          <div style={{ fontSize: compact ? 13 : 14, fontFamily: 'inherit', fontWeight: 700, color: '#13233D' }}>Braking Analysis</div>
+          <div style={{ fontSize: compact ? 10 : 11, fontFamily: 'inherit', color: '#56657C', marginTop: 2, lineHeight: 1.35 }}>
             Compare where each driver brakes, slows, and exits the corner.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: '#13233D', background: `${c0}14`, border: `1px solid ${c0}2A`, borderRadius: 999, padding: compact ? '4px 8px' : '6px 10px' }}>
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: '#13233D', background: `${c0}14`, border: `1px solid ${c0}2A`, borderRadius: 999, padding: compact ? '4px 8px' : '6px 10px' }}>
             {d0.abbreviation}: {d0Wins}/{total}
           </span>
-          <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: '#13233D', background: `${altC1}14`, border: `1px solid ${altC1}2A`, borderRadius: 999, padding: compact ? '4px 8px' : '6px 10px' }}>
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: '#13233D', background: `${altC1}14`, border: `1px solid ${altC1}2A`, borderRadius: 999, padding: compact ? '4px 8px' : '6px 10px' }}>
             {d1.abbreviation}: {d1Wins}/{total}
           </span>
         </div>
@@ -347,10 +347,10 @@ export default function BrakingAnalysis({
                   boxShadow: '0 8px 20px rgba(19,35,61,0.08)',
                 }}
               >
-                <div style={{ fontSize: 8, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, color: '#7D8BA2', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: '#7D8BA2', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
                   C{corner.corner_number}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: compact ? 9 : 10, fontFamily: 'JetBrains Mono, monospace', color: '#13233D' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: compact ? 9 : 10, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: '#13233D' }}>
                   <div style={{ color: '#56657C', marginBottom: 1 }}>Entry</div>
                   {entries.slice(0, compact ? 4 : 2).map(item => (
                     <div key={`${corner.corner_number}-entry-${item.abbr}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -380,7 +380,7 @@ export default function BrakingAnalysis({
         )}
 
         <div style={{ marginTop: 14, borderTop: '1px solid #D9E3EF', paddingTop: 12, overflowX: 'auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', minWidth: compact ? 'auto' : 480, gap: 8, fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', color: '#7D8BA2', textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', minWidth: compact ? 'auto' : 480, gap: 8, fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', color: '#7D8BA2', textTransform: 'uppercase', marginBottom: 8 }}>
             <div>Corner</div>
             <div>Driver</div>
             <div>Entry</div>
@@ -389,7 +389,7 @@ export default function BrakingAnalysis({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: compact ? 'auto' : 480 }}>
             {corners.map(corner => (
-              <div key={corner.corner_number} style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', gap: 8, alignItems: 'center', fontSize: compact ? 10 : 11, fontFamily: 'JetBrains Mono, monospace', color: '#13233D' }}>
+              <div key={corner.corner_number} style={{ display: 'grid', gridTemplateColumns: compact ? '48px 1fr 1fr 48px' : '56px 1fr 1fr 1fr 1fr', gap: 8, alignItems: 'center', fontSize: compact ? 10 : 11, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: '#13233D' }}>
                 <div style={{ fontWeight: 700 }}>C{corner.corner_number}</div>
                 <div style={{ color: '#56657C' }}>{d0.abbreviation} / {d1.abbreviation}</div>
                 <div>
@@ -417,10 +417,10 @@ export default function BrakingAnalysis({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ border: '1px solid #D9E3EF', borderRadius: 14, background: '#F8FBFE', padding: '10px 12px' }}>
-      <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, color: '#7D8BA2', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+      <div style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: '#7D8BA2', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
         {label}
       </div>
-      <div style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: '#13233D' }}>
+      <div style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: '#13233D' }}>
         {value}
       </div>
     </div>

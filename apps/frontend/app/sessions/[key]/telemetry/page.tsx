@@ -1,6 +1,10 @@
 'use client'
 
 import { use, useEffect, useRef, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { ArrowLeft } from '@phosphor-icons/react'
+import '@/components/landing/landing.css'
+import { geist, geistMono } from '@/components/landing/font'
 import { api, telemetryApi } from '@/lib/api'
 import {
   getSegmentDriverNumbers,
@@ -27,7 +31,7 @@ const LapTimeDistribution = dynamic(() => import('@/components/analysis/LapTimeD
   ssr: false,
   loading: () => (
     <div style={{ padding: 20, border: '1px solid #D9E3EF', borderRadius: 18, background: '#FFFFFF' }}>
-      <div style={{ fontSize: 11, color: '#7D8BA2', fontFamily: 'Inter, sans-serif' }}>Loading lap data...</div>
+      <div style={{ fontSize: 12, color: '#7D8BA2', fontFamily: 'inherit' }}>Loading lap data...</div>
     </div>
   ),
 })
@@ -40,21 +44,21 @@ const isPracticeSession = (t: string | null) => t === 'FP1' || t === 'FP2' || t 
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg: '#F8F9FC',
+  bg: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceAlt: '#F5F7FB',
-  border: '#D9E3EF',
-  borderMid: '#C5D2E3',
-  textDim: '#7D8BA2',
-  textMid: '#56657C',
-  textSub: '#293A52',
-  textBright: '#13233D',
+  surfaceAlt: '#FAFAFA',
+  border: '#E5E5E5',
+  borderMid: '#D4D4D4',
+  textDim: '#737373',
+  textMid: '#666666',
+  textSub: '#333333',
+  textBright: '#0A0A0A',
   red: '#E8002D',
   green: '#10B981',
   purple: '#6E56CF',
   gold: '#F59E0B',
   brake: '#E8002D',
-  crosshair: 'rgba(19,35,61,0.08)',
+  crosshair: 'rgba(10,10,10,0.12)',
 } as const
 
 // ── Telemetry fetch ───────────────────────────────────────────────────────────
@@ -151,12 +155,12 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, yMin: num
     ctx.beginPath(); ctx.strokeStyle = i === 0 ? C.borderMid : C.border; ctx.lineWidth = 1
     ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
     const val = yMin + (i / gridCount) * (yMax - yMin)
-    ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+    ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
     ctx.fillText(isRpm ? `${(val / 1000).toFixed(0)}k` : Math.round(val).toString(), PAD.left - 10, y + 4)
   }
   ctx.beginPath(); ctx.strokeStyle = C.borderMid; ctx.lineWidth = 1
   ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left, PAD.top + cH); ctx.stroke()
-  ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'center'
+  ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'
   for (let i = 0; i <= 4; i++) {
     const nx = i / 4; const x = PAD.left + nx * (cW)
     ctx.fillText(xLabel ? xLabel(nx) : `${(nx * 100).toFixed(0)}%`, x, PAD.top + cH + 24)
@@ -244,6 +248,7 @@ const CHARTS = [
   { label: 'SPEED', unit: 'km/h', field: 'speed', yMin: 60, yMax: 360, height: 420, gridCount: 6, isRpm: false },
   { label: 'THROTTLE', unit: '%', field: 'throttle', yMin: 0, yMax: 100, height: 220, gridCount: 4, isRpm: false },
   { label: 'RPM', unit: 'rpm', field: 'rpm', yMin: 6000, yMax: 13000, height: 140, gridCount: 5, isRpm: true },
+  { label: 'BRAKE', unit: '', field: 'brake', yMin: 0, yMax: 100, height: 120, gridCount: 2, isRpm: false },
 ]
 
 type DriverSectorTimes = { s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; lap_number: number }
@@ -257,15 +262,7 @@ type TooltipValue = {
   brake: number
 }
 type TooltipSnapshot = { dist: number; progress: number; verticalProgress: number; speedDelta: number | null; values: TooltipValue[] }
-type SectionKey = 'overview' | 'drivingAnalysis' | 'speedTrace' | 'inputsPower' | 'qualifyingTables'
-
-const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
-  overview: false,
-  drivingAnalysis: false,
-  speedTrace: false,
-  inputsPower: false,
-  qualifyingTables: false,
-}
+type TabKey = 'pace' | 'driving' | 'inputs' | 'data'
 
 function getErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
   if (error instanceof Error) return error.message || fallback
@@ -281,14 +278,7 @@ function getErrorMessage(error: unknown, fallback = 'Something went wrong'): str
 
 function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{
-      background: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 24,
-      overflow: 'hidden',
-      boxShadow: '0 8px 32px rgba(19,35,61,0.03)',
-      ...style,
-    }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', ...style }}>
       {children}
     </div>
   )
@@ -296,142 +286,21 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 function PanelHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 18px 14px', borderBottom: `1px solid ${C.border}` }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>{title}</span>
-        {subtitle && <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{subtitle}</span>}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '16px', borderBottom: `1px solid ${C.border}` }}>
+      <div>
+        <div style={{ fontSize: 16, lineHeight: '24px', fontWeight: 600, color: C.textBright }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 14, lineHeight: '20px', color: C.textMid }}>{subtitle}</div>}
       </div>
       {right}
     </div>
   )
 }
 
-function SectionToggle({
-  title,
-  subtitle,
-  open,
-  onToggle,
-  badge,
-}: {
-  title: string
-  subtitle: string
-  open: boolean
-  onToggle: () => void
-  badge?: string
-}) {
+function InlineMessage({ title, detail }: { title: string; detail: string }) {
   return (
-    <button
-      onClick={onToggle}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        padding: 0,
-        border: 'none',
-        background: 'none',
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 3, height: 30, borderRadius: 999, background: C.red, flexShrink: 0 }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>
-              {title}
-            </span>
-            {badge && (
-              <span style={{
-                padding: '3px 8px',
-                borderRadius: 999,
-                border: `1px solid ${C.border}`,
-                background: C.surfaceAlt,
-                color: C.textMid,
-                fontSize: 9,
-                fontFamily: 'JetBrains Mono, monospace',
-                fontWeight: 700,
-              }}>
-                {badge}
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textDim }}>
-            {subtitle}
-          </span>
-        </div>
-      </div>
-
-      <div style={{
-        width: 30,
-        height: 30,
-        borderRadius: 10,
-        border: `1px solid ${C.border}`,
-        background: C.surfaceAlt,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-        transition: 'transform 0.2s ease',
-        flexShrink: 0,
-      }}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2 4L6 8L10 4" stroke={C.textMid} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    </button>
-  )
-}
-
-function CollapsibleSection({
-  title,
-  subtitle,
-  open,
-  onToggle,
-  badge,
-  children,
-}: {
-  title: string
-  subtitle: string
-  open: boolean
-  onToggle: () => void
-  badge?: string
-  children: React.ReactNode
-}) {
-  return (
-    <Panel style={{ marginBottom: 18 }}>
-      <div style={{ padding: '18px 20px', borderBottom: open ? `1px solid ${C.border}` : 'none' }}>
-        <SectionToggle title={title} subtitle={subtitle} open={open} onToggle={onToggle} badge={badge} />
-      </div>
-      {open && (
-        <div style={{ padding: '18px 20px' }}>
-          {children}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function InlineMessage({
-  title,
-  detail,
-}: {
-  title: string
-  detail: string
-}) {
-  return (
-    <div style={{
-      padding: '18px 20px',
-      borderRadius: 18,
-      border: `1px dashed ${C.borderMid}`,
-      background: 'linear-gradient(180deg, rgba(255,255,255,0.88), rgba(245,247,251,0.92))',
-    }}>
-      <div style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textBright }}>
-        {title}
-      </div>
-      <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, color: C.textMid, fontFamily: 'Inter, sans-serif' }}>
-        {detail}
-      </div>
+    <div style={{ padding: 24, borderRadius: 16, border: `1px solid ${C.border}`, background: C.surfaceAlt }}>
+      <div style={{ fontSize: 16, lineHeight: '24px', fontWeight: 600, color: C.textBright }}>{title}</div>
+      <div style={{ marginTop: 4, fontSize: 14, lineHeight: '20px', color: C.textMid }}>{detail}</div>
     </div>
   )
 }
@@ -500,7 +369,7 @@ function GapToLeaderChart({
       const x = PL + (i / 3) * cW
       ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
       ctx.setLineDash([4, 4]); ctx.moveTo(x, PT); ctx.lineTo(x, PT + cH); ctx.stroke(); ctx.setLineDash([])
-      ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'
+      ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'
       ctx.textAlign = i === xLabels.length - 1 ? 'right' : i === 0 ? 'left' : 'center'
       ctx.fillText(lbl, x + (i === 0 ? 2 : i === 3 ? -2 : 0), PT + cH + 24)
     })
@@ -509,7 +378,7 @@ function GapToLeaderChart({
     const ticks = [0, maxGap / 3, (maxGap * 2) / 3, maxGap]
     ticks.forEach(v => {
       const y = toY(v)
-      ctx.fillStyle = C.textDim; ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = C.textDim; ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillText(v === 0 ? '0.0s' : `+${v.toFixed(1)}s`, PL - 8, y + 4)
       if (v > 0) {
         ctx.beginPath(); ctx.strokeStyle = C.border; ctx.lineWidth = 1
@@ -559,10 +428,10 @@ function GapToLeaderChart({
 
       // End label
       const last = pts[pts.length - 1]
-      ctx.font = 'bold 9px "JetBrains Mono", monospace'; ctx.textAlign = 'right'
+      ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'right'
       ctx.fillStyle = colour; ctx.fillText(abbr, last[0] - 4, last[1] - 6)
       if (isFastest) {
-        ctx.font = '700 8px "Space Grotesk", sans-serif'
+        ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'
         ctx.fillStyle = C.textDim
         ctx.fillText('FASTEST', last[0] - 4, last[1] + 6)
       }
@@ -587,10 +456,10 @@ function GapToLeaderChart({
                   ? <div style={{ width: 16, height: 2.5, borderRadius: 2, background: d.colour }} />
                   : <svg width="16" height="2"><line x1="0" y1="1" x2="16" y2="1" stroke={d.colour} strokeWidth="2" strokeDasharray="4 3" /></svg>
                 }
-                <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour }}>{d.abbr}</span>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: d.colour }}>{d.abbr}</span>
               </div>
             ))}
-            <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textDim, alignSelf: 'center' }}>
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textDim, alignSelf: 'center' }}>
               0.0s = fastest line
             </span>
           </div>
@@ -666,9 +535,9 @@ function PerformanceMatrix({
         <div style={{ padding: '12px 16px' }}>
           {/* Header */}
           <div style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, paddingBottom: 10, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
-            <span style={{ fontSize: 9, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>METRIC</span>
+            <span style={{ fontSize: 12, color: C.textDim, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>METRIC</span>
             {driverData.map(d => (
-              <span key={d.abbr} style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: d.colour, textAlign: 'right' }}>{d.abbr}</span>
+              <span key={d.abbr} style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: d.colour, textAlign: 'right' }}>{d.abbr}</span>
             ))}
           </div>
 
@@ -677,11 +546,11 @@ function PerformanceMatrix({
             const best = valid.length ? (row.higherIsBetter ? Math.max(...valid) : Math.min(...valid)) : null
             return (
               <div key={row.label} style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{row.label}</span>
+                <span style={{ fontSize: 12, color: C.textSub, fontFamily: 'inherit', fontWeight: 500 }}>{row.label}</span>
                 {row.values.map(({ abbr, v, fmt }) => {
                   const isBest = v !== null && v === best
                   return (
-                    <span key={abbr} style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
+                    <span key={abbr} style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
                       {v !== null ? fmt(v) : '—'}
                     </span>
                   )
@@ -692,11 +561,11 @@ function PerformanceMatrix({
 
           {/* Theoretical row */}
           <div style={{ display: 'grid', gridTemplateColumns: `minmax(100px, 1.2fr) repeat(${driverData.length}, minmax(80px, 1fr))`, gap: 6, padding: '10px 0' }}>
-            <span style={{ fontSize: 13, color: C.textSub, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Theoretical</span>
+            <span style={{ fontSize: 12, color: C.textSub, fontFamily: 'inherit', fontWeight: 500 }}>Theoretical</span>
             {theoBest.map(({ abbr, ms }) => {
               const isBest = ms !== null && ms === Math.min(...theoBest.filter(t => t.ms !== null).map(t => t.ms!))
               return (
-                <span key={abbr} style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
+                <span key={abbr} style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: isBest ? 700 : 400, color: isBest ? C.textBright : C.textMid, textAlign: 'right' }}>
                   {ms !== null ? formatLapTime(ms) : '—'}
                 </span>
               )
@@ -717,23 +586,23 @@ function PerformanceMatrix({
           marginTop: 'auto',
         }}>
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 34%)' }} />
-          <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)', fontFamily: 'inherit', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>
             THEORETICAL LAP
           </div>
-          <div style={{ fontSize: 44, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.03em' }}>
+          <div style={{ fontSize: 40, fontFamily: 'inherit', fontWeight: 700, color: '#fff', lineHeight: 1, letterSpacing: '-0.03em' }}>
             {formatLapTime(fastestTheo.ms)}
           </div>
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: fastestTheo.colour }} />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', fontFamily: 'JetBrains Mono, monospace' }}>{fastestTheo.abbr}</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' }}>{fastestTheo.abbr}</span>
             {theoDelta !== null && (
               <span style={{
                 marginLeft: 6, padding: '3px 10px',
                 background: 'rgba(255,255,255,0.10)',
                 border: '1px solid rgba(255,255,255,0.18)',
                 borderRadius: 20,
-                fontSize: 11, color: 'rgba(255,255,255,0.75)',
-                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 12, color: 'rgba(255,255,255,0.75)',
+                fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
               }}>
                 Δ −{(theoDelta / 1000).toFixed(3)}s
               </span>
@@ -784,22 +653,22 @@ function SectorHeroCards({
             <div style={{ padding: '18px 18px 16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
               {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 8 }}>
-                <span style={{ fontSize: 10, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: colour }}>{label}</span>
+                <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: colour }}>{label}</span>
                 {delta !== null && (
-                  <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim, whiteSpace: 'nowrap' }}>Δ {(delta / 1000).toFixed(3)}s</span>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textDim, whiteSpace: 'nowrap' }}>Δ {(delta / 1000).toFixed(3)}s</span>
                 )}
               </div>
 
               {/* Leader big number */}
               {leader && fastestMs !== null && (
                 <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 34, fontFamily: 'Inter, sans-serif', fontWeight: 900, color: C.textBright, letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  <div style={{ fontSize: 30, fontFamily: 'inherit', fontWeight: 700, color: C.textBright, letterSpacing: '-0.03em', lineHeight: 1 }}>
                     {(fastestMs / 1000).toFixed(3)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: leader.colour }} />
-                    <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: leader.colour, fontWeight: 700 }}>{leader.abbr}</span>
-                    <span style={{ fontSize: 9, color: C.textDim, fontFamily: 'JetBrains Mono, monospace' }}>fastest</span>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: leader.colour, fontWeight: 700 }}>{leader.abbr}</span>
+                    <span style={{ fontSize: 12, color: C.textDim, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' }}>fastest</span>
                   </div>
                 </div>
               )}
@@ -817,8 +686,8 @@ function SectorHeroCards({
                   return (
                     <div key={abbr}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: dColour }}>{abbr}</span>
-                        <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: isLeader ? C.green : C.red, fontWeight: isLeader ? 700 : 400 }}>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: dColour }}>{abbr}</span>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: isLeader ? C.green : C.red, fontWeight: isLeader ? 700 : 400 }}>
                           {isLeader ? '+0.000' : deltaMs !== null ? `+${(deltaMs / 1000).toFixed(3)}` : '—'}
                         </span>
                       </div>
@@ -850,8 +719,6 @@ function SectorHeroCards({
 function TelemetryDecisionHero({
   sessionName,
   selectedSegment,
-  onSegmentChange,
-  segmentCounts,
   driverData,
   drivers,
   sectorTimes,
@@ -861,8 +728,6 @@ function TelemetryDecisionHero({
 }: {
   sessionName: string
   selectedSegment: 'Q1' | 'Q2' | 'Q3'
-  onSegmentChange: (segment: 'Q1' | 'Q2' | 'Q3') => void
-  segmentCounts: Record<'Q1' | 'Q2' | 'Q3', number>
   driverData: DriverRenderData[]
   drivers: Driver[]
   sectorTimes: Map<number, DriverSectorTimes>
@@ -902,55 +767,53 @@ function TelemetryDecisionHero({
   const decisive = [...sectorDeltas].sort((a, b) => (b.delta ?? -1) - (a.delta ?? -1))[0]
   const fmtGap = (ms: number | null) => ms == null ? '—' : `+${(ms / 1000).toFixed(3)}s`
 
+  const names = ranked.length > 2
+    ? rivalGaps.map((row, index) => <span key={row.abbr}>{index > 0 ? ', ' : ''}{row.abbr} by <strong style={{ color: C.red, whiteSpace: 'nowrap' }}>{fmtGap(row.gap)}</strong></span>)
+    : null
+
   return (
-    <section style={{ background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 6, padding: isMobile ? 18 : 28, marginBottom: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.red }} />
-          <span style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>{sessionName}{isRaceSession(sessionType) ? '' : ` · ${selectedSegment}`}</span>
-        </div>
-        {!isRaceSession(sessionType) && (<div style={{ display: 'flex', gap: 16 }}>
-          {(['Q1', 'Q2', 'Q3'] as const).map(segment => (
-            <button key={segment} onClick={() => onSegmentChange(segment)} disabled={!segmentCounts[segment]} style={{ border: 0, borderBottom: selectedSegment === segment ? `1px solid ${C.textBright}` : '1px solid transparent', padding: '0 0 4px', background: 'transparent', color: selectedSegment === segment ? C.textBright : C.textDim, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', cursor: segmentCounts[segment] ? 'pointer' : 'not-allowed' }}>{segment}</button>
-          ))}
-        </div>)}
+    <section style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 24, padding: isMobile ? 24 : 32, marginBottom: 24 }}>
+      <div style={{ fontSize: 14, lineHeight: '20px', color: C.textMid, fontWeight: 500, marginBottom: 12 }}>
+        {sessionName}{isRaceSession(sessionType) ? '' : ` · ${selectedSegment}`}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(260px, 0.72fr)', gap: isMobile ? 24 : 40, alignItems: 'end' }}>
         <div>
-          <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Lap comparison</div>
-          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: isMobile ? (ranked.length > 2 ? 24 : 30) : (ranked.length > 2 ? 29 : 40), lineHeight: 1.12, fontWeight: 400, letterSpacing: '-0.025em', color: C.textBright, margin: 0 }}>
+          <h2 style={{ fontSize: isMobile ? 30 : 36, lineHeight: isMobile ? '36px' : '40px', fontWeight: 600, color: C.textBright, margin: 0, textWrap: 'balance' }}>
             {ranked.length > 2 ? (
-              <>{leader?.abbr ?? '—'} beats {rivalGaps.map((row, index) => <span key={row.abbr}>{index > 0 ? ', ' : ''}{row.abbr} by <em style={{ color: C.red, fontStyle: 'italic', whiteSpace: 'nowrap' }}>{fmtGap(row.gap)}</em></span>)}</>
+              <>{leader?.abbr ?? '—'} beats {names}</>
             ) : (
-              <>{leader?.abbr ?? '—'} beats {challenger?.abbr ?? '—'} by <em style={{ color: C.red, fontStyle: 'italic' }}>{fmtGap(gap)}</em></>
+              <>{leader?.abbr ?? '—'} beats {challenger?.abbr ?? '—'} by <strong style={{ color: C.red, fontWeight: 600 }}>{fmtGap(gap)}</strong></>
             )}
           </h2>
-          <p style={{ maxWidth: 540, margin: '14px 0 0', color: C.textMid, fontSize: 12, lineHeight: 1.65 }}>
-            {decisive?.winner && decisive.delta != null ? `${decisive.winner.abbr} creates the biggest separation in ${decisive.label}, worth ${(decisive.delta / 1000).toFixed(3)}s. ` : 'Select two comparable laps to compare their pace. '}
-            Use the trace below to see where the time appears on track.
+          <p style={{ maxWidth: 540, margin: '16px 0 0', color: C.textMid, fontSize: 16, lineHeight: '24px' }}>
+            {decisive?.winner && decisive.delta != null ? `${decisive.winner.abbr} makes the biggest difference in ${decisive.label}, worth ${(decisive.delta / 1000).toFixed(3)}s. ` : ''}
+            Use the speed trace below to see where on track the time appears.
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-          {rows.map((row, index) => (
-            <div key={row.abbr} style={{ padding: '10px 12px', borderLeft: index % 2 === 1 ? `1px solid ${C.border}` : 'none', borderTop: index > 1 ? `1px solid ${C.border}` : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: row.colour }} /><span style={{ fontSize: 12, fontWeight: 700, color: C.textBright }}>{row.abbr}</span><span style={{ marginLeft: 'auto', fontSize: 9, color: C.textDim, fontFamily: 'JetBrains Mono, monospace' }}>L{telLapNumbers.get(row.driver?.driver_number ?? -1) ?? '—'}</span></div>
-              <div style={{ fontSize: 9, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sector sum</div>
-              <div style={{ marginTop: 4, fontSize: 15, fontFamily: 'JetBrains Mono, monospace', color: C.textBright }}>{row.total != null ? `${(row.total / 1000).toFixed(3)}s` : '—'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+          {rows.map(row => (
+            <div key={row.abbr} style={{ padding: 12, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, lineHeight: '20px', fontWeight: 600, color: C.textBright }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.colour }} />{row.abbr}
+                <span style={{ marginLeft: 'auto', fontSize: 12, lineHeight: '16px', color: C.textDim, fontWeight: 500 }}>Lap {telLapNumbers.get(row.driver?.driver_number ?? -1) ?? '—'}</span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, lineHeight: '16px', color: C.textMid }}>Sector sum</div>
+              <div style={{ fontSize: 20, lineHeight: '28px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: C.textBright }}>{row.total != null ? `${(row.total / 1000).toFixed(3)}s` : '—'}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginTop: 28, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
         {sectorDeltas.map(sector => (
-          <div key={sector.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ color: sector.colour, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>{sector.label}</span>
-            <div style={{ flex: 1, height: 5, display: 'flex', gap: 2, background: C.surfaceAlt }}>
+          <div key={sector.label} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, lineHeight: '16px' }}>
+            <span style={{ color: sector.colour, fontWeight: 600 }}>{sector.label}</span>
+            <div style={{ flex: 1, height: 8, display: 'flex', gap: 2, background: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
               {sector.values.map(value => <span key={value.abbr} style={{ flex: 1, background: value.ms === sector.fastest ? value.colour : C.border }} />)}
             </div>
-            <span style={{ minWidth: 38, textAlign: 'right', fontSize: 9, color: C.textDim, fontFamily: 'JetBrains Mono, monospace' }}>{sector.winner?.abbr ?? '—'}</span>
+            <span style={{ minWidth: 40, textAlign: 'right', color: C.textMid }}>{sector.winner?.abbr ?? '—'}</span>
           </div>
         ))}
       </div>
@@ -983,8 +846,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const [cornerInsights, setCornerInsights] = useState<InsightsData | null>(null)
   const [insightDriverColours, setInsightDriverColours] = useState<Record<string, string>>({})
   const [chartWidth, setChartWidth] = useState(0)
-  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTION_OPEN)
-  const [activeChannel, setActiveChannel] = useState<'speed' | 'throttle' | 'rpm'>('speed')
+  const [tab, setTab] = useState<TabKey>('pace')
 
   const chartRefs = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null])
   const deltaRef = useRef<HTMLCanvasElement | null>(null)
@@ -999,10 +861,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const isQualifying = !isRaceSession(sessionType) && !isPracticeSession(sessionType)
   const showTelemetry = isQualifying || isRaceSession(sessionType)
   const selectedKey = selected.join(',')
-
-  const toggleSection = useCallback((key: SectionKey) => {
-    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
-  }, [])
 
   // Session + drivers
   useEffect(() => {
@@ -1216,7 +1074,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       return Boolean(interp && interp.dist.length > 1 && interp.speed.length > 1)
     })
   const hoverActive = Boolean(tooltipData?.values.length)
-  const comparisonCountLabel = driverData.length > 0 ? `${driverData.length} drivers` : undefined
 
   const lapStoryDrivers: LapStoryDriver[] = driverData.map(d => {
     const dn = drivers.find(x => x.abbreviation === d.abbr)?.driver_number
@@ -1233,16 +1090,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       lapNumber: dn !== undefined ? (telLapNumbers.get(dn) ?? null) : null,
     }
   })
-
-  const sectorWinners = (() => {
-    if (driverData.length < 2) return []
-    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0)
-    return [[0, 166], [166, 333], [333, 500]].map(([s, e]) => {
-      const a = avg(driverData[0].interp.speed.slice(s, e))
-      const b = avg(driverData[1].interp.speed.slice(s, e))
-      return a > b ? 0 : 1
-    })
-  })()
 
   const comparisonRows = driverData.map(d => {
     const driver = drivers.find(item => item.abbreviation === d.abbr)
@@ -1262,20 +1109,6 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       fullThrottle,
     }
   })
-  const rankedComparison = [...comparisonRows].sort((a, b) => (a.lapMs ?? Infinity) - (b.lapMs ?? Infinity))
-  const comparisonLead = rankedComparison[0]
-  const comparisonChaser = rankedComparison[1]
-  const comparisonGap = comparisonLead?.lapMs != null && comparisonChaser?.lapMs != null
-    ? comparisonChaser.lapMs - comparisonLead.lapMs
-    : null
-  const comparisonRivalGaps = rankedComparison.slice(1).map(row => ({
-    ...row,
-    gap: comparisonLead?.lapMs != null && row.lapMs != null ? row.lapMs - comparisonLead.lapMs : null,
-  }))
-  const sectorMargin = (key: 's1_ms' | 's2_ms' | 's3_ms') => {
-    const values = comparisonRows.map(row => row.driver ? sectorTimes.get(row.driver.driver_number)?.[key] ?? null : null).filter((value): value is number => value !== null)
-    return values.length > 1 ? Math.max(...values) - Math.min(...values) : null
-  }
   const theoreticalBest = ['s1_ms', 's2_ms', 's3_ms'].reduce((total, key) => {
     const values = comparisonRows.map(row => row.driver ? sectorTimes.get(row.driver.driver_number)?.[key as 's1_ms' | 's2_ms' | 's3_ms'] ?? null : null).filter((value): value is number => value !== null)
     return (total !== null && values.length) ? total + Math.min(...values) : null
@@ -1302,7 +1135,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           driverData.forEach((d, idx) => drawLine(ctx, d.interp.speed, d.colour, W, cfg.height, cfg.yMin, cfg.yMax, idx === 0 ? 3.8 : 3.2, driverData.length > 2 && idx % 2 !== 0))
         } else if (cfg.field === 'brake') {
           driverData.forEach((d, idx) => {
-            drawLine(ctx, d.interp.brake.map(b => b ? 1 : 0), d.colour, W, cfg.height, 0, 1, 1.8, idx % 2 !== 0, false)
+            drawLine(ctx, d.interp.brake, d.colour, W, cfg.height, 0, 100, 1.8, idx % 2 !== 0, false)
           })
         } else if (cfg.field === 'throttle') {
           driverData.forEach((d, idx) => {
@@ -1344,7 +1177,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         for (const m of [-1, -0.5, 0.5, 1]) {
           const y = midY - m * cH / 2
           ctx.fillStyle = C.textDim
-          ctx.font = '600 11px "JetBrains Mono", monospace'
+          ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'
           ctx.textAlign = 'right'
           ctx.fillText((m * maxD).toFixed(0), PAD.left - 8, y + 4)
           if (m !== 0) {
@@ -1383,7 +1216,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
           ctx.fill()
           ctx.restore()
           ctx.fillStyle = C.textBright
-          ctx.font = 'bold 10px "JetBrains Mono", monospace'
+          ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace'
           ctx.textAlign = cx > PAD.left + cW / 2 ? 'right' : 'left'
           ctx.fillText(`${d >= 0 ? '+' : ''}${d.toFixed(1)}`, cx + (cx > PAD.left + cW / 2 ? -10 : 10), PAD.top + 20)
         }
@@ -1397,7 +1230,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
         && trackX.every(Number.isFinite)
         && trackY.every(Number.isFinite)
 
-      if (trackRef.current && hasTrackShape && openSections.inputsPower) {
+      if (trackRef.current && hasTrackShape && tab === 'inputs') {
         const canvas = trackRef.current
         canvas.width = W
         canvas.height = 300
@@ -1468,7 +1301,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     })
 
     return () => window.cancelAnimationFrame(raf)
-  }, [chartWidth, driverData, isQualifying, openSections.inputsPower, openSections.speedTrace, telemetryReady, tooltipNx])
+  }, [chartWidth, driverData, isQualifying, tab, telemetryReady, tooltipNx])
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!telemetryReady || !driverData.length) return
@@ -1513,82 +1346,108 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
   const qualifyingAdvancePosition = getQualifyingAdvancePosition(session?.year ?? null, activeSegment)
 
   // ── Render ────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ background: 'linear-gradient(180deg, #F5F7FB 0%, #EEF3FA 22%, #EAF0F8 100%)', minHeight: '100vh', paddingBottom: 80 }}>
-      <div ref={containerRef} style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '0 16px' : '0 36px' }}>
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'pace', label: 'Pace' },
+    { key: 'driving', label: 'Driving' },
+    { key: 'inputs', label: 'Inputs' },
+    { key: 'data', label: 'Data' },
+  ]
+  const sessionLabel = isRaceSession(sessionType)
+    ? 'Race'
+    : isPracticeSession(sessionType)
+      ? sessionName || 'Practice'
+      : `${sessionName || 'Qualifying'} · ${selectedSegment}`
+  const comparisonReady = driverData.length >= 2 && telemetryReady
+  const headerTitle = `${session?.year ? `${session.year} ` : ''}${session?.gp_name ?? (sessionName || 'Telemetry analysis')}`
 
-        {/* Header */}
-        <div style={{ padding: '22px 8px 20px', borderBottom: `1px solid ${C.border}`, marginBottom: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'start', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ padding: '3px 6px', borderRadius: 3, background: '#FCE7EB', color: C.red, fontSize: 8, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>ROUND</span>
-                <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>FIA Formula 1 World Championship</span>
-              </div>
-              <h1 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 900, fontSize: isMobile ? 22 : 27, color: C.textBright, letterSpacing: '-0.025em', margin: 0 }}>
-                {session?.year ? `${session.year} ` : ''}{session?.gp_name ?? sessionName ?? 'Telemetry Analysis'}
-              </h1>
-              <div style={{ marginTop: 7, fontSize: 11, color: C.textMid, fontFamily: 'JetBrains Mono, monospace' }}>Qualifying · {selectedSegment} shootout · pole position battle</div>
+  const hoverCard = hoverActive && tooltipData ? (
+    <div style={{
+      position: 'absolute',
+      zIndex: 3,
+      top: 10 + Math.max(8, Math.min(420 - tooltipCardHeight - 8, tooltipData.verticalProgress < 0.5 ? tooltipData.verticalProgress * 420 + 12 : tooltipData.verticalProgress * 420 - tooltipCardHeight - 12)),
+      left: Math.max(8, Math.min(chartWidth - tooltipCardWidth - 8, PAD.left + tooltipData.progress * (chartWidth - PAD.left - PAD.right) + 14)),
+      width: tooltipCardWidth,
+      border: `1px solid ${C.borderMid}`,
+      borderRadius: 12,
+      background: 'rgba(255,255,255,0.98)',
+      pointerEvents: 'none',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, fontSize: 12, lineHeight: '16px' }}>
+        <span style={{ color: C.textBright, fontWeight: 600 }}>{Math.round(tooltipData.dist).toLocaleString()} m</span>
+        <span style={{ color: C.textMid, whiteSpace: 'nowrap' }}>
+          {driverData[0]?.abbr} vs {driverData[1]?.abbr}: {tooltipData.speedDelta == null ? '—' : `${tooltipData.speedDelta >= 0 ? '+' : ''}${tooltipData.speedDelta.toFixed(0)} km/h`}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+        {tooltipData.values.map((value, index) => (
+          <div key={value.abbr} style={{ minWidth: 0, padding: '8px 12px', borderRight: index % 2 === 0 ? `1px solid ${C.border}` : undefined, borderBottom: index < 2 && tooltipData.values.length > 2 ? `1px solid ${C.border}` : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, lineHeight: '16px', fontWeight: 600, color: C.textBright }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: value.colour }} />{value.abbr}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-              <span style={{ padding: '6px 8px', background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 9, color: C.textMid, fontFamily: 'JetBrains Mono, monospace' }}>{session?.gp_name ?? 'Circuit'}</span>
-              <span style={{ padding: '6px 8px', background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 9, color: C.green, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>LIVE SYNC</span>
+            <div style={{ fontSize: 20, lineHeight: '28px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{Math.round(value.speed)}<span style={{ marginLeft: 4, color: C.textMid, fontSize: 12, fontWeight: 500 }}>km/h</span></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 8px', marginTop: 8, color: C.textSub, fontSize: 12, lineHeight: '16px', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ color: C.textDim }}>RPM</span><span>{Math.round(value.rpm).toLocaleString()}</span>
+              <span style={{ color: C.textDim }}>Throttle</span><span>{Math.round(value.throttle)}%</span>
+              <span style={{ color: C.textDim }}>Brake</span><span>{value.brake > 0 ? 'On' : 'Off'}</span>
+              <span style={{ color: C.textDim }}>Gear</span><span>{value.gear}</span>
             </div>
           </div>
-          {driverData.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
-              {driverData.map((d, i) => (
-                <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 18, height: i === 0 ? 2.5 : 0, borderTop: i > 0 ? `2px dashed ${d.colour}` : undefined, borderBottom: i === 0 ? `2.5px solid ${d.colour}` : undefined, display: 'inline-block' }} />
-                  <span style={{ fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: 700, color: C.textBright }}>CAR {d.abbr}</span>
-                  <div style={{ display: 'flex', gap: 3 }}>
-                    {[0, 1, 2].map(si => (
-                      <div key={si} style={{ width: 5, height: 5, borderRadius: '50%', background: sectorWinners[si] === i ? d.colour : C.border }} />
-                    ))}
-                  </div>
-                  {i < driverData.length - 1 && <span style={{ color: C.textDim, fontSize: 11, marginLeft: 4 }}>vs</span>}
-                </div>
-              ))}
-              {telLapNumbers.size > 0 && (
-                <span style={{ fontSize: 11, color: C.textMid, fontFamily: 'JetBrains Mono, monospace', marginLeft: 4 }}>
-                  LAP {[...telLapNumbers.values()].join(' VS LAP ')}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        ))}
+      </div>
+    </div>
+  ) : null
 
+  const waiting = (
+    <InlineMessage
+      title={loading ? 'Loading telemetry' : telemetryError ? 'Telemetry unavailable' : 'Select two drivers to compare'}
+      detail={loading
+        ? 'Syncing the selected laps. Charts appear as soon as every driver has data.'
+        : telemetryError ?? 'Pick at least two drivers in the bar above to build the comparison.'}
+    />
+  )
 
+  return (
+    <div className={`lp ${geist.className} ${geistMono.variable}`} style={{ paddingBottom: 80 }}>
+      <div ref={containerRef} style={{ maxWidth: 1120, margin: '0 auto', padding: isMobile ? '0 16px' : '0 24px' }}>
+
+        {/* Header */}
+        <header style={{ padding: '32px 0 24px' }}>
+          <Link href="/telemetry" className="back body-5">
+            <ArrowLeft size={16} weight="bold" aria-hidden="true" /> All sessions
+          </Link>
+          <h1 className="heading-4" style={{ marginTop: 16 }}>{headerTitle}</h1>
+          <p className="body-3 muted" style={{ marginTop: 4 }}>{sessionLabel}</p>
+        </header>
 
         {/* Practice mode */}
         {isPracticeSession(sessionType) && <PracticeAnalysis sessionKey={sessionKey} session={session} drivers={driverList} />}
 
-        {/* Qualifying mode */}
+        {/* Qualifying and race */}
         {showTelemetry && (
           <div ref={chartMeasureRef}>
-            <TelemetryDecisionHero
-              sessionName={sessionName}
-              selectedSegment={selectedSegment}
-              onSegmentChange={setSelectedSegment}
-              segmentCounts={{
-                Q1: qualiSegments?.segments.Q1?.length ?? 0,
-                Q2: qualiSegments?.segments.Q2?.length ?? 0,
-                Q3: qualiSegments?.segments.Q3?.length ?? 0,
-              }}
-              driverData={driverData}
-              drivers={drivers}
-              sectorTimes={sectorTimes}
-              telLapNumbers={telLapNumbers}
-              isMobile={isMobile}
-              sessionType={sessionType}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14, padding: '12px 14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Compare drivers</span>
-                <span style={{ fontSize: 9, color: C.textMid, fontFamily: 'JetBrains Mono, monospace' }}>{selected.length}/4 selected</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            {/* Sticky controls: segment and drivers */}
+            <div className="tel-bar">
+              {!isRaceSession(sessionType) && (
+                <div className="tabs" role="tablist" aria-label="Qualifying segment">
+                  {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
+                    const count = qualiSegments?.segments?.[seg]?.length ?? 0
+                    return (
+                      <button
+                        key={seg}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedSegment === seg}
+                        disabled={count === 0}
+                        className={`tab button-sm ${selectedSegment === seg ? 'on' : ''}`}
+                        onClick={() => setSelectedSegment(seg)}
+                      >
+                        {seg}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="tel-drivers" role="group" aria-label="Drivers to compare">
                 {drivers.map(driver => {
                   const isSelected = selected.includes(driver.driver_number)
                   const unavailable = Boolean(qualiSegments?.segments && !segmentDriverNumbers.has(driver.driver_number))
@@ -1602,315 +1461,121 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                       aria-pressed={isSelected}
                       disabled={unavailable || atLimit}
                       onClick={() => toggleDriver(driver.driver_number)}
-                      title={unavailable ? `${driver.abbreviation} did not set a lap in ${selectedSegment}` : atLimit ? 'Select up to four drivers' : `${isSelected ? 'Remove' : 'Add'} ${driver.abbreviation}${lap ? ` · lap ${lap}` : ''}`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        minHeight: 28, padding: '4px 7px', border: `1px solid ${isSelected ? `${colour}70` : C.border}`,
-                        borderRadius: 4, background: isSelected ? `${colour}12` : C.surfaceAlt,
-                        color: isSelected ? C.textBright : C.textMid,
-                        fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: isSelected ? 800 : 500,
-                        cursor: unavailable || atLimit ? 'not-allowed' : 'pointer', opacity: unavailable || atLimit ? 0.38 : 1,
-                      }}
+                      title={unavailable ? `${driver.abbreviation} did not set a lap in ${selectedSegment}` : atLimit ? 'Select up to four drivers' : `${isSelected ? 'Remove' : 'Add'} ${driver.abbreviation}${lap ? `, lap ${lap}` : ''}`}
+                      className={`chip ${isSelected ? 'on' : ''}`}
+                      style={isSelected ? { borderColor: colour } : undefined}
                     >
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: unavailable ? C.borderMid : colour }} />
+                      <span className="dot" style={{ background: unavailable ? C.borderMid : colour }} />
                       {driver.abbreviation}
                     </button>
                   )
                 })}
+                <span className="caption-4 muted" style={{ marginLeft: 'auto' }}>{selected.length} of 4 selected</span>
               </div>
             </div>
 
-            {driverData.length >= 2 && telemetryReady ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '12px 14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                  <span style={{ marginRight: 4, fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>Channels</span>
-                  {[
-                    { key: 'speed' as const, label: 'Velocity (km/h)' },
-                    { key: 'throttle' as const, label: 'Throttle %' },
-                    { key: 'rpm' as const, label: 'Engine RPM' },
-                  ].map(channel => {
-                    const active = activeChannel === channel.key
-                    return <button key={channel.key} onClick={() => setActiveChannel(channel.key)} style={{ border: `1px solid ${active ? C.red : C.border}`, borderRadius: 4, padding: '6px 9px', background: active ? C.red : C.surfaceAlt, color: active ? '#FFFFFF' : C.textMid, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, cursor: 'pointer' }}>{channel.label}</button>
-                  })}
-                </div>
+            {comparisonReady ? (
+              <TelemetryDecisionHero
+                sessionName={sessionName}
+                selectedSegment={selectedSegment}
+                driverData={driverData}
+                drivers={drivers}
+                sectorTimes={sectorTimes}
+                telLapNumbers={telLapNumbers}
+                isMobile={isMobile}
+                sessionType={sessionType}
+              />
+            ) : (
+              <div style={{ marginBottom: 24 }}>{waiting}</div>
+            )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 240px', gap: 14, padding: '16px 18px', background: '#FFF9FA', border: '1px solid #F7D7DE', borderLeft: `3px solid ${C.red}`, borderRadius: 6 }}>
-                  <div>
-                    <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, letterSpacing: '0.12em', color: C.red, textTransform: 'uppercase', marginBottom: 7 }}>Where the lap was won</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.65, color: C.textSub }}>
-                      {comparisonLead?.abbr} leads{comparisonRivalGaps.length ? ' ' : ' the comparison'}{comparisonRivalGaps.map((row, index) => <span key={row.abbr}>{index > 0 ? ', ' : ''}{row.abbr} by <strong>{row.gap != null ? `+${(row.gap / 1000).toFixed(3)}s` : '—'}</strong></span>)}. The largest sector separation is {sectorMargin('s1_ms') != null && sectorMargin('s2_ms') != null && sectorMargin('s3_ms') != null ? `S${(['s1_ms', 's2_ms', 's3_ms'] as const).reduce((best, key, index) => (sectorMargin(key) ?? 0) > (sectorMargin((['s1_ms', 's2_ms', 's3_ms'] as const)[best]) ?? 0) ? index : best, 0) + 1}` : 'available in the trace'}; inspect the overlay to trace the braking and exit-speed trade-off.
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'center' }}>
-                    <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 12 }}><div style={{ fontSize: 8, color: C.textDim, letterSpacing: '0.09em' }}>{comparisonRows.length > 2 ? 'NEXT CAR GAP' : 'NET ADVANTAGE'}</div><div style={{ marginTop: 4, color: C.red, fontSize: 17, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>{comparisonGap != null ? `-${(comparisonGap / 1000).toFixed(3)}s` : '—'}</div></div>
-                    <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 12 }}><div style={{ fontSize: 8, color: C.textDim, letterSpacing: '0.09em' }}>LAP SAMPLE</div><div style={{ marginTop: 4, color: C.green, fontSize: 17, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>100 Hz</div></div>
-                  </div>
-                </div>
+            {/* Tabs */}
+            <div className="tabs" role="tablist" aria-label="Analysis view" style={{ marginBottom: 24 }}>
+              {tabs.map(t => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.key}
+                  className={`tab button-sm ${tab === t.key ? 'on' : ''}`}
+                  onClick={() => setTab(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
-                  {[
-                    { label: 'Apex min speed', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.minSpeed != null ? `${row.minSpeed}` : '—' })), accent: C.red },
-                    { label: 'Tunnel top speed', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.maxSpeed != null ? `${row.maxSpeed}` : '—' })), accent: '#F97316' },
-                    { label: 'Full throttle', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.fullThrottle != null ? `${row.fullThrottle.toFixed(1)}%` : '—' })), accent: C.green },
-                    { label: 'Lap sector sum', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.lapMs != null ? `${(row.lapMs / 1000).toFixed(3)}s` : '—' })), accent: C.gold },
-                  ].map(metric => (
-                    <div key={metric.label} style={{ minHeight: 104, padding: '11px 10px 9px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                      <div style={{ fontSize: 8, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{metric.label}</div>
-                      <div style={{ display: 'grid', gap: 5, marginTop: 9 }}>
-                        {metric.values.map(value => <div key={value.abbr} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, fontFamily: 'JetBrains Mono, monospace' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.textMid, fontSize: 8 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: value.colour }} />{value.abbr}</span><span style={{ color: C.textBright, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>{value.value}{metric.label.includes('speed') ? ' km/h' : ''}</span></div>)}
-                      </div>
-                      <div style={{ height: 3, marginTop: 8, background: metric.accent, opacity: 0.9 }} />
-                    </div>
-                  ))}
-                  <div style={{ minHeight: 104, padding: '11px 10px 9px', background: '#FFF0F2', border: '1px solid #F8D4DA', borderRadius: 6 }}>
-                    <div style={{ fontSize: 8, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Theoretical best</div>
-                    <div style={{ marginTop: 13, color: C.textBright, fontSize: 16, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>{theoreticalBest != null ? formatLapTime(theoreticalBest) : '—'}</div>
-                    <div style={{ marginTop: 4, color: C.red, fontSize: 8, fontFamily: 'JetBrains Mono, monospace' }}>BEST OF SELECTED</div>
-                    <div style={{ height: 3, marginTop: 8, background: C.red }} />
-                  </div>
-                </div>
-
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
-                    <div><div style={{ fontSize: 12, fontFamily: 'Space Grotesk, sans-serif', color: C.textBright, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{activeChannel === 'speed' ? 'Speed vs distance trace' : `${activeChannel} trace`}</div><div style={{ marginTop: 3, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>Continuous multi-channel overlay · {Math.round(driverData[0]?.interp.dist.at(-1) ?? 0).toLocaleString()} m lap</div></div>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{driverData.map((driver, index) => <span key={driver.abbr} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textMid }}><span style={{ width: 12, height: index ? 2 : 3, background: driver.colour, borderTop: index ? `1px dashed ${driver.colour}` : undefined }} />{driver.abbr}</span>)}</div>
-                  </div>
-                  <div style={{ padding: '10px 0 0', position: 'relative' }}>
-                    {CHARTS.map((chart, index) => chart.field === 'speed' ? (
-                      <div key={chart.field} style={{ display: activeChannel === chart.field ? 'block' : 'none' }}>
-                        <SvgSpeedTrace driverData={driverData} tooltipNx={tooltipNx} onMouseMove={handleMouseMove as unknown as React.MouseEventHandler<SVGSVGElement>} onMouseLeave={handleMouseLeave} />
-                      </div>
-                    ) : (
-                      <canvas key={chart.field} ref={element => { chartRefs.current[index] = element }} height={isMobile ? 160 : Math.min(chart.height, 220)} style={{ display: activeChannel === chart.field ? 'block' : 'none', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    ))}
-                    {activeChannel === 'speed' && <canvas ref={deltaRef} height={isMobile ? 110 : 135} style={{ display: 'block', width: '100%', cursor: 'crosshair', borderTop: `1px solid ${C.border}` }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />}
-                    {hoverActive && tooltipData && (
-                      <div style={{
-                        position: 'absolute',
-                        zIndex: 3,
-                        top: 10 + Math.max(8, Math.min(420 - tooltipCardHeight - 8, tooltipData.verticalProgress < 0.5 ? tooltipData.verticalProgress * 420 + 12 : tooltipData.verticalProgress * 420 - tooltipCardHeight - 12)),
-                        left: Math.max(8, Math.min(chartWidth - tooltipCardWidth - 8, PAD.left + tooltipData.progress * (chartWidth - PAD.left - PAD.right) + 14)),
-                        width: tooltipCardWidth,
-                        border: `1px solid ${C.borderMid}`,
-                        borderRadius: 7,
-                        background: 'rgba(255,255,255,0.98)',
-                        boxShadow: '0 12px 32px rgba(19,35,61,0.18)',
-                        pointerEvents: 'none',
-                        fontFamily: 'JetBrains Mono, monospace',
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
-                          <span style={{ fontSize: 10, color: C.textBright, fontWeight: 800 }}>DISTANCE: {Math.round(tooltipData!.dist).toLocaleString()} m</span>
-                          <span style={{ fontSize: 9, color: tooltipData.speedDelta != null && tooltipData.speedDelta >= 0 ? driverData[0]?.colour : driverData[1]?.colour, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            Δ SPEED · {driverData[0]?.abbr}/{driverData[1]?.abbr} {tooltipData.speedDelta == null ? '—' : `${tooltipData.speedDelta >= 0 ? '+' : ''}${tooltipData.speedDelta.toFixed(0)} km/h`}
-                          </span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                          {tooltipData!.values.map((value, index) => (
-                            <div key={value.abbr} style={{ minWidth: 0, padding: '9px 12px 10px', borderRight: index % 2 === 0 ? `1px solid ${C.border}` : undefined, borderBottom: index < 2 && tooltipData!.values.length > 2 ? `1px solid ${C.border}` : undefined }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ width: 8, height: 8, flex: '0 0 auto', borderRadius: '50%', background: value.colour }} /><span style={{ fontSize: 10, fontWeight: 800, color: value.colour }}>{value.abbr}</span></div>
-                              <div style={{ color: C.textBright, fontSize: 19, lineHeight: 1.1, fontWeight: 800, whiteSpace: 'nowrap' }}>{Math.round(value.speed)}<span style={{ marginLeft: 4, color: C.textMid, fontSize: 9, fontWeight: 500 }}>km/h</span></div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 8px', marginTop: 8, color: C.textSub, fontSize: 9, lineHeight: 1.3 }}>
-                                <span style={{ color: C.textDim }}>RPM</span><span>{Math.round(value.rpm).toLocaleString()}</span>
-                                <span style={{ color: C.textDim }}>THROTTLE</span><span>{Math.round(value.throttle)}%</span>
-                                <span style={{ color: C.textDim }}>BRAKE</span><span>{value.brake > 0 ? `${Math.round(value.brake)}%` : 'OFF'}</span>
-                                <span style={{ color: C.textDim }}>GEAR</span><span>{value.gear}</span>
-                              </div>
+            {/* Pace */}
+            {tab === 'pace' && (
+              comparisonReady ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
+                    {[
+                      { label: 'Apex minimum speed', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.minSpeed != null ? `${row.minSpeed} km/h` : '—' })) },
+                      { label: 'Top speed', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.maxSpeed != null ? `${row.maxSpeed} km/h` : '—' })) },
+                      { label: 'Full throttle', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.fullThrottle != null ? `${row.fullThrottle.toFixed(1)}%` : '—' })) },
+                      { label: 'Sector sum', values: comparisonRows.map(row => ({ abbr: row.abbr, colour: row.colour, value: row.lapMs != null ? `${(row.lapMs / 1000).toFixed(3)}s` : '—' })) },
+                    ].map(metric => (
+                      <div key={metric.label} style={{ padding: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16 }}>
+                        <div style={{ fontSize: 12, lineHeight: '16px', color: C.textMid, fontWeight: 500 }}>{metric.label}</div>
+                        <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                          {metric.values.map(value => (
+                            <div key={value.abbr} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 14, lineHeight: '20px', fontVariantNumeric: 'tabular-nums' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: C.textMid }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: value.colour }} />{value.abbr}</span>
+                              <span style={{ color: C.textBright, fontWeight: 600, whiteSpace: 'nowrap' }}>{value.value}</span>
                             </div>
                           ))}
                         </div>
-                        <div style={{ padding: '7px 12px 9px', borderTop: `1px solid ${C.border}` }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, color: C.textDim, fontSize: 8 }}><span>LAP PROGRESS</span><span>{Math.round(tooltipData.progress * 100)}%</span></div>
-                          <div style={{ height: 3, overflow: 'hidden', borderRadius: 2, background: C.surfaceAlt }}><div style={{ width: `${tooltipData.progress * 100}%`, height: '100%', background: C.red }} /></div>
-                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div style={{ padding: '8px 18px 12px', color: C.textDim, fontSize: 8, fontFamily: 'JetBrains Mono, monospace' }}>Hover across the trace to inspect live telemetry values</div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 0.95fr) minmax(0, 1.05fr)', gap: 14 }}>
-                  <div style={{ padding: '16px 18px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                    <div style={{ fontSize: 11, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>Session telemetry log</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginTop: 16, fontFamily: 'JetBrains Mono, monospace', fontSize: 9 }}>
-                      <span style={{ color: C.textDim }}>SESSION <strong style={{ color: C.textBright }}>{selectedSegment}</strong></span><span style={{ color: C.textDim }}>LAPS <strong style={{ color: C.textBright }}>{comparisonRows.map(row => telLapNumbers.get(row.driver?.driver_number ?? -1) ?? '—').join(' / ')}</strong></span>
-                      <span style={{ color: C.textDim }}>COMPARISON <strong style={{ color: C.textBright }}>{comparisonRows.map(row => row.abbr).join(' vs ')}</strong></span><span style={{ color: C.textDim }}>TRACK <strong style={{ color: C.textBright }}>{session?.gp_name ?? 'Circuit'}</strong></span>
-                      <span style={{ color: C.textDim }}>TELEMETRY <strong style={{ color: C.green }}>READY</strong></span><span style={{ color: C.textDim }}>MODE <strong style={{ color: C.textBright }}>BEST LAP</strong></span>
+                    ))}
+                    <div style={{ padding: 16, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 16 }}>
+                      <div style={{ fontSize: 12, lineHeight: '16px', color: C.textMid, fontWeight: 500 }}>Theoretical best</div>
+                      <div style={{ marginTop: 12, fontSize: 20, lineHeight: '28px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{theoreticalBest != null ? formatLapTime(theoreticalBest) : '—'}</div>
+                      <div style={{ marginTop: 4, fontSize: 12, lineHeight: '16px', color: C.textMid }}>Best sectors of the selected drivers</div>
                     </div>
                   </div>
-                  <div style={{ padding: '16px 18px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 11 }}><span style={{ fontSize: 11, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, letterSpacing: '0.08em', color: C.textBright, textTransform: 'uppercase' }}>Performance matrix</span><span style={{ fontSize: 9, color: C.textDim, fontFamily: 'JetBrains Mono, monospace' }}>Sector times</span></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: `minmax(58px, 0.8fr) repeat(${comparisonRows.length}, minmax(48px, 1fr))`, gap: 6, paddingBottom: 7, borderBottom: `1px solid ${C.border}` }}>
-                      <span />
-                      {comparisonRows.map(row => <span key={row.abbr} style={{ textAlign: 'right', color: row.colour, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>{row.abbr}</span>)}
-                    </div>
-                    {([
-                      { label: 'S1', key: 's1_ms' as const },
-                      { label: 'S2', key: 's2_ms' as const },
-                      { label: 'S3', key: 's3_ms' as const },
-                    ]).map(sector => {
-                      const values = comparisonRows.map(row => ({
-                        abbr: row.abbr,
-                        ms: row.driver ? sectorTimes.get(row.driver.driver_number)?.[sector.key] ?? null : null,
-                      }))
-                      const valid = values.map(value => value.ms).filter((value): value is number => value != null)
-                      const fastest = valid.length ? Math.min(...valid) : null
-                      return <div key={sector.label} style={{ display: 'grid', gridTemplateColumns: `minmax(58px, 0.8fr) repeat(${comparisonRows.length}, minmax(48px, 1fr))`, gap: 6, padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 10, color: C.textMid }}>{sector.label}</span>
-                        {values.map(value => <span key={value.abbr} style={{ textAlign: 'right', color: value.ms === fastest ? C.green : C.textSub, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: value.ms === fastest ? 800 : 500 }}>{value.ms != null ? (value.ms / 1000).toFixed(3) : '—'}</span>)}
-                      </div>
-                    })}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 11, padding: '8px 10px', background: '#FFF0F2', color: C.red, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}><span>{comparisonLead?.abbr} TO NEXT CAR</span><span>{comparisonGap != null ? `-${(comparisonGap / 1000).toFixed(3)}s` : '—'}</span></div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <InlineMessage title={loading ? 'Loading telemetry' : 'Select a comparison'} detail={loading ? 'Synchronizing the selected qualifying laps.' : 'Choose two drivers from the overview panel to build the telemetry console.'} />
-            )}
-            {false && (
-              <>
-            <CollapsibleSection
-              title="Overview"
-              subtitle="Core comparison controls, sector spread, and summary pace metrics."
-              open={openSections.overview}
-              onToggle={() => toggleSection('overview')}
-              badge={comparisonCountLabel}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <Panel>
-                  <PanelHeader title="Controls" subtitle="Segment lens and driver focus" />
-                  <div style={{ padding: '16px 18px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 320px) minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
-                      <div>
-                        {qualiSegments?.segments && !isRaceSession(sessionType) && (
-                          <div style={{ marginBottom: 16 }}>
-                            <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim, marginBottom: 8 }}>
-                              Segment Lens
-                            </div>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
-                                const isActive = selectedSegment === seg
-                                const count = qualiSegments?.segments?.[seg]?.length ?? 0
-                                const sc = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? C.gold : C.red
-                                return (
-                                  <button key={seg} disabled={count === 0} onClick={() => setSelectedSegment(seg)} style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, border: `1px solid ${isActive ? sc : C.border}`,
-                                    background: isActive ? `${sc}15` : C.surfaceAlt, color: count === 0 ? C.textDim : isActive ? sc : C.textMid,
-                                    fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: isActive ? 700 : 500, cursor: count === 0 ? 'not-allowed' : 'pointer',
-                                  }}>
-                                    {seg}
-                                    {count > 0 && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: isActive ? `${sc}20` : C.border, color: isActive ? sc : C.textMid }}>{count}</span>}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
 
-                      <div>
-                        <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim, marginBottom: 8 }}>
-                          Drivers
+                  <Panel>
+                    <PanelHeader
+                      title="Speed against distance"
+                      subtitle={`${Math.round(driverData[0]?.interp.dist.at(-1) ?? 0).toLocaleString()} m lap. Hover to inspect a point.`}
+                      right={
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {driverData.map((driver, index) => (
+                            <span key={driver.abbr} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '16px', color: C.textMid }}>
+                              <span style={{ width: 16, height: 0, borderTop: `${index ? 2 : 3}px ${index ? 'dashed' : 'solid'} ${driver.colour}` }} />{driver.abbr}
+                            </span>
+                          ))}
                         </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {drivers.map(d => {
-                            const isSel = selected.includes(d.driver_number)
-                            const colour = teamColour(d.team_colour, d.team_name)
-                            const unavail = showTelemetry && qualiSegments?.segments ? !segmentDriverNumbers.has(d.driver_number) : false
-                            const segLap = segmentLapByDriver.get(d.driver_number)
-                            return (
-                              <button key={d.driver_number} disabled={unavail} onClick={() => toggleDriver(d.driver_number)} style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 10,
-                                border: `1px solid ${isSel ? colour + '55' : C.border}`, background: isSel ? `${colour}12` : C.surfaceAlt,
-                                color: isSel ? C.textBright : C.textMid, fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
-                                fontWeight: isSel ? 700 : 500, cursor: unavail ? 'not-allowed' : 'pointer', opacity: unavail ? 0.35 : 1,
-                              }}>
-                                <div style={{ width: 5, height: 5, borderRadius: '50%', background: unavail ? C.textDim : colour }} />
-                                {d.abbreviation}
-                                {segLap && <span style={{ fontSize: 8, color: C.textDim }}>L{segLap}</span>}
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        {driverData.length > 0 && (
-                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {driverData.map(d => (
-                              <div key={d.abbr} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', background: `${d.colour}10`, border: `1px solid ${d.colour}28`, borderRadius: 999 }}>
-                                <div style={{ width: 14, height: 2, borderRadius: 1, background: d.colour }} />
-                                <span style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textBright, fontWeight: 700 }}>
-                                  {d.abbr}{(() => { const dr = drivers.find(x => x.abbreviation === d.abbr); const lap = dr ? telLapNumbers.get(dr.driver_number) : null; return lap ? ` · L${lap}` : '' })()}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Panel>
-
-                {driverData.length >= 2 && telemetryReady && (
-                  <LapStory drivers={lapStoryDrivers} isMobile={isMobile} />
-                )}
-
-                {driverData.length >= 2 ? (
-                  telemetryReady ? (
-                    <GapToLeaderChart driverData={driverData} width={chartWidth} active={openSections.overview} />
-                  ) : (
-                    <InlineMessage
-                      title={loading ? 'Loading telemetry' : 'Telemetry comparison pending'}
-                      detail={loading ? 'Building the speed comparison for the selected qualifying laps.' : (telemetryError ?? 'Select at least two comparable laps to unlock the top-level gap view.')}
+                      }
                     />
-                  )
-                ) : (
-                  <InlineMessage
-                    title="Select a comparison"
-                    detail="Choose at least two available drivers from the current qualifying segment to unlock the top-level time gap view."
-                  />
-                )}
+                    <div style={{ position: 'relative', paddingTop: 8 }}>
+                      <SvgSpeedTrace driverData={driverData} tooltipNx={tooltipNx} onMouseMove={handleMouseMove as unknown as React.MouseEventHandler<SVGSVGElement>} onMouseLeave={handleMouseLeave} />
+                      <canvas ref={deltaRef} height={isMobile ? 110 : 135} style={{ display: 'block', width: '100%', cursor: 'crosshair', borderTop: `1px solid ${C.border}` }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
+                      {hoverCard}
+                    </div>
+                  </Panel>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.35fr) minmax(320px, 0.95fr)', gap: 18, alignItems: 'start' }}>
-                  <div>
-                    {driverData.length >= 2 && sectorTimes.size > 0 ? (
-                      <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} />
-                    ) : (
-                      <InlineMessage
-                        title="Sector comparison pending"
-                        detail="Sector cards appear once lap-matched sector times are available for the currently selected qualifying laps."
-                      />
-                    )}
-                  </div>
+                  <LapStory drivers={lapStoryDrivers} isMobile={isMobile} />
+                  <GapToLeaderChart driverData={driverData} width={chartWidth} active />
 
-                  <div>
-                    {driverData.length >= 2 ? (
-                      <PerformanceMatrix driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} telStats={telStats} />
-                    ) : (
-                      <InlineMessage
-                        title="Performance matrix pending"
-                        detail="The matrix and theoretical lap summary will populate once at least two drivers are selected."
-                      />
-                    )}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.35fr) minmax(320px, 0.95fr)', gap: 16, alignItems: 'start' }}>
+                    {sectorTimes.size > 0 ? <SectorHeroCards driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} /> : <InlineMessage title="Sector times not available" detail="Sector cards appear once lap matched sector times exist for the selected laps." />}
+                    <PerformanceMatrix driverData={driverData} sectorTimes={sectorTimes} drivers={drivers} telStats={telStats} />
                   </div>
                 </div>
-              </div>
-            </CollapsibleSection>
+              ) : waiting
+            )}
 
-            <CollapsibleSection
-              title="Driving Analysis"
-              subtitle="Corner story, braking map, and narrative insights for the current duel."
-              open={openSections.drivingAnalysis}
-              onToggle={() => toggleSection('drivingAnalysis')}
-            >
-              {driverData.length >= 2 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.3fr) minmax(320px, 0.9fr)', gap: 18, alignItems: 'start' }}>
+            {/* Driving */}
+            {tab === 'driving' && (
+              driverData.length >= 2 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.3fr) minmax(320px, 0.9fr)', gap: 16, alignItems: 'start' }}>
                   <div>
                     {cornerInsights ? (
-                      <CornerInsights data={cornerInsights!} driverColours={insightDriverColours} />
+                      <CornerInsights data={cornerInsights} driverColours={insightDriverColours} />
                     ) : (
-                      <InlineMessage
-                        title="Driving insights loading"
-                        detail="Corner-by-corner narrative insights will appear here as the braking comparison finishes processing."
-                      />
+                      <InlineMessage title="Corner insights loading" detail="The corner by corner story appears when the braking comparison finishes processing." />
                     )}
                   </div>
                   <BrakingAnalysis
@@ -1924,246 +1589,99 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                   />
                 </div>
               ) : (
-                <InlineMessage
-                  title="Driving analysis unavailable"
-                  detail="Pick two comparable drivers from the selected segment to unlock braking and corner insights."
-                />
-              )}
-            </CollapsibleSection>
+                <InlineMessage title="Driving analysis needs two drivers" detail="Pick two comparable drivers in the bar above to unlock braking zones and corner insights." />
+              )
+            )}
 
-            <CollapsibleSection
-              title="Speed Trace"
-              subtitle="Primary speed comparison with a compact telemetry snapshot that expands on hover."
-              open={openSections.speedTrace}
-              onToggle={() => toggleSection('speedTrace')}
-              badge={hoverActive && tooltipData ? `${(tooltipData!.dist / 1000).toFixed(3)} km` : undefined}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <Panel>
-                  <PanelHeader
-                    title="Telemetry Snapshot"
-                    subtitle={hoverActive ? 'Live metrics at the highlighted distance marker' : 'Hover the charts below to inspect a point on lap'}
-                    right={telemetryReady ? <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{telLapNumbers.size > 0 ? `LAPS ${[...telLapNumbers.values()].join(' / ')}` : 'Telemetry ready'}</span> : undefined}
-                  />
-                  <div style={{ padding: '16px 18px' }}>
-                    {!hoverActive || !tooltipData ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: 10, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.textDim }}>
-                            Ready for inspection
-                          </div>
-                          <div style={{ fontSize: 13, fontFamily: 'Inter, sans-serif', color: C.textMid, marginTop: 6, lineHeight: 1.6 }}>
-                            Hover the velocity or delta graph to reveal the live speed, throttle, brake, and RPM snapshot without taking over the page.
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          {driverData.map((d, i) => (
-                            <div key={d.abbr} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 14, background: `${d.colour}10`, border: `1px solid ${d.colour}25` }}>
-                              {i === 0 ? <div style={{ width: 18, height: 2.5, borderRadius: 2, background: d.colour }} /> : <div style={{ width: 18, borderTop: `2px dashed ${d.colour}` }} />}
-                              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: C.textBright }}>{d.abbr}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                        {tooltipData!.values.map(v => (
-                          <div key={v.abbr} style={{ borderRadius: 18, border: `1px solid ${C.border}`, background: `${v.colour}08`, padding: '14px 16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: v.colour }} />
-                                <span style={{ fontSize: 13, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 900, color: C.textBright }}>{v.abbr}</span>
-                              </div>
-                              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: C.textDim }}>{(tooltipData!.dist / 1000).toFixed(3)} km</span>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-                              {[
-                                { label: 'Speed', value: `${v.speed.toFixed(0)} km/h`, colour: C.textBright },
-                                { label: 'RPM', value: `${Math.round(v.rpm).toLocaleString()}`, colour: C.textBright },
-                                { label: 'Throttle', value: `${v.throttle.toFixed(0)}%`, colour: C.green },
-                                { label: 'Brake', value: v.brake > 0 ? 'On' : 'Off', colour: v.brake > 0 ? C.red : C.textMid },
-                              ].map(metric => (
-                                <div key={metric.label}>
-                                  <div style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.textDim }}>
-                                    {metric.label}
-                                  </div>
-                                  <div style={{ marginTop: 4, fontSize: 14, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: metric.colour }}>
-                                    {metric.value}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </Panel>
-
-                {loading ? (
-                  <InlineMessage
-                    title="Loading speed traces"
-                    detail="The selected qualifying comparison is loading. The charts will render as soon as the telemetry samples and lap mapping are synchronized."
-                  />
-                ) : telemetryError ? (
-                  <InlineMessage
-                    title="Telemetry unavailable"
-                    detail={telemetryError ?? ""}
-                  />
-                ) : telemetryReady ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <Panel>
-                      <PanelHeader title="Velocity" subtitle="Speed vs distance" right={
-                        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                          {driverData.map((d, i) => (
-                            <div key={d.abbr} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {i === 0 ? <div style={{ width: 18, height: 2.5, borderRadius: 2, background: d.colour }} /> : <div style={{ width: 18, borderTop: `2px dashed ${d.colour}` }} />}
-                              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: C.textMid }}>{d.abbr}</span>
-                            </div>
-                          ))}
-                        </div>
-                      } />
-                      <div style={{ width: '100%' }}>
-                        <SvgSpeedTrace driverData={driverData} tooltipNx={tooltipNx} onMouseMove={handleMouseMove as unknown as React.MouseEventHandler<SVGSVGElement>} onMouseLeave={handleMouseLeave} />
-                      </div>
-                    </Panel>
-
-                    {driverData.length >= 2 && (
-                      <Panel>
-                        <PanelHeader title="Speed Delta" subtitle={`${driverData[0].abbr} vs ${driverData[1].abbr}`} />
-                        <div style={{ width: '100%' }}>
-                          <canvas ref={deltaRef} height={isMobile ? 120 : 160} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                        </div>
-                      </Panel>
-                    )}
-                  </div>
-                ) : (
-                  <InlineMessage
-                    title="Awaiting telemetry"
-                    detail="Once telemetry is ready for every selected driver, the primary speed charts will render here automatically."
-                  />
-                )}
-              </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              title="Inputs & Power"
-              subtitle="Supporting traces for braking, throttle, engine RPM, and circuit path."
-              open={openSections.inputsPower}
-              onToggle={() => toggleSection('inputsPower')}
-            >
-              {telemetryReady ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Inputs */}
+            {tab === 'inputs' && (
+              comparisonReady ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <Panel>
-                    <PanelHeader title="Braking" subtitle="Brake application intensity" />
-                    <div style={{ width: '100%' }}>
-                      <canvas ref={el => { chartRefs.current[1] = el }} height={isMobile ? 120 : CHARTS[1].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    </div>
+                    <PanelHeader title="Braking" subtitle="Brake on or off across the lap" />
+                    <canvas ref={el => { chartRefs.current[3] = el }} height={CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
-
                   <Panel>
-                    <PanelHeader title="Throttle Input" subtitle="0 – 100%" />
-                    <div style={{ width: '100%' }}>
-                      <canvas ref={el => { chartRefs.current[2] = el }} height={isMobile ? 160 : CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    </div>
+                    <PanelHeader title="Throttle" subtitle="0 to 100 percent" />
+                    <canvas ref={el => { chartRefs.current[1] = el }} height={isMobile ? 160 : Math.min(CHARTS[1].height, 220)} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
-
                   <Panel>
-                    <PanelHeader title="Engine RPM" subtitle="6 000 – 13 000" />
-                    <div style={{ width: '100%' }}>
-                      <canvas ref={el => { chartRefs.current[3] = el }} height={isMobile ? 120 : CHARTS[3].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
-                    </div>
+                    <PanelHeader title="Engine speed" subtitle="6,000 to 13,000 rpm" />
+                    <canvas ref={el => { chartRefs.current[2] = el }} height={CHARTS[2].height} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
-
                   <Panel>
-                    <PanelHeader title="Circuit Path" subtitle="Sector placement across the lap" right={
-                      <div style={{ display: 'flex', gap: 14 }}>
+                    <PanelHeader title="Circuit path" subtitle="Sector placement across the lap" right={
+                      <div style={{ display: 'flex', gap: 12 }}>
                         {[{ c: C.red, l: 'S1' }, { c: C.gold, l: 'S2' }, { c: C.purple, l: 'S3' }].map(({ c, l }) => (
-                          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <div style={{ width: 10, height: 3, borderRadius: 2, background: c }} />
-                            <span style={{ fontSize: 9, color: C.textMid, fontFamily: 'Space Grotesk, sans-serif' }}>{l}</span>
-                          </div>
+                          <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, lineHeight: '16px', color: C.textMid }}>
+                            <span style={{ width: 12, height: 4, borderRadius: 2, background: c }} />{l}
+                          </span>
                         ))}
                       </div>
                     } />
                     <canvas ref={trackRef} height={300} style={{ display: 'block', width: '100%', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
                   </Panel>
                 </div>
-              ) : (
-                <InlineMessage
-                  title="Supporting telemetry pending"
-                  detail={loading ? 'Supporting traces will appear as soon as the core telemetry comparison finishes loading.' : (telemetryError ?? 'Select a valid qualifying comparison to unlock the deeper input and power traces.')}
-                />
-              )}
-            </CollapsibleSection>
+              ) : waiting
+            )}
 
-            {!isRaceSession(sessionType) && (<CollapsibleSection
-              title="Qualifying Tables"
-              subtitle="Session order, speed trap analysis, and lap progression grouped into one lower-priority data section."
-              open={openSections.qualifyingTables}
-              onToggle={() => toggleSection('qualifyingTables')}
-            >
+            {/* Data */}
+            {tab === 'data' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {qualiSegments?.segments && !isRaceSession(sessionType) && (
                   <Panel>
                     <PanelHeader
-                      title="Qualifying Segments"
-                      subtitle="Segment order and elimination line"
+                      title="Qualifying segments"
+                      subtitle="Order and elimination line"
                       right={
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {(['Q1', 'Q2', 'Q3'] as const).map(seg => {
-                            const count = qualiSegments?.segments?.[seg]?.length ?? 0
-                            const isA = activeSegment === seg
-                            const sc = seg === 'Q1' ? '#3671C6' : seg === 'Q2' ? C.gold : C.red
-                            return (
-                              <button key={seg} onClick={() => setActiveSegment(seg)} style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 10,
-                                border: `1px solid ${isA ? sc : C.border}`, background: isA ? `${sc}15` : C.surfaceAlt,
-                                color: isA ? sc : C.textMid, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: isA ? 700 : 500, cursor: 'pointer',
-                              }}>
-                                {seg}
-                                {count > 0 && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: isA ? `${sc}22` : C.border, color: isA ? sc : C.textDim }}>{count}</span>}
-                              </button>
-                            )
-                          })}
+                        <div className="tabs" role="tablist" aria-label="Table segment">
+                          {(['Q1', 'Q2', 'Q3'] as const).map(seg => (
+                            <button
+                              key={seg}
+                              type="button"
+                              role="tab"
+                              aria-selected={activeSegment === seg}
+                              className={`tab button-sm ${activeSegment === seg ? 'on' : ''}`}
+                              onClick={() => setActiveSegment(seg)}
+                            >
+                              {seg}
+                            </button>
+                          ))}
                         </div>
                       }
                     />
                     <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
                       {(() => {
                         const entries = qualiSegments?.segments?.[activeSegment] ?? []
-                        const sc = activeSegment === 'Q1' ? '#3671C6' : activeSegment === 'Q2' ? C.gold : C.red
                         const cutoff = qualifyingAdvancePosition
                         return (
-                          <div style={{ minWidth: isMobile ? '700px' : 580 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 64px 64px 64px', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
-                              {['P', 'DRV', 'TEAM', 'TIME', 'S1', 'S2', 'S3'].map(h => (
-                                <span key={h} style={{ fontSize: 8, color: C.textDim, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', textAlign: ['TIME', 'S1', 'S2', 'S3'].includes(h) ? 'right' : 'left' }}>{h}</span>
+                          <div style={{ minWidth: 600 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '40px 56px 1fr 96px 72px 72px 72px', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                              {['Pos', 'Driver', 'Team', 'Time', 'S1', 'S2', 'S3'].map(h => (
+                                <span key={h} style={{ fontSize: 12, lineHeight: '16px', color: C.textMid, fontWeight: 500, textAlign: ['Time', 'S1', 'S2', 'S3'].includes(h) ? 'right' : 'left' }}>{h}</span>
                               ))}
                             </div>
                             {entries.map((entry, idx) => {
-                              const isFastest = idx === 0
                               const showCut = cutoff !== null && entry.position === cutoff
                               return (
                                 <div key={entry.driver_number}>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 1fr 84px 64px 64px 64px', gap: 4, alignItems: 'center', padding: '8px 8px', borderRadius: 10, background: isFastest ? `${sc}08` : 'transparent', opacity: entry.eliminated ? 0.45 : 1 }}>
-                                    <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: isFastest ? sc : C.textMid, fontWeight: isFastest ? 700 : 500 }}>P{entry.position}</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                      <div style={{ width: 3, height: 12, borderRadius: 2, background: `#${entry.team_colour}`, flexShrink: 0 }} />
-                                      <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: isFastest ? C.textBright : C.textSub, fontWeight: isFastest ? 700 : 500 }}>{entry.abbreviation}</span>
-                                    </div>
-                                    <span style={{ fontSize: 9, fontFamily: 'Inter, sans-serif', color: C.textMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.team_name}</span>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: isFastest ? C.textBright : C.textSub, fontWeight: isFastest ? 700 : 500 }}>{fmtMs(entry.lap_time_ms)}</div>
-                                      {entry.gap_ms > 0 && <div style={{ fontSize: 8, color: C.textDim, fontFamily: 'JetBrains Mono, monospace' }}>+{(entry.gap_ms / 1000).toFixed(3)}</div>}
-                                    </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '40px 56px 1fr 96px 72px 72px 72px', gap: 4, alignItems: 'center', padding: '8px 0', opacity: entry.eliminated ? 0.5 : 1, fontSize: 14, lineHeight: '20px', fontVariantNumeric: 'tabular-nums' }}>
+                                    <span style={{ color: C.textMid, fontWeight: idx === 0 ? 600 : 400 }}>{entry.position}</span>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: idx === 0 ? 600 : 500 }}>
+                                      <span style={{ width: 4, height: 16, borderRadius: 2, background: `#${entry.team_colour}` }} />{entry.abbreviation}
+                                    </span>
+                                    <span style={{ color: C.textMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.team_name}</span>
+                                    <span style={{ textAlign: 'right', fontWeight: idx === 0 ? 600 : 500 }}>
+                                      {fmtMs(entry.lap_time_ms)}
+                                      {entry.gap_ms > 0 && <span style={{ display: 'block', fontSize: 12, lineHeight: '16px', color: C.textDim, fontWeight: 400 }}>+{(entry.gap_ms / 1000).toFixed(3)}</span>}
+                                    </span>
                                     {(['s1_ms', 's2_ms', 's3_ms'] as const).map(sk => (
-                                      <span key={sk} style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textMid, textAlign: 'right' }}>{entry[sk] ? (entry[sk]! / 1000).toFixed(3) : '—'}</span>
+                                      <span key={sk} style={{ color: C.textMid, textAlign: 'right' }}>{entry[sk] ? (entry[sk]! / 1000).toFixed(3) : '—'}</span>
                                     ))}
                                   </div>
                                   {showCut && (
-                                    <div style={{ height: 1, background: C.red, opacity: 0.3, margin: '4px 0', position: 'relative' }}>
-                                      <span style={{ position: 'absolute', right: 0, top: -9, fontSize: 7, color: C.red, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, letterSpacing: '0.12em' }}>ELIMINATION ↓</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '16px', color: C.red, margin: '4px 0' }}>
+                                      <span style={{ flex: 1, height: 1, background: C.red, opacity: 0.3 }} />Elimination line
                                     </div>
                                   )}
                                 </div>
@@ -2175,21 +1693,13 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
                     </div>
                   </Panel>
                 )}
-
-                <QualiSpeedPanel sessionKey={sessionKey} />
+                {!isRaceSession(sessionType) && <QualiSpeedPanel sessionKey={sessionKey} />}
+                <LapTimeDistribution sessionKey={sessionKey} />
               </div>
-            </CollapsibleSection>)}
-              </>
             )}
-            <div style={{ marginTop: 24 }}>
-              <LapTimeDistribution sessionKey={sessionKey} />
-            </div>
           </div>
         )}
-
       </div>
-
-      <style>{`@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }`}</style>
     </div>
   )
 }

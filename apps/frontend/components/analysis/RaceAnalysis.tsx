@@ -133,8 +133,8 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '16px 18px 8px' }}>
-      <span style={{ fontSize: '14px', fontFamily: 'Inter, sans-serif', color: TEXT_DARK, fontWeight: 800 }}>{title}</span>
-      {subtitle && <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: TEXT_DIM }}>{subtitle}</span>}
+      <span style={{ fontSize: '14px', fontFamily: 'inherit', color: TEXT_DARK, fontWeight: 700 }}>{title}</span>
+      {subtitle && <span style={{ fontSize: '10px', fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: TEXT_DIM }}>{subtitle}</span>}
     </div>
   )
 }
@@ -605,9 +605,9 @@ export default function RaceAnalysis({
       <Card style={{ padding: '18px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: '11px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.14em', marginBottom: '8px' }}>RACE ANALYSIS</div>
+            <div style={{ fontSize: '11px', color: TEXT_DIM, fontFamily: 'inherit', letterSpacing: '0.14em', marginBottom: '8px' }}>RACE ANALYSIS</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '34px', lineHeight: 1, fontWeight: 900, color: TEXT_DARK, letterSpacing: '-0.04em' }}>Lap Evolution</span>
+              <span style={{ fontSize: '34px', lineHeight: 1, fontWeight: 700, color: TEXT_DARK, letterSpacing: '-0.04em' }}>Lap Evolution</span>
               <span style={{ fontSize: '12px', color: '#CC3648', fontWeight: 700, letterSpacing: '0.08em' }}>SESSION COMPLETE</span>
             </div>
             <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: TEXT_MID, fontWeight: 600 }}>
@@ -619,16 +619,16 @@ export default function RaceAnalysis({
             </div>
           </div>
           <div style={{ minWidth: isMobile ? '100%' : '280px', flex: isMobile ? '1 1 100%' : '1 1 320px', marginTop: isMobile ? '12px' : 0 }}>
-            <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'monospace', letterSpacing: '0.12em', marginBottom: '10px', textAlign: isMobile ? 'left' : 'right' }}>DRIVERS (MAX 4)</div>
+            <div style={{ fontSize: '10px', color: TEXT_DIM, fontFamily: 'inherit', letterSpacing: '0.12em', marginBottom: '10px', textAlign: isMobile ? 'left' : 'right' }}>DRIVERS (MAX 4)</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
           {allDrivers.map(d => {
             const isSel  = selected.includes(d.driver_number)
             const colour = teamColour(d.team_colour, d.team_name)
             return (
-              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '999px', cursor: 'pointer', transition: 'all 0.12s', border: isSel ? `1.5px solid ${colour}` : `1px solid ${BORDER}`, background: isSel ? `${colour}12` : 'rgba(255,255,255,0.72)', color: isSel ? TEXT_DARK : TEXT_MID, fontSize: '12px', fontWeight: isSel ? 800 : 600, fontFamily: 'Inter, sans-serif', boxShadow: isSel ? `0 8px 24px ${colour}12` : 'none' }}>
+              <button key={d.driver_number} onClick={() => toggleDriver(d.driver_number)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '999px', cursor: 'pointer', transition: 'all 0.12s', border: isSel ? `1.5px solid ${colour}` : `1px solid ${BORDER}`, background: isSel ? `${colour}12` : 'rgba(255,255,255,0.72)', color: isSel ? TEXT_DARK : TEXT_MID, fontSize: '12px', fontWeight: isSel ? 800 : 600, fontFamily: 'inherit', boxShadow: isSel ? `0 8px 24px ${colour}12` : 'none' }}>
                 <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
                 {d.abbreviation}
-                {isSel && <span style={{ color: colour, fontSize: '10px', fontWeight: 900 }}>×</span>}
+                {isSel && <span style={{ color: colour, fontSize: '10px', fontWeight: 700 }}>×</span>}
               </button>
             )
           })}
@@ -639,13 +639,13 @@ export default function RaceAnalysis({
           {Object.entries(COMPOUND_COLOUR).map(([c, col]) => (
             <div key={c} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: col }} />
-              <span style={{ fontSize: '10px', fontFamily: 'monospace', color: TEXT_DIM }}>{c}</span>
+              <span style={{ fontSize: '10px', fontFamily: 'inherit', color: TEXT_DIM }}>{c}</span>
             </div>
           ))}
         </div>
       </Card>
 
-      {loading && <div style={{ textAlign: 'center', padding: '48px', color: TEXT_DIM, fontFamily: 'monospace' }}>Loading race data...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: TEXT_DIM, fontFamily: 'inherit' }}>Loading race data...</div>}
 
       {!loading && (
         <>
@@ -656,7 +656,7 @@ export default function RaceAnalysis({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', padding: '18px 20px 8px', flexWrap: 'wrap' }}>
                     <SectionTitle title="Lap Time Evolution" subtitle="Selected drivers · pit laps excluded · compound markers on traces" />
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <div style={{ padding: '7px 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.86)', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 800, color: TEXT_DARK }}>LAPS 1–{Math.min(15, maxLap)}</div>
+                      <div style={{ padding: '7px 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.86)', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 700, color: TEXT_DARK }}>LAPS 1–{Math.min(15, maxLap)}</div>
                       <div style={{ padding: '7px 12px', borderRadius: '999px', background: '#EEF3FB', border: `1px solid ${BORDER}`, fontSize: '11px', fontWeight: 700, color: TEXT_DIM }}>FULL SESSION</div>
                     </div>
                   </div>
@@ -667,7 +667,7 @@ export default function RaceAnalysis({
               </div>
               {lapTip && (
                 <TooltipCard anchorRef={lapCardRef} canvasOffsetX={lapTipXY.x} canvasOffsetY={lapTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {lapTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {lapTip.entries.map((entry: any) => {
                     const compCol = COMPOUND_COLOUR[entry.compound ?? ''] ?? '#555'
@@ -675,17 +675,17 @@ export default function RaceAnalysis({
                       <div key={entry.abbr} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}>
                         <div style={{ width: '3px', minHeight: '44px', borderRadius: '2px', background: entry.colour, flexShrink: 0, marginTop: '2px' }} />
                         <div>
-                          <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'monospace', fontWeight: 700 }}>
+                          <div style={{ fontSize: '10px', color: entry.colour, fontFamily: 'inherit', fontWeight: 700 }}>
                             {entry.abbr}{entry.position !== null && <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 400, marginLeft: '6px' }}>P{entry.position}</span>}
                           </div>
                           {entry.lap_time_ms === null
-                            ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'monospace', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
-                            : <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
+                            ? <div style={{ display: 'inline-block', marginTop: '2px', fontSize: '10px', fontFamily: 'inherit', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#E8002D22', color: '#E8002D', border: '1px solid #E8002D44' }}>PIT</div>
+                            : <div style={{ fontSize: '15px', fontFamily: 'inherit', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.2 }}>{formatLapTime(entry.lap_time_ms)}</div>
                           }
                           {entry.compound && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                              <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compCol }}>● {entry.compound}</span>
-                              {entry.tyre_changed && <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, padding: '1px 4px', borderRadius: '4px', background: compCol + '33', color: '#E8002D' }}>PIT</span>}
+                              <span style={{ fontSize: '9px', fontFamily: 'inherit', color: compCol }}>● {entry.compound}</span>
+                              {entry.tyre_changed && <span style={{ fontSize: '10px', fontFamily: 'inherit', fontWeight: 700, padding: '1px 4px', borderRadius: '4px', background: compCol + '33', color: '#E8002D' }}>PIT</span>}
                             </div>
                           )}
                         </div>
@@ -707,14 +707,14 @@ export default function RaceAnalysis({
               </div>
               {gapTip && (
                 <TooltipCard anchorRef={gapCardRef} canvasOffsetX={gapTipXY.x} canvasOffsetY={gapTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {gapTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {gapTip.entries.map((e: any) => (
                     <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                        <div style={{ fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>
+                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'inherit', fontWeight: 700 }}>{e.abbr}</div>
+                        <div style={{ fontSize: '14px', fontFamily: 'inherit', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>
                           {e.gap_s === null ? '—' : e.gap_s === 0 ? 'LEADER' : `+${e.gap_s.toFixed(3)}s`}
                         </div>
                       </div>
@@ -735,14 +735,14 @@ export default function RaceAnalysis({
               </div>
               {posTip && (
                 <TooltipCard anchorRef={posCardRef} canvasOffsetX={posTipXY.x} canvasOffsetY={posTipXY.y + 46}>
-                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'inherit', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '8px' }}>LAP {posTip.lap}</div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {posTip.entries.map((e: any) => (
                     <div key={e.abbr} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <div style={{ width: '3px', height: '24px', borderRadius: '2px', background: e.colour, flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'monospace', fontWeight: 700 }}>{e.abbr}</div>
-                        <div style={{ fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
+                        <div style={{ fontSize: '10px', color: e.colour, fontFamily: 'inherit', fontWeight: 700 }}>{e.abbr}</div>
+                        <div style={{ fontSize: '15px', fontFamily: 'inherit', color: '#FFFFFF', fontWeight: 700, lineHeight: 1.1 }}>{e.position !== null ? `P${e.position}` : '—'}</div>
                       </div>
                     </div>
                   ))}
@@ -757,8 +757,8 @@ export default function RaceAnalysis({
                   <div style={{ marginTop: '14px', padding: '18px', borderRadius: '20px', background: 'linear-gradient(180deg, #16243D 0%, #101A2D 100%)', color: '#fff', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                       <div>
-                        <div style={{ fontSize: '12px', fontFamily: 'monospace', letterSpacing: '0.08em', color: '#' + overallFastest.team_colour }}>{overallFastest.abbreviation}</div>
-                        <div style={{ fontSize: isMobile ? '28px' : '40px', lineHeight: 1.02, fontWeight: 900, letterSpacing: '-0.05em', marginTop: '8px' }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
+                        <div style={{ fontSize: '12px', fontFamily: 'inherit', letterSpacing: '0.08em', color: '#' + overallFastest.team_colour }}>{overallFastest.abbreviation}</div>
+                        <div style={{ fontSize: isMobile ? '28px' : '40px', lineHeight: 1.02, fontWeight: 700, letterSpacing: '-0.05em', marginTop: '8px' }}>{formatLapTime(overallFastest.lap_time_ms)}</div>
                       </div>
                       <div style={{ padding: '6px 10px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', fontSize: '11px', fontWeight: 700, color: '#B7C4DD' }}>LAP {overallFastest.lap_number}</div>
                     </div>
@@ -779,15 +779,15 @@ export default function RaceAnalysis({
                       const colour = '#' + fl.team_colour
                       return (
                         <div key={fl.driver_number + '-' + fl.lap_number} style={{ display: 'grid', gridTemplateColumns: '26px 44px 1fr auto', gap: '10px', alignItems: 'center', padding: '12px 14px', background: i === 0 ? '#FFF4F5' : '#F8FBFF', border: `1px solid ${i === 0 ? '#F3D2D8' : BORDER}`, borderRadius: '14px' }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: TEXT_DIM }}>P{i + 1}</span>
-                          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: colour, fontWeight: 800 }}>{fl.abbreviation}</span>
+                          <span style={{ fontSize: '11px', fontFamily: 'inherit', color: TEXT_DIM }}>P{i + 1}</span>
+                          <span style={{ fontSize: '12px', fontFamily: 'inherit', color: colour, fontWeight: 700 }}>{fl.abbreviation}</span>
                           <div style={{ fontSize: '11px', color: TEXT_MID }}>
                             Lap {fl.lap_number}
                             {fl.compound ? <span style={{ marginLeft: '8px', color: COMPOUND_COLOUR[fl.compound] ?? TEXT_DIM }}>● {fl.compound}</span> : null}
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '18px', fontFamily: 'monospace', color: i === 0 ? '#CC3648' : TEXT_DARK, fontWeight: 800 }}>{formatLapTime(fl.lap_time_ms)}</div>
-                            {i > 0 && <div style={{ fontSize: '10px', fontFamily: 'monospace', color: '#CC3648' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</div>}
+                            <div style={{ fontSize: '18px', fontFamily: 'inherit', color: i === 0 ? '#CC3648' : TEXT_DARK, fontWeight: 700 }}>{formatLapTime(fl.lap_time_ms)}</div>
+                            {i > 0 && <div style={{ fontSize: '10px', fontFamily: 'inherit', color: '#CC3648' }}>+{(fl.gap_ms / 1000).toFixed(3)}s</div>}
                           </div>
                         </div>
                       )
@@ -808,13 +808,13 @@ export default function RaceAnalysis({
                       const isLeader = d.position === 1
                       return (
                         <div key={d.driver_number} style={{ display: 'grid', gridTemplateColumns: '24px 8px 36px 1fr auto', gap: '10px', alignItems: 'center', padding: '9px 10px', borderRadius: '12px', background: isSel ? `${colour}10` : '#FAFCFF', border: `1px solid ${isSel ? `${colour}30` : BORDER}` }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700, textAlign: 'right' }}>{d.position}</span>
+                          <span style={{ fontSize: '11px', fontFamily: 'inherit', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700, textAlign: 'right' }}>{d.position}</span>
                           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: colour, display: 'inline-block' }} />
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: isSel ? colour : TEXT_MID, fontWeight: 800 }}>{d.abbreviation}</span>
+                          <span style={{ fontSize: '11px', fontFamily: 'inherit', color: isSel ? colour : TEXT_MID, fontWeight: 700 }}>{d.abbreviation}</span>
                           <div style={{ height: '5px', background: '#E7EEF8', borderRadius: '999px', overflow: 'hidden' }}>
                             {d.gap !== null && d.gap > 0 && <div style={{ width: `${Math.min(100, (d.gap / 60) * 100)}%`, height: '100%', background: colour, borderRadius: '999px' }} />}
                           </div>
-                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700 }}>{isLeader ? 'LEADER' : d.gap !== null ? `+${d.gap.toFixed(1)}s` : '—'}</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'inherit', color: isLeader ? '#C69214' : TEXT_DIM, fontWeight: 700 }}>{isLeader ? 'LEADER' : d.gap !== null ? `+${d.gap.toFixed(1)}s` : '—'}</span>
                         </div>
                       )
                     })}
@@ -840,26 +840,26 @@ export default function RaceAnalysis({
                       <div style={{ width: '3px', height: '52px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{u.abbreviation}</span>
-                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: TEXT_DIM }}>Pit lap {u.pit_lap}</span>
+                          <span style={{ fontSize: '11px', fontFamily: 'inherit', color: colour, fontWeight: 700 }}>{u.abbreviation}</span>
+                          <span style={{ fontSize: '9px', fontFamily: 'inherit', color: TEXT_DIM }}>Pit lap {u.pit_lap}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
-                            <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compInCol }}>● {u.compound_in?.slice(0,1) ?? '?'}</span>
+                            <span style={{ fontSize: '9px', fontFamily: 'inherit', color: compInCol }}>● {u.compound_in?.slice(0,1) ?? '?'}</span>
                             <span style={{ fontSize: '9px', color: TEXT_DIM }}>→</span>
-                            <span style={{ fontSize: '9px', fontFamily: 'monospace', color: compOutCol }}>● {u.compound_out?.slice(0,1) ?? '?'}</span>
-                            {u.tyre_life_laps !== null && <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'monospace' }}>({u.tyre_life_laps}L in)</span>}
+                            <span style={{ fontSize: '9px', fontFamily: 'inherit', color: compOutCol }}>● {u.compound_out?.slice(0,1) ?? '?'}</span>
+                            {u.tyre_life_laps !== null && <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'inherit' }}>({u.tyre_life_laps}L in)</span>}
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: TEXT_MID }}>P{u.pos_before ?? '?'}</span>
+                          <span style={{ fontSize: '13px', fontFamily: 'inherit', color: TEXT_MID }}>P{u.pos_before ?? '?'}</span>
                           <span style={{ fontSize: '10px', color: TEXT_DIM }}>→</span>
-                          <span style={{ fontSize: '13px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700 }}>P{u.pos_after ?? '?'}</span>
+                          <span style={{ fontSize: '13px', fontFamily: 'inherit', color: TEXT_DARK, fontWeight: 700 }}>P{u.pos_after ?? '?'}</span>
                           {u.pos_before !== null && u.pos_after !== null && (
-                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: posGain > 0 ? '#2CF4C5' : posGain < 0 ? '#E8002D' : '#71717A', fontWeight: 700 }}>
+                            <span style={{ fontSize: '11px', fontFamily: 'inherit', color: posGain > 0 ? '#2CF4C5' : posGain < 0 ? '#E8002D' : '#71717A', fontWeight: 700 }}>
                               {posGain > 0 ? `+${posGain}` : posGain < 0 ? `${posGain}` : '±0'}
                             </span>
                           )}
                           <div style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: '4px', background: vs.bg, border: `1px solid ${vs.border}` }}>
-                            <span style={{ fontSize: '9px', fontFamily: 'monospace', color: vs.text, fontWeight: 700 }}>{vs.label}</span>
+                            <span style={{ fontSize: '9px', fontFamily: 'inherit', color: vs.text, fontWeight: 700 }}>{vs.label}</span>
                           </div>
                         </div>
                       </div>
@@ -885,15 +885,15 @@ export default function RaceAnalysis({
                       <div style={{ width: '3px', height: '44px', borderRadius: '2px', background: colour, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: colour, fontWeight: 700 }}>{s.abbreviation}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: TEXT_DIM }}>Stint {s.stint}</span>
-                          <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: compColour + '22', color: compColour, fontFamily: 'monospace', fontWeight: 700 }}>{s.compound}</span>
-                          <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'monospace', marginLeft: 'auto' }}>L{s.start_lap}–{s.end_lap} · {s.clean_laps} laps</span>
+                          <span style={{ fontSize: '11px', fontFamily: 'inherit', color: colour, fontWeight: 700 }}>{s.abbreviation}</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'inherit', color: TEXT_DIM }}>Stint {s.stint}</span>
+                          <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: compColour + '22', color: compColour, fontFamily: 'inherit', fontWeight: 700 }}>{s.compound}</span>
+                          <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: 'inherit', marginLeft: 'auto' }}>L{s.start_lap}–{s.end_lap} · {s.clean_laps} laps</span>
                         </div>
                         <div style={{ display: 'flex', gap: '20px', alignItems: 'baseline' }}>
-                          <span style={{ fontSize: '15px', fontFamily: 'monospace', color: TEXT_DARK, fontWeight: 700 }}>{formatLapTime(parseFloat(s.avg_ms))}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: degColour }}>{degVal >= 0 ? '+' : ''}{degVal.toFixed(0)} ms/lap</span>
-                          <span style={{ fontSize: '9px', fontFamily: 'monospace', color: TEXT_DIM }}>best {formatLapTime(s.best_ms)}</span>
+                          <span style={{ fontSize: '15px', fontFamily: 'inherit', color: TEXT_DARK, fontWeight: 700 }}>{formatLapTime(parseFloat(s.avg_ms))}</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'inherit', color: degColour }}>{degVal >= 0 ? '+' : ''}{degVal.toFixed(0)} ms/lap</span>
+                          <span style={{ fontSize: '9px', fontFamily: 'inherit', color: TEXT_DIM }}>best {formatLapTime(s.best_ms)}</span>
                         </div>
                       </div>
                     </div>

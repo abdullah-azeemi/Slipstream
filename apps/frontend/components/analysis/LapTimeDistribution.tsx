@@ -172,7 +172,7 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
         splitLine: { show: false },
         axisLabel: {
           color: C.textBright,
-          fontFamily: 'JetBrains Mono, monospace',
+          fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
           fontSize: 12,
           fontWeight: 700,
           formatter: (v: number) => {
@@ -189,8 +189,8 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
         splitLine: { lineStyle: { color: '#EEF1F6', type: 'dashed' } },
         axisLabel: {
           color: C.textDim,
-          fontFamily: 'JetBrains Mono, monospace',
-          fontSize: 10,
+          fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
+          fontSize: 12,
           formatter: (v: number) => {
             const mins = Math.floor(v / 60)
             const secs = (v % 60).toFixed(3).padStart(6, '0')
@@ -249,14 +249,14 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
   if (loading) {
     return (
       <div style={{ padding: 20, border: `1px solid ${C.border}`, borderRadius: 18, background: C.surface }}>
-        <div style={{ fontSize: 11, color: C.textDim, fontFamily: 'Inter, sans-serif' }}>Loading lap data...</div>
+        <div style={{ fontSize: 12, color: C.textDim, fontFamily: 'inherit' }}>Loading lap data...</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ padding: 20, border: '1px solid #FECACA', borderRadius: 18, background: '#FEF2F2', color: '#B91C1C', fontFamily: 'Inter, sans-serif', fontSize: 11 }}>
+      <div style={{ padding: 20, border: '1px solid #FECACA', borderRadius: 18, background: '#FEF2F2', color: '#B91C1C', fontFamily: 'inherit', fontSize: 12 }}>
         {error}
       </div>
     )
@@ -266,10 +266,10 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(19,35,61,0.04)' }}>
       <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 14, fontFamily: 'Inter, sans-serif', fontWeight: 800, color: C.textBright }}>
+          <div style={{ fontSize: 14, fontFamily: 'inherit', fontWeight: 700, color: C.textBright }}>
             Lap Time Distribution
           </div>
-          <div style={{ fontSize: 11, fontFamily: 'Inter, sans-serif', color: C.textMid, marginTop: 2, lineHeight: 1.5, maxWidth: 420 }}>
+          <div style={{ fontSize: 12, fontFamily: 'inherit', color: C.textMid, marginTop: 2, lineHeight: 1.5, maxWidth: 420 }}>
             All race laps grouped by driver. Hover for details.
           </div>
         </div>
@@ -278,7 +278,7 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
       <div style={{ padding: 18 }}>
         {allDrivers.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.08em', color: C.textDim, textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>
+            <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.08em', color: C.textDim, textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>
               Drivers
             </span>
             {allDrivers.map(d => {
@@ -298,8 +298,8 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
                     border: `1px solid ${active ? colour : C.border}`,
                     background: active ? colour + '15' : C.surfaceAlt,
                     color: active ? colour : C.textMid,
-                    fontSize: 10,
-                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: 12,
+                    fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
                     fontWeight: 700,
                     cursor: 'pointer',
                   }}
@@ -318,7 +318,7 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
             opts={{ renderer: 'svg' }}
           />
         ) : (
-          <div style={{ padding: '40px 20px', textAlign: 'center', fontSize: 11, color: C.textDim, fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ padding: '40px 20px', textAlign: 'center', fontSize: 12, color: C.textDim, fontFamily: 'inherit' }}>
             {allDrivers.length === 0 ? 'No lap data available' : 'Select up to 4 drivers above'}
           </div>
         )}
@@ -329,9 +329,9 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
               const colour = s.colour?.startsWith('#') ? s.colour : `#${s.colour ?? '666'}`
               return (
                 <div key={s.dn} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 12px', background: C.surfaceAlt, minWidth: 140 }}>
-                  <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: colour, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', fontWeight: 700, color: colour, marginBottom: 4 }}>
                     {s.abbr}
-                    <span style={{ fontWeight: 400, color: C.textDim, fontSize: 9, marginLeft: 4 }}>
+                    <span style={{ fontWeight: 400, color: C.textDim, fontSize: 12, marginLeft: 4 }}>
                       ({s.count} laps)
                     </span>
                   </div>
@@ -346,13 +346,13 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
         )}
 
         <div style={{ marginTop: 12, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 9, fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.08em', color: C.textDim, textTransform: 'uppercase' }}>
+          <span style={{ fontSize: 12, fontFamily: 'inherit', fontWeight: 600, letterSpacing: '0.08em', color: C.textDim, textTransform: 'uppercase' }}>
             Compound
           </span>
           {Object.entries(COMPOUND_COLOURS).filter(([k]) => ['SOFT', 'MEDIUM', 'HARD', 'INTER', 'WET'].includes(k)).map(([compound, colour]) => (
             <div key={compound} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: colour, border: compound === 'HARD' ? '1px solid #CCC' : 'none' }} />
-              <span style={{ fontSize: 10, fontFamily: 'Inter, sans-serif', color: C.textMid }}>
+              <span style={{ fontSize: 12, fontFamily: 'inherit', color: C.textMid }}>
                 {compound.charAt(0) + compound.slice(1).toLowerCase()}
               </span>
             </div>
@@ -365,7 +365,7 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: C.textMid, lineHeight: 1.6 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, fontFamily: 'var(--font-geist-mono), ui-monospace, monospace', color: C.textMid, lineHeight: 1.6 }}>
       <span style={{ color: C.textDim }}>{label}</span>
       <span style={{ fontWeight: 600, color: C.textBright }}>{value}</span>
     </div>
