@@ -714,3 +714,6 @@
   .lp .pred-grid, .lp .pred-podium { grid-template-columns: 1fr; }
   .lp .steps { grid-template-columns: 1fr; }
 }
+
+.lp .chips { display: flex; flex-wrap: wrap; gap: var(--sp-75); margin-top: var(--sp-100); }
+.lp a.chip:hover { color: var(--lp-text); border-color: var(--lp-text); }

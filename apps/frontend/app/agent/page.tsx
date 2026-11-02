@@ -477,66 +477,37 @@ export default function AgentPage() {
   // ── Sidebar content (shared between desktop and mobile drawer) ──────────────
   const SidebarContent = (
     <div className="flex h-full flex-col bg-white">
-      {/* Top logo */}
-      <div className="p-6 flex items-center gap-4 border-b border-slate-100">
-        <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold text-sm">S</div>
-        <div>
-          <div className="text-[13px] font-extrabold tracking-[0.1em] text-black flex items-center gap-2">
-            SLIPSTREAM <span className="text-[8px] font-bold px-1.5 py-0.5 border border-slate-200 rounded text-slate-500">PRO</span>
-          </div>
-          <div className="text-[9px] text-slate-400 font-bold tracking-[0.15em] mt-0.5">TELEMETRY AGENT V2.4</div>
-        </div>
-      </div>
-
-      <div className="px-5 pt-6 pb-4">
-        <button className="w-full bg-[#1A1A1A] text-white rounded-lg flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-black transition-colors" onClick={newConversation}>
-          <div className="flex items-center gap-2 text-xs font-semibold"><Plus className="w-4 h-4 text-rose-500" /> New Pit Wall Inquiry</div>
-          <div className="text-[10px] text-slate-400 font-mono bg-white/10 px-1.5 py-0.5 rounded">⌘N</div>
+      <div className="px-5 pt-5 pb-4">
+        <button
+          className="w-full bg-black text-white rounded-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+          onClick={newConversation}
+        >
+          <Plus className="w-4 h-4" /> New conversation
         </button>
       </div>
 
-      <div className="px-5 pb-6">
-        <div className="relative">
-          <input type="text" placeholder="Search telemetries & logs..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 placeholder-slate-400 focus:outline-none focus:border-rose-400" />
-          <div className="absolute left-3 top-2.5"><Search className="w-4 h-4 text-slate-400" /></div>
-          <div className="absolute right-3 top-2.5"><div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">⌘K</div></div>
-        </div>
-      </div>
-
-      <div className="px-3 space-y-1">
-        <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-rose-50/50 text-rose-600 font-semibold text-xs border border-rose-100/50">
-          <div className="flex items-center gap-2"><Zap className="w-4 h-4" /> Live Strategy Orchestrator</div>
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2.5 text-slate-500 font-medium text-xs hover:bg-slate-50 rounded-lg cursor-pointer">
-          <History className="w-4 h-4 text-slate-400" /> Historical FIA Archive
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2.5 text-slate-500 font-medium text-xs hover:bg-slate-50 rounded-lg cursor-pointer">
-          <ShieldCheck className="w-4 h-4 text-slate-400" /> Deterministic Evidence Gate
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-6 mt-2">
-        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Today's Sessions</div>
-        <div className="space-y-1 mb-8">
-           <div className="text-xs text-black font-semibold px-2 py-1.5 bg-rose-50/50 border border-rose-100/50 rounded flex items-center gap-2 cursor-pointer"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Sainz pit telemetry · Monaco 2026</div>
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Hamilton vs Russell S2 delta</div>
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Silverstone crossover lap 32 forecast</div>
-        </div>
-        
-        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Yesterday</div>
-        <div className="space-y-1 mb-8">
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Leclerc apex speed comparison T3</div>
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Red Bull front wing aero wake balance</div>
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Verstappen pit stop stationary vs in-lap</div>
-        </div>
-
-        <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-4">Prior Grands Prix</div>
-        <div className="space-y-1 mb-8">
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Miami DRS train degradation model</div>
-           <div className="text-xs font-medium text-slate-500 px-3 py-1.5 hover:text-black cursor-pointer">Spa-Francorchamps Eau Rouge vMin</div>
-        </div>
-      </div>
+      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Conversations">
+        <div className="px-3 pb-2 text-xs font-medium text-slate-500">Conversations</div>
+        {conversations.length === 0 ? (
+          <p className="px-3 text-xs leading-5 text-slate-500">No conversations yet. Ask a question to start one.</p>
+        ) : (
+          <ul className="space-y-1">
+            {conversations.map(c => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => loadConversation(c.id)}
+                  aria-current={conversationId === c.id ? 'true' : undefined}
+                  className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${conversationId === c.id ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="truncate text-sm font-medium text-slate-900">{c.title ?? 'Untitled conversation'}</div>
+                  <div className="truncate text-xs text-slate-500">{c.last_message_preview ?? `${c.message_count} messages`}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </nav>
 
       <div className="mx-5 mb-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
         <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
@@ -559,16 +530,15 @@ export default function AgentPage() {
             <UserButton appearance={{ elements: { avatarBox: 'h-8 w-8' } }} />
             <div>
                <div className="max-w-[150px] truncate text-xs font-bold text-black">{strategistName}</div>
-               <div className="text-[10px] text-slate-400 font-mono mt-0.5">Strategy desk</div>
+               <div className="text-xs text-slate-500">Pitwall agent</div>
             </div>
          </div>
-         <Radio className="w-4 h-4 text-slate-300" />
       </div>
     </div>
   )
 
   return (
-    <div className="agent-page-root flex h-screen w-full bg-[#FDFDFD] text-slate-900 font-sans overflow-hidden">
+    <div className="agent-page-root flex h-[calc(100vh-72px)] w-full bg-[#FDFDFD] text-slate-900 font-sans overflow-hidden">
       
       {/* ── Mobile sidebar drawer overlay ──────────── */}
       {sidebarOpen && (
@@ -600,26 +570,16 @@ export default function AgentPage() {
       <section className="flex flex-col flex-1 bg-[#FAFAFA] min-w-0 h-full relative">
         
         {/* Topbar */}
-        <div className="h-16 px-8 border-b border-slate-100 flex items-center justify-between bg-white shrink-0 absolute top-0 left-0 right-0 z-20">
-           <div className="flex items-center gap-6">
-              <button onClick={() => setSidebarOpen(true)} className="sm:hidden p-1 -ml-2"><Menu className="w-5 h-5 text-slate-500" /></button>
-              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.1em] text-black">
-                 <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
-                 STRATEGY_BOT // ACTIVE SESSION
-              </div>
-              <div className="w-px h-4 bg-slate-200 hidden sm:block"></div>
-              <div className="text-xs text-slate-500 font-medium hidden sm:block">2026 Monaco Grand Prix</div>
-           </div>
-           <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-50 shadow-sm transition-colors">
-                 <Download className="w-3.5 h-3.5" />
-                 <span className="hidden sm:inline">Export Stint Data</span>
-              </button>
+        <div className="h-14 px-4 sm:px-8 border-b border-slate-100 flex items-center justify-between bg-white shrink-0 absolute top-0 left-0 right-0 z-20">
+           <div className="flex items-center gap-4">
+              <button onClick={() => setSidebarOpen(true)} className="sm:hidden p-2 -ml-2" aria-label="Open conversations"><Menu className="w-5 h-5 text-slate-500" /></button>
+              <h1 className="text-sm font-semibold text-black">Pitwall agent</h1>
+              <span className="hidden sm:inline text-xs text-slate-500">Answers come from read only analysis tools, with the evidence shown.</span>
            </div>
         </div>
 
         {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto pt-16 pb-32 scroll-smooth" ref={chatScrollRef}>
+        <div className="flex-1 overflow-y-auto pt-14 pb-32 scroll-smooth" ref={chatScrollRef}>
             
             {/* Idle State */}
             {turns.length === 0 && !loadingQuestion && (
@@ -631,8 +591,8 @@ export default function AgentPage() {
                  </div>
                  
                  <h1 className="text-[44px] text-center mb-5 text-black tracking-tight leading-tight">
-                    <span className="font-serif text-slate-700">Hello, </span>
-                    <span className="font-serif italic text-slate-800">{strategistName}</span>
+                    <span className="font-semibold text-slate-700">Hello, </span>
+                    <span className="font-semibold text-slate-800">{strategistName}</span>
                     <br />
                     <span className="font-medium text-slate-900">How can the pit wall assist you today?</span>
                  </h1>

@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 
+import { ArrowLeft, ArrowRight } from '@phosphor-icons/react/dist/ssr'
+import '@/components/landing/landing.css'
+import { geist } from '@/components/landing/font'
 import CardSection from '@/components/race/CardSection'
 import RacePacePanel from '@/components/race/RacePacePanel'
 import type { ChartDriver, PitWindow } from '@/components/race/LapEvolutionChart'
@@ -27,8 +30,6 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const RACE_LIKE = ['R', 'S'] as const
 const QUALI_LIKE = ['Q', 'SQ'] as const
-const SERIF = 'inherit'
-const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 const PALETTE = ['#0D9488', '#DC2626', '#1D4ED8', '#64748B']
 const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 
@@ -108,13 +109,6 @@ type SessionRef = {
   source: 'current' | 'reference' | 'none'
 }
 
-const eyebrow = {
-  fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: '#9CA3AF',
-} as const
 
 async function fetchJson<T>(path: string, revalidateSeconds = 60, token?: string): Promise<T | null> {
   try {
@@ -210,42 +204,36 @@ function buildPitWindows(drivers: ChartDriver[]): PitWindow[] {
 
 function Empty({ message }: { message: string }) {
   return (
-    <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: '28px 20px', textAlign: 'center', color: '#6B7280', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.6 }}>
-      {message}
+    <div className="empty">
+      <p className="body-6">{message}</p>
     </div>
   )
 }
 
 function EnvCard({ session, round }: { session: LocalSession | null; round: number }) {
   const rows: Array<[string, string]> = [
-    ['Track Temp', session?.track_temp_c != null ? `${session.track_temp_c}°C` : '—'],
-    ['Air Temp', session?.air_temp_c != null ? `${session.air_temp_c}°C` : '—'],
+    ['Track temperature', session?.track_temp_c != null ? `${session.track_temp_c}°C` : '—'],
+    ['Air temperature', session?.air_temp_c != null ? `${session.air_temp_c}°C` : '—'],
     ['Humidity', session?.humidity_pct != null ? `${session.humidity_pct}%` : '—'],
-    ['Surface', session?.rainfall != null ? (session.rainfall ? 'WET' : 'DRY') : '—'],
+    ['Surface', session?.rainfall != null ? (session.rainfall ? 'Wet' : 'Dry') : '—'],
     ['Wind', session?.wind_speed_ms != null ? `${session.wind_speed_ms} m/s` : '—'],
     ['Round', String(round).padStart(2, '0')],
   ]
   return (
-    <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 20, padding: 18, minWidth: 300 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <div style={{ ...eyebrow }}>Session Environment</div>
-        <span style={{
-          padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
-          textTransform: 'uppercase', background: session ? 'rgba(13,148,136,0.1)' : 'rgba(148,163,184,0.12)',
-          color: session ? '#0F766E' : '#64748B', fontFamily: MONO,
-        }}>
-          {session ? 'Official Classified' : 'Pending Ingest'}
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+    <section className="panel" aria-label="Session conditions">
+      <p className="caption-1" style={{ justifyContent: 'space-between' }}>
+        <span>Session conditions</span>
+        <span className="tag">{session ? 'Classified' : 'Waiting for data'}</span>
+      </p>
+      <div className="metric-grid" style={{ marginTop: 'var(--sp-100)' }}>
         {rows.map(([label, value]) => (
-          <div key={label} style={{ padding: '10px 12px', borderRadius: 12, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', fontFamily: MONO }}>{value}</div>
+          <div key={label} className="metric">
+            <div className="v">{value}</div>
+            <div className="l">{label}</div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -257,43 +245,35 @@ function PodiumCard({ position, result, index, winnerBest }: {
 }) {
   if (!result) {
     return (
-      <div style={{ border: '1px dashed #D1D5DB', borderRadius: 16, padding: 14, flex: 1, minWidth: 140 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#9CA3AF', fontFamily: MONO }}>{position} — {POINTS[index]} PTS</div>
-        <div style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF' }}>Awaiting data</div>
+      <div className="card" style={{ flex: 1, minWidth: 160 }}>
+        <div className="caption-4 muted">{position}, {POINTS[index]} points</div>
+        <div className="body-6 muted">Waiting for data</div>
       </div>
     )
   }
-  const isFirst = index === 0
   const accent = teamColour(result.team_colour, result.team_name)
   const gap = index === 0 ? null : formatGapLike(result, index)
   return (
-    <div style={{
-      border: `1px solid ${isFirst ? '#0D9488' : '#E5E7EB'}`,
-      borderRadius: 16, padding: 14, flex: 1, minWidth: 140,
-      background: isFirst ? 'linear-gradient(180deg, rgba(13,148,136,0.05), rgba(255,255,255,0))' : '#FFFFFF',
-    }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: isFirst ? '#0F766E' : '#111827', fontFamily: MONO }}>
-        {position} — {POINTS[index]} PTS
+    <div className="card" style={{ flex: 1, minWidth: 160 }}>
+      <div className="caption-4 muted">{position}, {POINTS[index]} points</div>
+      <div className="heading-5" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-100)' }}>
+        <span style={{ width: 4, height: 24, borderRadius: 2, background: accent }} aria-hidden="true" />
+        {result.abbreviation}
       </div>
-      <div style={{ fontSize: 12, color: '#6B7280', fontFamily: 'inherit', fontWeight: 600, marginTop: 12 }}>{result.team_name}</div>
-      <div style={{ margin: '3px 0 8px', fontSize: 18, fontWeight: 600, color: '#111827', fontFamily: SERIF }}>{result.abbreviation}</div>
-      {gap != null && (
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: accent, fontFamily: MONO }}>{gap}</div>
-      )}
-      <div style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF', fontFamily: MONO }}>
-        Best Lap: {formatLapTime(result.best_lap_ms ?? winnerBest)}
-      </div>
+      <div className="body-6">{result.team_name}</div>
+      {gap != null && <div className="body-5" style={{ fontVariantNumeric: 'tabular-nums' }}>{gap}</div>}
+      <div className="caption-4 muted" style={{ fontVariantNumeric: 'tabular-nums' }}>Best lap {formatLapTime(result.best_lap_ms ?? winnerBest)}</div>
     </div>
   )
 }
 
 function BenchmarkRow({ label, value, caption }: { label: string; value: string; caption: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: '11px 0', borderBottom: '1px solid #F3F4F6' }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', fontFamily: 'inherit' }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: '12px 0', borderBottom: '1px solid var(--lp-border)' }}>
+      <span className="body-5 muted">{label}</span>
       <span style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: '#111827', fontFamily: MONO, display: 'block' }}>{value}</span>
-        <span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'inherit', marginTop: 2, display: 'block' }}>{caption}</span>
+        <span className="title-3" style={{ display: 'block', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+        <span className="caption-4 muted" style={{ display: 'block' }}>{caption}</span>
       </span>
     </div>
   )
@@ -307,67 +287,39 @@ type RaceTableRow = RaceResult & {
 
 function ClassificationTable({ rows }: { rows: RaceTableRow[] }) {
   return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 700 }}>
+    <div className="viz-scroll">
+      <table className="data-table" style={{ minWidth: 700 }}>
         <thead>
-          <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
-            {['POS', 'Driver', 'Team', 'Laps', 'Gap', 'Best Lap', 'Tyres', 'Pts'].map(h => (
-              <th
-                key={h}
-                style={{
-                  textAlign: h === 'POS' ? 'center' : h === 'Driver' ? 'left' : 'right',
-                  padding: '10px 10px', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-                  textTransform: 'uppercase', color: '#9CA3AF', fontFamily: MONO, whiteSpace: 'nowrap',
-                }}
-              >
-                {h}
-              </th>
+          <tr>
+            {['Pos', 'Driver', 'Team', 'Laps', 'Gap', 'Best lap', 'Tyres', 'Points'].map(h => (
+              <th key={h} style={{ textAlign: ['Laps', 'Gap', 'Best lap', 'Points'].includes(h) ? 'right' : 'left' }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => {
+          {rows.map(r => {
             const accent = teamColour(r.team_colour, r.team_name)
             return (
-              <tr key={r.driver_number} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                <td style={{ padding: '12px 10px', textAlign: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: i === 0 ? '#0F766E' : '#111827' }}>
-                  {r.finish_pos ?? '—'}
-                </td>
-                <td style={{ padding: '12px 10px', textAlign: 'left' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: '#111827' }}>
-                    <span style={{ width: 3, height: 22, borderRadius: 999, background: accent, display: 'inline-block' }} />
+              <tr key={r.driver_number}>
+                <td><strong>{r.finish_pos ?? '—'}</strong></td>
+                <td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                    <span style={{ width: 4, height: 16, borderRadius: 2, background: accent }} aria-hidden="true" />
                     {r.abbreviation}
                   </span>
                 </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'inherit', fontSize: 11.5, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {r.team_name}
-                </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: '#111827', fontWeight: 700 }}>
-                  {r.total_laps}
-                </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: '#111827', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {r.displayGap}
-                </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: '#111827', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {formatLapTime(r.best_lap_ms)}
-                </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td className="muted" style={{ whiteSpace: 'nowrap' }}>{r.team_name}</td>
+                <td style={{ textAlign: 'right' }}>{r.total_laps}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{r.displayGap}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{formatLapTime(r.best_lap_ms)}</td>
+                <td>
                   <span style={{ display: 'inline-flex', gap: 4 }}>
                     {r.tyreFlags.length ? r.tyreFlags.map(t => (
-                      <span
-                        key={t}
-                        title={t}
-                        style={{
-                          width: 16, height: 16, borderRadius: 999, border: '1px solid #E5E7EB',
-                          background: COMPOUND_COLOURS[t] ?? '#CBD5E1', display: 'inline-block',
-                        }}
-                      />
-                    )) : <span style={{ color: '#D1D5DB', fontFamily: MONO, fontSize: 12 }}>—</span>}
+                      <span key={t} title={t} aria-label={t} style={{ width: 16, height: 16, borderRadius: 999, border: '1px solid var(--lp-border)', background: COMPOUND_COLOURS[t] ?? '#CBD5E1', display: 'inline-block' }} />
+                    )) : <span className="muted">—</span>}
                   </span>
                 </td>
-                <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: r.points ? '#0F766E' : '#9CA3AF' }}>
-                  {r.points || '—'}
-                </td>
+                <td style={{ textAlign: 'right' }}>{r.points || '—'}</td>
               </tr>
             )
           })}
@@ -468,113 +420,72 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
   })
 
   return (
-    <div style={{ maxWidth: 1160, margin: '0 auto', padding: '36px 20px 72px', fontFamily: 'inherit' }}>
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Link href="/" style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'inherit' }}>
-          Pitwall
-        </Link>
-        <span style={{ fontSize: 12, color: '#D1D5DB' }}>/</span>
-        <Link href="/sessions" style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', textDecoration: 'none', fontFamily: 'inherit' }}>
-          Sessions
-        </Link>
-        <span style={{ fontSize: 12, color: '#D1D5DB' }}>/</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', fontFamily: 'inherit' }}>
-          {circuitName} {weekend.year}
-        </span>
-      </div>
-
-      {/* Hero */}
-      <header style={{ margin: '18px 0 40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
-          <div style={{ maxWidth: 760 }}>
-            <div style={{ ...eyebrow, marginBottom: 11 }}>Formula 1 {weekend.year} — Round {String(round).padStart(2, '0')}</div>
-            <h1 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(1.8rem, 4vw, 3rem)', lineHeight: 1.05, color: '#111827', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {circuitName}
-            </h1>
-            <p style={{ margin: '16px 0 0', fontFamily: SERIF, fontSize: 'clamp(1.05rem, 2.4vw, 1.5rem)', lineHeight: 1.5, color: '#6B7280', maxWidth: 620 }}>
-              Race classification, macro benchmarks and telemetry-adjacent lap analytics for one complete race window.
+    <div className={`lp ${geist.className}`}>
+      <div className="dash">
+        <div className="wrap">
+          <header className="dash-head">
+            <Link href="/sessions" className="back body-5">
+              <ArrowLeft size={16} weight="bold" aria-hidden="true" /> All sessions
+            </Link>
+            <p className="caption-1 muted" style={{ marginTop: 'var(--sp-200)' }}>
+              Formula 1 {weekend.year}, round {String(round).padStart(2, '0')}
             </p>
+            <h1 className="heading-3">{circuitName}</h1>
+            <p className="body-3 muted" style={{ marginTop: 'var(--sp-100)', maxWidth: 620 }}>
+              Race classification, benchmarks and lap analysis for the full race distance of {maxLap} laps.
+            </p>
+          </header>
+
+          <EnvCard session={envSession} round={round} />
+
+          <div className="dash-grid" style={{ marginTop: 'var(--sp-200)' }}>
+            <CardSection eyebrowLabel="Podium" title="Podium" subtitle="Highest classified finishers and the championship points they earn.">
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <PodiumCard position="P1" result={podiumResults[0]} index={0} winnerBest={winnerBest} />
+                <PodiumCard position="P2" result={podiumResults[1]} index={1} winnerBest={winnerBest} />
+                <PodiumCard position="P3" result={podiumResults[2]} index={2} winnerBest={winnerBest} />
+              </div>
+            </CardSection>
+
+            <CardSection eyebrowLabel="Benchmarks" title="Benchmarks" subtitle="Best whole lap and sector performance in this weekend.">
+              <BenchmarkRow label="Fastest lap" value={raceFastest?.[0] ? formatLapTime(raceFastest[0].lap_time_ms) : '—'} caption={raceFastest?.[0] ? `${raceFastest[0].abbreviation} ${raceFastest[0].compound ?? ''} on lap ${raceFastest[0].lap_number}` : 'Waiting for race data'} />
+              <BenchmarkRow label="Theoretical best lap" value={theo.ms ? formatLapTime(theo.ms) : '—'} caption={theo.ms ? `S1 lap ${theo.s1}, S2 lap ${theo.s2}, S3 lap ${theo.s3}` : 'Waiting for sector data'} />
+              <BenchmarkRow label="Pole position" value={qualiFastest?.[0] ? formatLapTime(qualiFastest[0].lap_time_ms) : '—'} caption={qualiFastest?.[0] ? `${qualiFastest[0].abbreviation} ${qualiFastest[0].compound ?? ''}`.trim() : 'Waiting for qualifying data'} />
+              <BenchmarkRow label="Winner's best lap" value={winnerBest != null ? formatLapTime(winnerBest) : '—'} caption={raceResults?.[0]?.abbreviation ?? 'Waiting for race data'} />
+            </CardSection>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, minWidth: 96 }}>
-            <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: '#0F766E', whiteSpace: 'nowrap' }}>
-              R{String(round).padStart(2, '0')}
-            </span>
-            <span style={{ fontFamily: MONO, fontSize: 12, color: '#9CA3AF' }}>{circuitName}</span>
-            <span style={{ fontFamily: MONO, fontSize: 12, color: '#9CA3AF' }}>Lap {maxLap}</span>
+
+          <div style={{ marginTop: 'var(--sp-200)' }}>
+            <RacePacePanel
+              drivers={chartDrivers}
+              colors={chartColors}
+              pitWindows={pitWindows}
+              maxLap={maxLap === 1 ? 78 : maxLap}
+              stints={raceStints ?? []}
+              results={rankOrder}
+              sessions={allWeekendSessions}
+              currentKey={raceKey}
+            />
           </div>
-        </div>
-      </header>
 
-      {/* Environment */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexWrap: 'wrap', marginBottom: 32 }}>
-        <EnvCard session={envSession} round={round} />
-      </div>
-
-      {/* Podium + Benchmarks */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 7fr) minmax(320px, 5fr)', gap: 22, marginBottom: 32 }}>
-        <CardSection eyebrowLabel="Podium" title="Race classification podium" subtitle="Highest classified finishers by championship points awarded.">
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <PodiumCard position="P1" result={podiumResults[0]} index={0} winnerBest={winnerBest} />
-            <PodiumCard position="P2" result={podiumResults[1]} index={1} winnerBest={winnerBest} />
-            <PodiumCard position="P3" result={podiumResults[2]} index={2} winnerBest={winnerBest} />
+          <div style={{ marginTop: 'var(--sp-200)' }}>
+            <CardSection
+              eyebrowLabel="Classification"
+              title="Full race classification"
+              subtitle="Official classified order with laps completed, gap to the leader, fastest lap and tyres used."
+            >
+              {tableRows.length ? <ClassificationTable rows={tableRows} /> : <Empty message="Race results have not been classified yet." />}
+            </CardSection>
           </div>
-        </CardSection>
 
-        <CardSection eyebrowLabel="Macro Benchmarks" title="Window benchmarks" subtitle="Best whole-track and per-sector performance detected.">
-          <BenchmarkRow label="Fastest Lap" value={raceFastest?.[0] ? formatLapTime(raceFastest[0].lap_time_ms) : '—'} caption={raceFastest?.[0] ? `${raceFastest[0].abbreviation} ${raceFastest[0].compound ?? ''} on lap ${raceFastest[0].lap_number}` : 'Awaiting race data'} />
-          <BenchmarkRow label="Theoretical Optimum" value={theo.ms ? formatLapTime(theo.ms) : '—'} caption={theo.ms ? `S1 L${theo.s1} · S2 L${theo.s2} · S3 L${theo.s3}` : 'Awaiting sector data'} />
-          <BenchmarkRow label="Pole Position" value={qualiFastest?.[0] ? formatLapTime(qualiFastest[0].lap_time_ms) : '—'} caption={qualiFastest?.[0] ? `${qualiFastest[0].abbreviation} · ${qualiFastest[0].compound ?? ''}` : 'Awaiting qualifying data'} />
-          <BenchmarkRow label="Winner Gap" value={winnerBest != null ? formatLapTime(winnerBest) : '—'} caption={raceResults?.[0]?.abbreviation ?? 'Awaiting race data'} />
-        </CardSection>
-      </div>
-
-      {/* Race pace + tyre strategy + consistency (shared driver selection) */}
-      <RacePacePanel
-        drivers={chartDrivers}
-        colors={chartColors}
-        pitWindows={pitWindows}
-        maxLap={maxLap === 1 ? 78 : maxLap}
-        stints={raceStints ?? []}
-        results={rankOrder}
-        sessions={allWeekendSessions}
-        currentKey={raceKey}
-      />
-
-      {/* Classification */}
-      <CardSection
-        eyebrowLabel="Classification"
-        title="Full race classification"
-        subtitle={`Official classified order with laps completed, gaps to the leader, fastest lap and compounds used.`}
-      >
-        {tableRows.length ? (
-          <ClassificationTable rows={tableRows} />
-        ) : (
-          <Empty message="Race results have not been classified yet." />
-        )}
-      </CardSection>
-
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid #E5E7EB', marginTop: 48, paddingTop: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, color: '#111827' }}>
-            {circuitName} <span style={{ color: '#9CA3AF' }}>·</span> {weekend.year}
-          </div>
-          <div style={{ marginTop: 5, fontSize: 11.5, color: '#6B7280', fontFamily: 'inherit' }}>
-            Data refreshed from live feeds every minute. Source classification subject to change.
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 'var(--sp-500)' }}>
+            <p className="body-6 muted">Data refreshes every minute. Classification may change after the race.</p>
+            <Link href={getSessionTelemetryRoute(raceKey)} prefetch={false} className="btn btn-primary button-md">
+              Open telemetry <ArrowRight size={16} weight="bold" aria-hidden="true" />
+            </Link>
           </div>
         </div>
-        <Link
-          href={getSessionTelemetryRoute(raceKey)}
-          prefetch={false}
-          style={{
-            textDecoration: 'none', background: '#111827', color: '#FFFFFF', borderRadius: 999,
-            padding: '12px 20px', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
-          }}
-        >
-          Open telemetry →
-        </Link>
-      </footer>
+      </div>
     </div>
   )
 }
