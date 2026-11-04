@@ -79,7 +79,7 @@ export default function LandingNav({ app = false }: { app?: boolean }) {
       <a href="#main" className="skip-link button-sm">Skip to content</a>
 
       <header className="nav" aria-label="Main">
-        <Link href={app && signedIn ? '/dashboard' : '/'} className="nav-logo" onClick={() => setOpen(false)}>Slipstream</Link>
+        <Link href="/" className="nav-logo" onClick={() => setOpen(false)}>Slipstream</Link>
 
         <nav className="nav-links body-5" aria-label="Primary">
           {links.map(l => (
