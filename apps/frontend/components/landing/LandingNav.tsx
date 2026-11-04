@@ -17,6 +17,7 @@ const APP_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Telemetry', href: '/telemetry' },
   { label: 'Sessions', href: '/sessions' },
+  { label: 'Drivers', href: '/drivers' },
   { label: 'Schedule', href: '/schedule' },
   { label: 'Predictions', href: '/predictions' },
   { label: 'Agent', href: '/agent' },
