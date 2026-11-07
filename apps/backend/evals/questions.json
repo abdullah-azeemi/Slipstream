@@ -1,0 +1,225 @@
+{
+  "_comment": "Answer-quality eval set. tier: supported = agent should handle today; analytical = Ruth-style multi-step analysis (expected to fail on the current agent); trap = agent must refuse. Sessions are limited to data present in the DB (checked 2026-11-07): Italian GP 2026 race has laps but NO telemetry artifacts, Australian GP 2026 quali has NO laps.",
+  "questions": [
+    {
+      "id": "sup-01",
+      "tier": "supported",
+      "question": "How bad was Hamilton's tyre degradation in the 2026 Singapore Grand Prix race?",
+      "must_mention": ["degradation", "stint"],
+      "numeric_checks": [{"name": "deg_rate", "unit": "s/lap", "min": 0.0, "max": 0.6}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["States a degradation rate with a unit", "Says which stint or compound it applies to", "Separates measured values from estimates"]
+    },
+    {
+      "id": "sup-02",
+      "tier": "supported",
+      "question": "Compare Norris and Piastri on lap 20 of the 2026 Dutch Grand Prix race.",
+      "must_mention": ["lap 20", "speed"],
+      "numeric_checks": [{"name": "speed", "unit": "km/h", "min": 50, "max": 380}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Names both drivers with numbers for each", "Says where on the lap the difference appears"]
+    },
+    {
+      "id": "sup-03",
+      "tier": "supported",
+      "question": "Did the safety car or VSC come out in the 2026 Azerbaijan Grand Prix race?",
+      "must_mention": ["safety car"],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Says clearly whether there was a safety car or VSC", "Gives lap numbers if there was one"]
+    },
+    {
+      "id": "sup-04",
+      "tier": "supported",
+      "question": "What was the weather like during the 2026 British Grand Prix race, and did it rain?",
+      "must_mention": ["track temperature"],
+      "numeric_checks": [{"name": "track_temp", "unit": "°C", "min": 5, "max": 65}],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Answers the rain question directly", "Quotes a temperature with a unit"]
+    },
+    {
+      "id": "sup-05",
+      "tier": "supported",
+      "question": "Which sessions and datasets do you have for the 2026 Hungarian Grand Prix?",
+      "must_mention": ["race", "qualifying"],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Lists what exists per session", "Does not claim data that is not stored"]
+    },
+    {
+      "id": "sup-06",
+      "tier": "supported",
+      "question": "When did Leclerc pit in the 2026 Spanish Grand Prix race and what tyres did he change to?",
+      "must_mention": ["lap"],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Gives pit lap(s)", "Gives compound before and after"]
+    },
+    {
+      "id": "sup-07",
+      "tier": "supported",
+      "question": "How did Verstappen's gap to the leader change through the 2026 Austrian Grand Prix race at lap 30?",
+      "must_mention": ["gap", "lap 30"],
+      "numeric_checks": [{"name": "gap", "unit": "s", "min": 0, "max": 120}],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Gives a gap number with a unit", "Names the position at that lap"]
+    },
+    {
+      "id": "sup-08",
+      "tier": "supported",
+      "question": "Compare Russell's and Antonelli's driving style across the 2026 season.",
+      "must_mention": ["archetype"],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Names an archetype for each driver", "Uses field percentiles, not invented numbers"]
+    },
+    {
+      "id": "ana-01",
+      "tier": "analytical",
+      "question": "Hamilton and Leclerc both ran the Ferrari at the 2026 Canadian Grand Prix. Whose tyre degradation was worse once you correct for fuel burn, and why?",
+      "must_mention": ["fuel", "degradation", "assumption"],
+      "numeric_checks": [{"name": "deg_rate", "unit": "s/lap", "min": 0.0, "max": 0.6}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Applies a fuel correction and states the assumed burn rate", "Compares both drivers on equal terms (same compound or stint age)", "Marks the fuel-corrected figures as estimates", "Offers a physical reason, not just the number"]
+    },
+    {
+      "id": "ana-02",
+      "tier": "analytical",
+      "question": "Could Norris have beaten Piastri at the 2026 Miami Grand Prix with a different stop count? Use the measured pit loss.",
+      "must_mention": ["pit loss", "assumption"],
+      "numeric_checks": [{"name": "pit_loss", "unit": "s", "min": 10, "max": 40}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Uses a measured pit loss, not a guessed constant", "Compares at least two stop-count scenarios with a time delta", "Lists assumptions and risks (traffic, safety car)"]
+    },
+    {
+      "id": "ana-03",
+      "tier": "analytical",
+      "question": "At the 2026 Singapore Grand Prix, was there a real undercut window for Verstappen on the car ahead, or would he have lost time in traffic?",
+      "must_mention": ["undercut", "gap"],
+      "numeric_checks": [{"name": "gap", "unit": "s", "min": 0, "max": 60}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["States the gap to the car ahead at a specific lap", "Estimates the undercut gain against the pit loss", "Considers where he would rejoin"]
+    },
+    {
+      "id": "ana-04",
+      "tier": "analytical",
+      "question": "How much of the lap time improvement during 2026 Hungarian GP qualifying was track evolution versus driver improvement?",
+      "must_mention": ["track evolution", "estimate"],
+      "numeric_checks": [{"name": "evolution", "unit": "s", "min": 0, "max": 3}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Separates track evolution from per-driver improvement", "Gives the size of each effect with units", "Says it is an estimate"]
+    },
+    {
+      "id": "ana-05",
+      "tier": "analytical",
+      "question": "Why did Albon lose time to Sainz in the slow corners at the 2026 Belgian Grand Prix? Use speed and throttle traces.",
+      "must_mention": ["corner", "throttle"],
+      "numeric_checks": [{"name": "speed_delta", "unit": "km/h", "min": 0, "max": 60}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Identifies specific corners or distances", "Uses throttle or brake evidence, not speculation", "Gives the size of the loss"]
+    },
+    {
+      "id": "ana-06",
+      "tier": "analytical",
+      "question": "What if a safety car had come out on lap 15 of the 2026 Spanish Grand Prix? Who would have gained most from pitting?",
+      "must_mention": ["safety car", "assumption"],
+      "numeric_checks": [{"name": "pit_loss", "unit": "s", "min": 5, "max": 30}],
+      "needs_chart": false,
+      "expect_refusal": false,
+      "rubric": ["Uses a reduced pit loss under SC and says it is assumed", "Names drivers by who had not yet stopped", "Labels the result as a counterfactual"]
+    },
+    {
+      "id": "ana-07",
+      "tier": "analytical",
+      "question": "Was Hadjar's long stint at the 2026 Japanese Grand Prix limited by tyre wear or by traffic?",
+      "must_mention": ["stint", "traffic"],
+      "numeric_checks": [{"name": "deg_rate", "unit": "s/lap", "min": 0.0, "max": 0.6}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Distinguishes degradation from lap time lost behind another car", "Uses the gap to the car ahead", "States a conclusion with confidence level"]
+    },
+    {
+      "id": "ana-08",
+      "tier": "analytical",
+      "question": "Compare how Hamilton and Russell used the soft tyre in the 2026 Austrian Grand Prix qualifying, and what it says about their set-up.",
+      "must_mention": ["qualifying", "sector"],
+      "numeric_checks": [{"name": "sector", "unit": "s", "min": 0, "max": 60}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Compares sector times", "Separates what the data shows from what is inferred about set-up"]
+    },
+    {
+      "id": "ana-09",
+      "tier": "analytical",
+      "question": "Estimate the peak lateral acceleration Norris reached at the 2026 Barcelona Grand Prix qualifying lap and where on track it happened.",
+      "must_mention": ["lateral", "estimate"],
+      "numeric_checks": [{"name": "lat_g", "unit": "g", "min": 0, "max": 7}],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Derives it from speed and path curvature, and says so", "Gives the value in g with the corner location", "Flags it as an estimate from noisy position data"]
+    },
+    {
+      "id": "ana-10",
+      "tier": "analytical",
+      "question": "Did the 2026 Dutch Grand Prix winner win through strategy or through raw pace?",
+      "must_mention": ["pace", "strategy"],
+      "numeric_checks": [],
+      "needs_chart": true,
+      "expect_refusal": false,
+      "rubric": ["Names the winner from the results data", "Compares clean-air pace against strategy gains with numbers", "States assumptions and uncertainty"]
+    },
+    {
+      "id": "trap-01",
+      "tier": "trap",
+      "question": "What was the pole sitter's Q3 lap time in the 2026 Australian Grand Prix qualifying?",
+      "must_mention": [],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": true,
+      "rubric": ["Says the qualifying lap data is not stored", "Does not invent a lap time"]
+    },
+    {
+      "id": "trap-02",
+      "tier": "trap",
+      "question": "Compare Norris and Piastri's telemetry on lap 20 of the 2026 Italian Grand Prix race.",
+      "must_mention": [],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": true,
+      "rubric": ["Says telemetry is missing for that race", "Does not invent speeds"]
+    },
+    {
+      "id": "trap-03",
+      "tier": "trap",
+      "question": "Who will win the 2027 drivers' championship?",
+      "must_mention": [],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": true,
+      "rubric": ["Declines to predict from data it does not have"]
+    },
+    {
+      "id": "trap-04",
+      "tier": "trap",
+      "question": "How was Ayrton Senna's tyre degradation in the 2026 Singapore Grand Prix?",
+      "must_mention": [],
+      "numeric_checks": [],
+      "needs_chart": false,
+      "expect_refusal": true,
+      "rubric": ["Says that driver did not race in that session", "Does not invent data"]
+    }
+  ]
+}
