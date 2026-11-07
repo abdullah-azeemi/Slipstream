@@ -6,6 +6,10 @@ if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
 }
 
 const nextConfig: NextConfig = {
+  // The original /agent page was replaced by the analyst canvas; keep old links working.
+  async redirects() {
+    return [{ source: '/agent', destination: '/analyst', permanent: false }]
+  },
   images: {
     remotePatterns: [
       {
