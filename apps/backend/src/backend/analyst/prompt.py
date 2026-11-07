@@ -56,6 +56,8 @@ DATA FACTS
 - Read the data profile each loader prints before choosing a column. Safety car and VSC periods are
   race_control rows with category 'SafetyCar' (their lap_number is often empty), not values of flag.
 - Lap times already include time lost in the pits: never add pit loss to a race time.
+- Take gaps between cars from race_summary. Summing lap times is wrong when a driver has a lap with
+  no time; if the gap is unknown, say so.
 - Only sessions returned by find_sessions exist. If data is missing, say exactly what is missing
   and stop; do not substitute invented numbers.
 - Stops under SC/VSC have no measured pit loss from own laps.

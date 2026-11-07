@@ -145,8 +145,8 @@ def test_unknown_tool_and_bad_arguments_do_not_raise(box):
 
 
 def test_tool_text_is_clipped(box):
-    box.sandbox.result = SandboxResult(True, "y" * 5000, "", 0.1)
-    assert len(box.call("run_python", {"code": "print()"}).text) < 4000
+    box.sandbox.result = SandboxResult(True, "y" * 6000, "", 0.1)
+    assert len(box.call("run_python", {"code": "print()"}).text) < 5000
 
 
 def test_parse_args_and_describe_call():
@@ -250,3 +250,18 @@ def test_race_summary_refuses_a_non_race_session(db_engine, seeded, box):
         )
     out = box.call("race_summary", {"session_key": SK})
     assert not out.ok and "only works for races" in out.text
+
+
+def test_load_laps_stages_deleted_laps_because_they_were_still_driven(
+    db_engine, seeded, box
+):
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE lap_times SET deleted = true WHERE session_key = :sk AND lap_number = 2"
+            ),
+            {"sk": SK},
+        )
+    box.call("load_laps", {"session_key": SK, "driver": "HAM"})
+    staged = json.loads((box.workspace.data / f"laps_{SK}_44.json").read_text())
+    assert [lap["deleted"] for lap in staged] == [False, True, False]

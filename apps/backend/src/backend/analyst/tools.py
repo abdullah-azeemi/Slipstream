@@ -14,7 +14,7 @@ from sqlalchemy import text
 from backend.analyst.sandbox import Sandbox, Workspace
 from backend.f1lab import data, report, sanity
 
-MAX_TOOL_TEXT = 3500
+MAX_TOOL_TEXT = 4500
 READ_HINT = "Read staged files with load('<file>') (list of dicts) or df('<file>') (DataFrame); not pd.read_json."
 
 # Earlier successful scripts are replayed (output and charts suppressed) before each new one,
@@ -301,7 +301,7 @@ class ToolBox:
                         ok=False,
                         title=f"Laps · {driver}",
                     )
-            laps = data.load_laps(conn, session_key, number)
+            laps = data.load_laps(conn, session_key, number, include_deleted=True)
             drivers = [
                 dict(r)
                 for r in conn.execute(

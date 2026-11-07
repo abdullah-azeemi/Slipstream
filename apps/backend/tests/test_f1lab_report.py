@@ -143,7 +143,7 @@ def test_race_summary_gives_order_stops_and_traffic():
     assert second["clean_laps_in_traffic"] > 0
     assert second["clean_laps_with_gap"] > 0
     assert first["clean_laps_in_traffic"] == 0
-    assert "P2 BBB 30L S>H" in format_race_summary(summary)
+    assert "P2 BBB 30L gap ahead 0.3s S>H" in format_race_summary(summary)
 
 
 def test_retired_driver_sorts_after_finishers():
@@ -175,3 +175,14 @@ def test_red_flag_and_missing_time_stops_are_listed_without_a_loss():
 def test_full_names_appear_so_codes_are_not_guessed():
     summary = race_summary(_car(12, 1, 90.0), {12: "ANT"}, {12: "Kimi Antonelli"})
     assert "P1 ANT (Kimi Antonelli) 30L" in format_race_summary(summary)
+
+
+def test_final_gap_is_shown_and_unknown_when_a_lap_time_is_missing():
+    laps = _car(1, 1, 90.0) + _car(2, 2, 90.1)
+    summary = race_summary(laps, {1: "AAA", 2: "BBB"})
+    assert summary["drivers"][1]["final_gap_ahead_s"] == pytest.approx(3.0)
+    assert "gap ahead 3.0s" in format_race_summary(summary)
+    laps[30]["lap_time_ms"] = None
+    assert "gap ahead unknown" in format_race_summary(
+        race_summary(laps, {1: "AAA", 2: "BBB"})
+    )

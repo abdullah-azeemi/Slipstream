@@ -91,6 +91,7 @@ def _run_analyst(question: str, max_cost: float | None) -> dict:
         "charts": result.charts,
         "steps": result.steps,
         "unverified": result.unverified,
+        "incomplete": result.incomplete,
         "events": result.events,
     }
 
@@ -117,6 +118,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--max-cost", type=float, help="per-question USD cap (analyst only)"
+    )
+    parser.add_argument(
+        "--max-total",
+        type=float,
+        help="stop before a question would pass this USD total",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="validate and list, no calls"
@@ -148,10 +154,16 @@ def main() -> int:
 
     runs: list[dict] = []
     scores: list[scoring.QuestionScore] = []
+    spent = 0.0
     for q in selected:
+        # a question can cost more than its cap, so leave room for twice that
+        if args.max_total and spent + 2 * (args.max_cost or 0) > args.max_total:
+            print(f"stopping before {q['id']}: spent ${spent:.4f} of ${args.max_total}")
+            break
         print(f"running {q['id']} ...", flush=True)
         run = _run_one(q["question"], args.engine, args.max_cost)
         run["id"] = q["id"]
+        spent += float(run.get("cost_usd") or 0)
         runs.append(run)
         scores.append(scoring.score_run(q, run))
 

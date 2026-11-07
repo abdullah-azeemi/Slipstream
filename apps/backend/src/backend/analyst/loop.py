@@ -42,6 +42,7 @@ class AnalystResult:
     charts: list[dict] = field(default_factory=list)
     error: str | None = None
     unverified: list[str] = field(default_factory=list)
+    incomplete: bool = False
 
 
 def _assistant_message(reply: Reply) -> dict:
@@ -56,6 +57,23 @@ def _assistant_message(reply: Reply) -> dict:
             for c in reply.tool_calls
         ]
     return message
+
+
+def _partial_answer(messages: list[dict]) -> str:
+    """When no conclusion was written, show the latest results instead of nothing."""
+    results = [
+        m["content"]
+        for m in messages
+        if m.get("role") == "tool"
+        and str(m.get("content", "")).startswith(("OK", "Race of"))
+    ]
+    if not results:
+        return "I could not complete this analysis before reaching its limit."
+    body = "\n\n".join(r[:1500] for r in results[-2:])
+    return (
+        "**Analysis incomplete.** The run reached its limit before writing a conclusion. "
+        f"These are the last results it computed, unreviewed:\n\n```text\n{body}\n```"
+    )
 
 
 def run_analyst(
@@ -96,6 +114,8 @@ def run_analyst(
     answer: str | None = None
     reviewed = False
     numbers_checked = False
+    last_call_cost = 0.0
+    incomplete = False
     bad_final = False  # the model produced an unusable final_answer
     rounds = 0
     record("run_start", question=question)
@@ -105,11 +125,13 @@ def run_analyst(
             answer is None
             and not bad_final
             and rounds < max_steps
-            and cost < max_cost_usd
+            # keep room for this call and a closing one; calls grow as context grows
+            and cost + 2 * last_call_cost < max_cost_usd
             and time.perf_counter() - started < max_runtime_s
         ):
             reply = llm.chat(messages, TOOL_SCHEMAS)
             cost += reply.cost_usd
+            last_call_cost = reply.cost_usd
             messages.append(_assistant_message(reply))
 
             if not reply.tool_calls:
@@ -198,10 +220,14 @@ def run_analyst(
                     answer = None
 
         if answer is None:
-            messages.append({"role": "user", "content": _FORCE_FINAL})
-            final = llm.chat(messages, None)
-            cost += final.cost_usd
-            answer = final.content.strip() or "I could not complete this analysis."
+            closing = ""
+            if cost + last_call_cost <= max_cost_usd:
+                messages.append({"role": "user", "content": _FORCE_FINAL})
+                final = llm.chat(messages, None)
+                cost += final.cost_usd
+                closing = final.content.strip()
+            incomplete = not closing
+            answer = closing or _partial_answer(messages)
     except AnalystLLMError as exc:
         record("error", message=str(exc))
         return AnalystResult(
@@ -215,12 +241,19 @@ def run_analyst(
     record(
         "final",
         unverified=unverified,
+        incomplete=incomplete,
         markdown=answer,
         cost_usd=round(cost, 6),
         steps=rounds,
     )
     return AnalystResult(
-        answer, round(cost, 6), rounds, events, charts, unverified=unverified
+        answer,
+        round(cost, 6),
+        rounds,
+        events,
+        charts,
+        unverified=unverified,
+        incomplete=incomplete,
     )
 
 

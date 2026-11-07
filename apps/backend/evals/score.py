@@ -105,6 +105,7 @@ DEFAULT_FORBIDDEN = (
     "cannot confirm",
     "cannot provide",
     "could not establish",
+    "analysis incomplete",
     "insufficient data",
     "cannot conclude",
 )

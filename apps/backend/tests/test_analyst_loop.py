@@ -80,17 +80,58 @@ def test_plain_text_reply_is_accepted_as_the_answer():
     assert _types(result) == ["run_start", "final"]
 
 
-def test_cost_budget_forces_a_final_answer_without_tools():
+def test_budget_keeps_room_for_a_closing_answer():
     llm = ScriptedLLM(
         [
-            Reply("", (_call("c1", "load_laps"),), cost_usd=0.05),
-            Reply("Best effort answer."),
+            Reply("", (_call("c1", "load_laps"),), cost_usd=0.01),
+            Reply("Closing answer.", cost_usd=0.01),
         ]
     )
     result = run_analyst("q", llm=llm, toolbox=StubToolBox(), max_cost_usd=0.03)
-    assert result.answer == "Best effort answer."
-    assert llm.calls[-1][1] is None  # no tools offered on the forced turn
+    assert result.answer == "Closing answer." and not result.incomplete
+    assert llm.calls[-1][1] is None  # no tools offered on the closing turn
     assert "budget" in llm.calls[-1][0][-1]["content"].lower()
+    assert result.cost_usd <= 0.03
+
+
+def test_no_call_is_made_once_the_budget_is_gone_and_results_are_shown():
+    llm = ScriptedLLM(
+        [Reply("", (_call("c1", "run_python", '{"code": "print(1)"}'),), cost_usd=0.05)]
+    )
+    box = StubToolBox(
+        {"run_python": ToolOutput("OK (0.1s)\nstdout:\n0.112", title="fit")}
+    )
+    result = run_analyst("q", llm=llm, toolbox=box, max_cost_usd=0.03)
+    assert len(llm.calls) == 1
+    assert result.incomplete and "0.112" in result.answer
+
+
+def test_empty_closing_answer_shows_results_instead_of_nothing():
+    llm = ScriptedLLM(
+        [
+            Reply(
+                "", (_call("c1", "run_python", '{"code": "print(1)"}'),), cost_usd=0.001
+            ),
+            Reply(""),
+            Reply(""),
+        ]
+    )
+    box = StubToolBox(
+        {"run_python": ToolOutput("OK (0.1s)\nstdout:\n0.112", title="fit")}
+    )
+    result = run_analyst("q", llm=llm, toolbox=box)
+    assert (
+        result.incomplete
+        and "Analysis incomplete" in result.answer
+        and "0.112" in result.answer
+    )
+
+
+def test_with_no_results_the_limit_is_stated_plainly():
+    result = run_analyst(
+        "q", llm=ScriptedLLM([Reply(""), Reply("")]), toolbox=StubToolBox()
+    )
+    assert result.incomplete and "limit" in result.answer
 
 
 def test_step_limit_forces_a_final_answer():

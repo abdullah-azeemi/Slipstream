@@ -186,3 +186,12 @@ def test_confident_contradiction_of_the_data_fails():
     }
     assert not score.score_run(q, wrong).passed
     assert score.score_run(q, right).passed
+
+
+def test_an_incomplete_run_does_not_pass():
+    run = {
+        "answer": "**Analysis incomplete.** degradation",
+        "refusals": [],
+        "trace": [],
+    }
+    assert not score.score_run(_q(numeric_checks=[]), run).passed

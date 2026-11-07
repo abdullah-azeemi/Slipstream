@@ -207,6 +207,10 @@ def gaps_to_car_ahead(laps: list[dict]) -> dict[tuple[int, int], float]:
     return gaps
 
 
+def _rounded(value: float | None) -> float | None:
+    return None if value is None else round(value, 1)
+
+
 def race_summary(
     laps: list[dict], labels: dict[int, str], names: dict[int, str] | None = None
 ) -> dict:
@@ -258,6 +262,9 @@ def race_summary(
                 )
                 if clean
                 else None,
+                "final_gap_ahead_s": _rounded(
+                    gaps.get((driver, own[-1]["lap_number"]))
+                ),
                 "clean_laps_with_gap": len(known),
                 "clean_laps_in_traffic": sum(g < TRAFFIC_GAP_S for g in known),
             }
@@ -284,6 +291,12 @@ def format_race_summary(summary: dict) -> str:
             or "none"
         )
         name = f" ({row['name']})" if row.get("name") else ""
+        if row["final_position"] == 1:
+            gap = ""
+        elif row["final_gap_ahead_s"] is None:
+            gap = "gap ahead unknown "
+        else:
+            gap = f"gap ahead {row['final_gap_ahead_s']}s "
         # gaps vanish after a missing lap time: say unknown rather than imply clean air
         traffic = (
             f"{row['clean_laps_in_traffic']}/{row['clean_laps_with_gap']}"
@@ -291,7 +304,7 @@ def format_race_summary(summary: dict) -> str:
             else "unknown"
         )
         lines.append(
-            f"P{row['final_position']} {row['driver']}{name} {row['laps']}L "
+            f"P{row['final_position']} {row['driver']}{name} {row['laps']}L {gap}"
             f"{'>'.join(c[0] for c in row['compounds'])} "
             f"median {row['median_clean_lap_s']}s "
             f"traffic {traffic} stops: {stops}"
