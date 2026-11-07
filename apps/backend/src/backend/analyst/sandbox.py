@@ -2,16 +2,27 @@
 
 The model never gets a shell, the network, secrets or the database: it only
 sees files the loaders staged into a per-run workspace. The Sandbox protocol
-is the seam where a production runner (e.g. Fly Machines) plugs in.
+is the seam where a runner plugs in. Two exist:
+
+- DockerSandbox: one container per run (local development, CI, any Docker host).
+- NamespaceSandbox: for hosts without Docker, such as a Fly machine. It runs
+  the script in new network/pid/mount namespaces as an unprivileged user with
+  an empty environment and resource limits.
+
+default_sandbox() picks whichever works on the current host.
 """
 
 from __future__ import annotations
 
+import os
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass, field
+import functools
 from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
@@ -94,6 +105,22 @@ def _clip(text: str) -> str:
     )
 
 
+def _collect(workspace: "Workspace", before: set) -> tuple[list[dict], list[str]]:
+    """Charts (chart_*.json) and other files a run wrote to out/."""
+    import json
+
+    charts, files = [], []
+    for path in sorted(set(workspace.out.iterdir()) - before):
+        if path.name.startswith("chart_") and path.suffix == ".json":
+            try:
+                charts.append(json.loads(path.read_text()))
+            except ValueError:
+                pass
+        else:
+            files.append(path.name)
+    return charts, files
+
+
 class DockerSandbox:
     def __init__(
         self, image: str = IMAGE, memory: str = "512m", cpus: str = "1"
@@ -161,17 +188,140 @@ class DockerSandbox:
             stderr = f"timed out after {timeout_s}s"
         duration = round(time.perf_counter() - started, 2)
 
-        charts, files = [], []
-        for path in sorted(set(workspace.out.iterdir()) - before):
-            if path.name.startswith("chart_") and path.suffix == ".json":
-                import json
-
-                try:
-                    charts.append(json.loads(path.read_text()))
-                except ValueError:
-                    pass
-            else:
-                files.append(path.name)
+        charts, files = _collect(workspace, before)
         return SandboxResult(
             ok, _clip(stdout), _clip(stderr), duration, timed_out, charts, files
         )
+
+
+_UNPRIVILEGED_ID = "65534"  # nobody
+
+
+class NamespaceSandbox:
+    """Run model-written Python without Docker, inside the current (Linux) host.
+
+    Needs root (or CAP_SYS_ADMIN) to create namespaces, which a Fly machine
+    has. Isolation per run:
+    - new network namespace: no network at all
+    - new pid + mount-proc namespace: it cannot see or signal other processes,
+      and /proc/<pid>/environ of the API is not reachable
+    - runs as uid/gid 65534 with no extra groups and no_new_privs
+    - an EMPTY environment: no API keys, database URL or tokens are inherited
+    - RLIMITs on memory, processes, CPU time and file size
+    Weaker than a container (the filesystem is the host's, read-only for this
+    user), so it never gets secrets: the only thing worth reading is public data.
+    """
+
+    def __init__(
+        self, memory_bytes: int = 1_500_000_000, max_procs: int = 128
+    ) -> None:
+        self.memory_bytes = memory_bytes
+        self.max_procs = max_procs
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def available() -> bool:
+        """True when this host can create the namespaces (Linux, enough privilege)."""
+        if not sys.platform.startswith("linux"):
+            return False
+        for tool in ("unshare", "setpriv", "prlimit"):
+            if shutil.which(tool) is None:
+                return False
+        try:
+            done = subprocess.run(
+                ["unshare", "--net", "--pid", "--fork", "--mount", "--mount-proc", "true"],
+                capture_output=True,
+                timeout=10,
+            )
+            return done.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def _make_readable(self, workspace: "Workspace") -> None:
+        """The run executes as another user: let it traverse to, and read, its inputs."""
+        workspace.root.chmod(0o711)  # traverse only, no listing
+        workspace.code.chmod(0o755)
+        for path in workspace.code.iterdir():
+            path.chmod(0o644)
+        for path in workspace.data.iterdir():
+            path.chmod(0o666)
+        lib = _lib_dir()
+        for dirpath, dirnames, filenames in os.walk(lib):
+            os.chmod(dirpath, 0o755)
+            for name in filenames:
+                os.chmod(os.path.join(dirpath, name), 0o644)
+
+    def run(
+        self, code: str, workspace: Workspace, *, timeout_s: int = 20
+    ) -> SandboxResult:
+        import time
+
+        script = workspace.code / f"run_{uuid.uuid4().hex[:8]}.py"
+        script.write_text("from pitwall import *\n" + code)
+        self._make_readable(workspace)
+
+        # The helper library expects /data and /out (the Docker mount points).
+        # Bind the run's workspace there inside the private mount namespace; on
+        # Fly this also hides the real /data volume from the sandboxed code.
+        mount_and_exec = (
+            'mkdir -p /data /out && mount --bind "$1" /data && mount --bind "$2" /out'
+            ' && shift 2 && cd /data && exec "$@"'
+        )
+        cmd = [
+            "unshare", "--net", "--pid", "--fork", "--mount", "--mount-proc",
+            "--kill-child",
+            "sh", "-c", mount_and_exec, "sandbox", str(workspace.data), str(workspace.out),
+            "setpriv", f"--reuid={_UNPRIVILEGED_ID}", f"--regid={_UNPRIVILEGED_ID}",
+            "--clear-groups", "--no-new-privs",
+            "prlimit",
+            f"--as={self.memory_bytes}", f"--nproc={self.max_procs}",
+            f"--cpu={timeout_s + 5}", "--fsize=67108864", "--nofile=256",
+            sys.executable, str(script),
+        ]  # fmt: skip
+        env = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "PYTHONPATH": str(_lib_dir()),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONUNBUFFERED": "1",
+            "HOME": "/tmp",
+            "MPLCONFIGDIR": "/tmp",
+            "OPENBLAS_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": "1",
+        }
+        started = time.perf_counter()
+        before = set(workspace.out.iterdir())
+        proc = subprocess.Popen(
+            cmd,
+            cwd=workspace.data,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+            timed_out, ok = False, proc.returncode == 0
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, _ = proc.communicate()
+            timed_out, ok = True, False
+            stderr = f"timed out after {timeout_s}s"
+        duration = round(time.perf_counter() - started, 2)
+
+        charts, files = _collect(workspace, before)
+        return SandboxResult(
+            ok, _clip(stdout or ""), _clip(stderr or ""), duration, timed_out, charts, files
+        )
+
+
+def default_sandbox() -> Sandbox | None:
+    """The sandbox to use on this host, or None when nothing safe is available."""
+    if DockerSandbox.available():
+        return DockerSandbox()
+    if NamespaceSandbox.available():
+        return NamespaceSandbox()
+    return None

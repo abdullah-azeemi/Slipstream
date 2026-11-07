@@ -18,7 +18,7 @@ from backend.agent import persistence as agent_persistence
 from backend.analyst import persistence
 from backend.analyst.client import ChatClient, OpenRouterClient
 from backend.analyst.loop import run_analyst
-from backend.analyst.sandbox import DockerSandbox, Sandbox, Workspace
+from backend.analyst.sandbox import Sandbox, Workspace, default_sandbox
 from backend.analyst.tools import ToolBox
 from backend.api.v1.agent import (
     _is_admin,
@@ -38,11 +38,14 @@ def make_llm() -> ChatClient:
 
 
 def make_sandbox() -> Sandbox:
-    return DockerSandbox()
+    sandbox = default_sandbox()
+    if sandbox is None:
+        raise RuntimeError("no analysis sandbox is available on this host")
+    return sandbox
 
 
 def sandbox_ready() -> bool:
-    return DockerSandbox.available()
+    return default_sandbox() is not None
 
 
 @analyst_bp.before_request
