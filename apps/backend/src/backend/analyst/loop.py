@@ -14,8 +14,10 @@ EVENT TYPES (all carry seq and t_ms):
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from backend.analyst import checker
@@ -92,19 +94,22 @@ def run_analyst(
     events: list[dict] = []
     charts: list[dict] = []
 
+    lock = threading.Lock()  # tools of one turn report from several threads
+
     def record(type_: str, **data) -> None:
-        event = {
-            "type": type_,
-            "seq": len(events),
-            "t_ms": round((time.perf_counter() - started) * 1000),
-        }
-        event.update(data)
-        events.append(event)
-        if emit:
-            try:
-                emit(event)
-            except Exception:  # a broken consumer must never kill the run
-                pass
+        with lock:
+            event = {
+                "type": type_,
+                "seq": len(events),
+                "t_ms": round((time.perf_counter() - started) * 1000),
+            }
+            event.update(data)
+            events.append(event)
+            if emit:
+                try:
+                    emit(event)
+                except Exception:  # a broken consumer must never kill the run
+                    pass
 
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -141,6 +146,7 @@ def run_analyst(
             else:
                 if reply.content.strip():
                     record("thought", round=rounds, text=reply.content.strip())
+                pending: list[tuple] = []
                 for call in reply.tool_calls:
                     args = parse_args(call.arguments)
                     if call.name == "final_answer":
@@ -170,10 +176,14 @@ def run_analyst(
                         title=title,
                         preview=preview,
                     )
+                    pending.append((call, args, title, preview))
+
+                def run_one(item: tuple, turn: int = rounds) -> tuple:
+                    call, args, title, preview = item
                     t0 = time.perf_counter()
                     out = toolbox.call(call.name, args)
                     record(
-                        "tool_end", round=rounds, call_id=call.id, ok=out.ok,
+                        "tool_end", round=turn, call_id=call.id, ok=out.ok,
                         duration_ms=round((time.perf_counter() - t0) * 1000),
                         summary=out.text[:300], title=out.title or title, preview=out.preview or preview,
                     )  # fmt: skip
@@ -181,13 +191,31 @@ def run_analyst(
                         charts.append(chart)
                         record(
                             "chart",
-                            round=rounds,
+                            round=turn,
                             call_id=call.id,
                             title=chart.get("title", "chart"),
                             option=chart.get("option", {}),
                         )
+                    return call.id, out
+
+                # Independent loaders run together. run_python shares replayed state, so
+                # it runs afterwards, one at a time.
+                loaders = [item for item in pending if item[0].name != "run_python"]
+                scripts = [item for item in pending if item[0].name == "run_python"]
+                results: dict[str, object] = {}
+                if len(loaders) > 1:
+                    with ThreadPoolExecutor(max_workers=min(4, len(loaders))) as pool:
+                        results.update(pool.map(run_one, loaders))
+                else:
+                    results.update(run_one(item) for item in loaders)
+                results.update(run_one(item) for item in scripts)
+                for call, *_ in pending:
                     messages.append(
-                        {"role": "tool", "tool_call_id": call.id, "content": out.text}
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "content": results[call.id].text,  # type: ignore[attr-defined]
+                        }
                     )
                 rounds += 1 if answer is None else 0
 

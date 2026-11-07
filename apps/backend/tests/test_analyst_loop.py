@@ -234,3 +234,72 @@ def test_runtime_limit_forces_a_final_answer():
     result = run_analyst("q", llm=llm, toolbox=StubToolBox(), max_runtime_s=0.0)
     assert result.answer == "Out of time answer."
     assert llm.calls[0][1] is None
+
+
+class SlowBox:
+    """Each loader takes 0.2 s; records when calls overlapped."""
+
+    def __init__(self):
+        import threading
+
+        self.lock = threading.Lock()
+        self.active = 0
+        self.max_active = 0
+        self.order = []
+
+    def call(self, name, args):
+        import time
+
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            self.order.append(name)
+        time.sleep(0.2)
+        with self.lock:
+            self.active -= 1
+        return ToolOutput(f"{name} done", title=name)
+
+
+def test_independent_tools_in_one_turn_run_in_parallel_with_ordered_messages():
+    calls = (
+        _call("a", "load_laps", '{"session_key": 1, "driver": "HAM"}'),
+        _call("b", "load_laps", '{"session_key": 1, "driver": "RUS"}'),
+        _call("c", "load_context", '{"session_key": 1}'),
+    )
+    llm = ScriptedLLM(
+        [
+            Reply("Load everything.", calls),
+            Reply("", (_call("d", "final_answer", '{"markdown": "ok"}'),)),
+        ]
+    )
+    box = SlowBox()
+    result = run_analyst("q", llm=llm, toolbox=box)
+    assert box.max_active == 3  # all three overlapped
+    assert result.answer == "ok"
+    starts = [e["call_id"] for e in result.events if e["type"] == "tool_start"]
+    ends = [e["call_id"] for e in result.events if e["type"] == "tool_end"]
+    assert starts == ["a", "b", "c"] and sorted(ends) == ["a", "b", "c"]
+    assert (
+        result.events.index(next(e for e in result.events if e["type"] == "tool_end"))
+        > 3
+    )  # all started first
+    assert [e["seq"] for e in result.events] == list(range(len(result.events)))
+    tool_msgs = [m["tool_call_id"] for m in llm.calls[1][0] if m["role"] == "tool"]
+    assert tool_msgs == ["a", "b", "c"]  # one reply per call, in call order
+
+
+def test_run_python_waits_for_the_loaders_of_its_turn():
+    calls = (
+        _call("p", "run_python", '{"code": "print(1)"}'),
+        _call("l", "load_laps", '{"session_key": 1}'),
+    )
+    llm = ScriptedLLM(
+        [
+            Reply("", calls),
+            Reply("", (_call("f", "final_answer", '{"markdown": "ok"}'),)),
+        ]
+    )
+    box = SlowBox()
+    run_analyst("q", llm=llm, toolbox=box)
+    assert box.order == ["load_laps", "run_python"]
+    assert box.max_active == 1

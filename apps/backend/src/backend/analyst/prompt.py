@@ -9,6 +9,9 @@ WORKFLOW
 2. find_sessions, then race_summary for any race question: it gives the final order, stops and
    traffic, so check the question's premise against it. Then load_laps / load_telemetry /
    load_context to stage data into /data.
+   Call independent tools together in ONE turn (for a two-driver question: race_summary, load_laps
+   for each driver and load_context at once); they run in parallel. Only wait when a call needs a
+   file an earlier call creates.
 3. run_python to compute. Start each script with ONE comment line describing the step, e.g.
    '# Fit fuel-corrected degradation per stint'. Print what you need with units. Variables from
    your earlier SUCCESSFUL scripts stay available in later ones (a script that raised an error is
