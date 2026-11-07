@@ -104,6 +104,12 @@ class OpenF1Error(RuntimeError):
     """A request failed after retries (as opposed to a successful empty answer)."""
 
 
+class OpenF1Restricted(OpenF1Error):
+    """OpenF1 answered 401: it blocks unauthenticated access, past sessions
+    included, while a live F1 session is running. It lifts when the session
+    ends, so callers should retry later rather than treat it as missing data."""
+
+
 def _get_json(
     endpoint: str, params: dict, base_url: str | None = None, *, strict: bool = False
 ) -> list[dict]:
@@ -134,6 +140,20 @@ def _get_json(
             if exc.code == 404:
                 return []
             last_error = f"HTTP {exc.code}"
+            if exc.code == 401:
+                # Not transient within this run: retrying only hammers the API.
+                log.warning(
+                    "openf1.access_restricted",
+                    endpoint=endpoint,
+                    hint="OpenF1 blocks unauthenticated access during a live "
+                    "session; retry after it ends",
+                )
+                if strict:
+                    raise OpenF1Restricted(
+                        f"OpenF1 /{endpoint} is restricted (HTTP 401): a live "
+                        "session is in progress"
+                    ) from exc
+                return []
             if exc.code in (429, 500, 502, 503) and attempt < 2:
                 time.sleep(1.5 * (attempt + 1))
                 continue

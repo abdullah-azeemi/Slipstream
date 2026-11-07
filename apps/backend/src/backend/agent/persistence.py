@@ -270,6 +270,7 @@ def list_conversations(clerk_user_id: str) -> list[dict]:
                 JOIN users u ON u.id = c.user_id
                 LEFT JOIN agent_messages m ON m.conversation_id = c.id
                 WHERE u.clerk_user_id = :clerk_user_id
+                  AND c.deleted_at IS NULL
                 GROUP BY c.id
                 ORDER BY c.updated_at DESC, c.id DESC
                 """
@@ -303,6 +304,7 @@ def get_conversation_messages(conversation_id: int, clerk_user_id: str) -> dict 
                 FROM agent_conversations c
                 JOIN users u ON u.id = c.user_id
                 WHERE c.id = :cid AND u.clerk_user_id = :clerk_user_id
+                  AND c.deleted_at IS NULL
                 """
             ),
             {"cid": conversation_id, "clerk_user_id": clerk_user_id},
@@ -411,3 +413,36 @@ def get_feedback_stats() -> dict:
             )
         ).first()
         return {"up": row.up_votes, "down": row.down_votes}
+
+
+def lock_user_and_count_conversations(conn, user_id: int) -> int:
+    """Lock the user row so two parallel requests cannot both create the next chat."""
+    conn.execute(
+        text("SELECT id FROM users WHERE id = :uid FOR UPDATE"), {"uid": user_id}
+    )
+    return conn.execute(
+        text(
+            "SELECT COUNT(*) FROM agent_conversations "
+            "WHERE user_id = :uid AND deleted_at IS NULL"
+        ),
+        {"uid": user_id},
+    ).scalar_one()
+
+
+def delete_conversation(conversation_id: int, clerk_user_id: str) -> bool:
+    """Soft-delete a chat the user owns. Run rows stay so daily counters are intact."""
+    with extensions.engine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                UPDATE agent_conversations c
+                SET deleted_at = NOW()
+                FROM users u
+                WHERE c.id = :cid AND c.user_id = u.id
+                  AND u.clerk_user_id = :clerk_user_id
+                  AND c.deleted_at IS NULL
+                """
+            ),
+            {"cid": conversation_id, "clerk_user_id": clerk_user_id},
+        )
+        return result.rowcount > 0

@@ -1,12 +1,52 @@
+import re
+
 import structlog
-from flask import Flask
+from flask import Flask, request
+from flask_compress import Compress
 from flask_cors import CORS
 from sqlalchemy import create_engine
 
-from backend import extensions
+from backend import auth, extensions
 from backend.config import settings
 
+_SECRET = re.compile(r"(sk-[A-Za-z0-9_-]{10,}|Bearer\s+[A-Za-z0-9._~+/=-]+)")
+
+
+def _redact(_logger, _method, event_dict):
+    """Keep API keys and bearer tokens out of log lines."""
+    for key, value in event_dict.items():
+        if isinstance(value, str):
+            event_dict[key] = _SECRET.sub("[redacted]", value)
+    return event_dict
+
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.processors.TimeStamper(fmt="iso"),
+        _redact,
+        structlog.dev.ConsoleRenderer(),
+    ]
+)
+
 log = structlog.get_logger()
+
+# Reachable without a login: health checks and the public landing page data.
+_PUBLIC_PREFIXES = ("/health", "/api/v1/stats", "/api/v1/schedule")
+
+# Per-login responses for finished sessions change rarely; let the browser reuse them.
+_CACHEABLE_PARTS = (
+    "/analysis/",
+    "/telemetry",
+    "/laps",
+    "/fastest",
+    "/strategy",
+    "/race-order",
+    "/drivers",
+)
 
 
 def create_app() -> Flask:
@@ -16,19 +56,23 @@ def create_app() -> Flask:
     app.config["DEBUG"] = settings.debug
     app.config["TESTING"] = settings.testing
 
-    # Allow Next.js dev server to call the API
-    CORS(app, origins="*")
+    CORS(
+        app,
+        origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+    )
+    Compress(app)
 
     extensions.engine = create_engine(
         settings.db_url,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=5,
+        max_overflow=5,
         pool_pre_ping=True,
     )
 
     from backend.api.v1.sessions import sessions_bp
     from backend.api.v1.laps import laps_bp
     from backend.api.v1.drivers import drivers_bp
+    from backend.api.v1.driver_profile import driver_profile_bp
     from backend.api.v1.telemetry import telemetry_bp
     from backend.api.v1.strategy import strategy_bp
     from backend.api.v1.analysis import analysis_bp
@@ -37,11 +81,13 @@ def create_app() -> Flask:
     from backend.api.v1.stats import stats_bp
     from backend.health import health_bp
     from backend.api.v1.agent import agent_bp
+    from backend.api.v1.analyst import analyst_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(sessions_bp, url_prefix="/api/v1")
     app.register_blueprint(laps_bp, url_prefix="/api/v1")
     app.register_blueprint(drivers_bp, url_prefix="/api/v1")
+    app.register_blueprint(driver_profile_bp, url_prefix="/api/v1")
     app.register_blueprint(telemetry_bp, url_prefix="/api/v1")
     app.register_blueprint(strategy_bp, url_prefix="/api/v1")
     app.register_blueprint(analysis_bp, url_prefix="/api/v1")
@@ -49,6 +95,27 @@ def create_app() -> Flask:
     app.register_blueprint(schedule_bp, url_prefix="/api/v1")
     app.register_blueprint(stats_bp, url_prefix="/api/v1")
     app.register_blueprint(agent_bp, url_prefix="/api/v1")
+    app.register_blueprint(analyst_bp, url_prefix="/api/v1")
+
+    @app.before_request
+    def require_login_for_api():
+        path = request.path
+        if not path.startswith("/api/v1") or path.startswith(_PUBLIC_PREFIXES):
+            return None
+        return auth.require_api_auth()
+
+    @app.after_request
+    def add_cache_headers(resp):
+        if (
+            request.method == "GET"
+            and resp.status_code == 200
+            and request.path.startswith("/api/v1/sessions/")
+            and any(part in request.path for part in _CACHEABLE_PARTS)
+        ):
+            resp.headers.setdefault(
+                "Cache-Control", "private, max-age=60, stale-while-revalidate=300"
+            )
+        return resp
 
     @app.errorhandler(404)
     def not_found(e):

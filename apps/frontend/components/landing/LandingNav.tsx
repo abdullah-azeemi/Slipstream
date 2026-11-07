@@ -17,9 +17,10 @@ const APP_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Telemetry', href: '/telemetry' },
   { label: 'Sessions', href: '/sessions' },
+  { label: 'Drivers', href: '/drivers' },
   { label: 'Schedule', href: '/schedule' },
   { label: 'Predictions', href: '/predictions' },
-  { label: 'Agent', href: '/agent' },
+  { label: 'Agent', href: '/analyst' },
 ]
 
 /**
@@ -78,7 +79,7 @@ export default function LandingNav({ app = false }: { app?: boolean }) {
       <a href="#main" className="skip-link button-sm">Skip to content</a>
 
       <header className="nav" aria-label="Main">
-        <Link href={app && signedIn ? '/dashboard' : '/'} className="nav-logo" onClick={() => setOpen(false)}>Slipstream</Link>
+        <Link href="/" className="nav-logo" onClick={() => setOpen(false)}>Slipstream</Link>
 
         <nav className="nav-links body-5" aria-label="Primary">
           {links.map(l => (

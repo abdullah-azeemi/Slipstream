@@ -1,11 +1,16 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { teamColour, formatLapTime } from '@/lib/utils'
 import SectorCard from './SectorCard'
 import PerformanceMatrix from './PerformanceMatrix'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+// A failing endpoint degrades to an empty payload so the other panels still render.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const safeGet = (url: string) => getJson<any>(url).catch(() => ({}))
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -175,11 +180,11 @@ export default function PracticeAnalysis({
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-scatter`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-compound-delta`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-tyre-deg`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-compounds`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-sectors`).then(r => r.json()),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-scatter`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-compound-delta`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-tyre-deg`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-compounds`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fp-sectors`),
     ])
       .then(([sc, cd, td, cp, sec]) => {
         setScatter(Array.isArray(sc) ? sc : [])

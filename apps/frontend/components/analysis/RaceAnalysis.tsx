@@ -1,9 +1,14 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { teamColour, formatLapTime } from '@/lib/utils'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+// A failing endpoint degrades to an empty payload so the other panels still render.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const safeGet = (url: string) => getJson<any>(url).catch(() => ({}))
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -286,12 +291,12 @@ export default function RaceAnalysis({
     setLoading(true)
     const qs = selected.join(',')
     Promise.all([
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/lap-evolution?drivers=${qs}`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/position-changes`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/gap-to-leader`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/stint-pace`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/undercut`).then(r => r.json()),
-      fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fastest-lap`).then(r => r.json()),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/lap-evolution?drivers=${qs}`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/position-changes`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/gap-to-leader`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/stint-pace`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/undercut`),
+      safeGet(`${BASE}/api/v1/sessions/${sessionKey}/analysis/fastest-lap`),
     ])
       .then(([evo, pos, gap, stints, uc, fl]) => {
         setLapData(evo.drivers ?? {})

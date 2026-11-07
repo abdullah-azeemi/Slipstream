@@ -1,6 +1,7 @@
 import { getAuthToken } from '@/lib/auth-token'
+import { getJson } from '@/lib/http'
 import type {
-  Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus
+  Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus, DriverProfile
 } from '@/types/f1'
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
@@ -13,6 +14,8 @@ class APIError extends Error {
 }
 
 async function get<T>(path: string, serverOnly = false, token?: string): Promise<T> {
+  // Browser calls go through the shared cache; server calls keep Next's own fetch cache.
+  if (!serverOnly && !token) return getJson<T>(`${BASE}${path}`)
   const bearer = token ?? getAuthToken()
   const options: RequestInit = {
     headers: {
@@ -52,6 +55,8 @@ export const api = {
   drivers: {
     list: (key: number, server = false) =>
       get<Driver[]>(`/api/v1/sessions/${key}/drivers`, server),
+    profile: (code: string, token?: string | null) =>
+      get<DriverProfile>(`/api/v1/drivers/${encodeURIComponent(code)}/profile`, false, token ?? undefined),
     compare: (key: number, drivers: number[]) =>
       get<DriverComparison[]>(
         `/api/v1/sessions/${key}/drivers/compare?drivers=${drivers.join(',')}`

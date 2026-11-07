@@ -40,3 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# Private driver cutouts (licensing): keep local only, never commit
+/public/drivers/*
+!/public/drivers/README.md
+
+# alternate build folders (NEXT_DIST_DIR) for a second dev server
+.next-*

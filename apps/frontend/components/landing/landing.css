@@ -717,3 +717,21 @@
 
 .lp .chips { display: flex; flex-wrap: wrap; gap: var(--sp-75); margin-top: var(--sp-100); }
 .lp a.chip:hover { color: var(--lp-text); border-color: var(--lp-text); }
+
+/* article extras: kicker, deck, contents box, callouts, figures */
+.lp .article .kicker { letter-spacing: .12em; text-transform: uppercase; color: var(--lp-muted); margin-bottom: var(--sp-100); }
+.lp .article h1 em { font-style: italic; }
+.lp .article .deck { margin: var(--sp-200) 0 var(--sp-150, 18px); color: var(--lp-muted); font-size: 18px; line-height: 28px; text-wrap: pretty; }
+.lp .toc { margin-top: var(--sp-400); padding: var(--sp-200); border: 1px solid var(--lp-border); border-radius: 12px; background: #fafafa; }
+.lp .toc-title { letter-spacing: .12em; text-transform: uppercase; color: var(--lp-muted); margin-bottom: var(--sp-100); }
+.lp .toc ol { list-style: none; counter-reset: toc; padding: 0; display: flex; flex-direction: column; gap: var(--sp-50, 6px); }
+.lp .toc li { font-size: 15px; line-height: 22px; }
+.lp .toc a { text-decoration: none; }
+.lp .toc a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.lp .prose h2 { scroll-margin-top: 96px; }
+.lp .prose blockquote { background: #f7f8f6; color: inherit; border-left: 3px solid #3d7f8a; }
+.lp .prose blockquote p { font-size: 15px; line-height: 23px; }
+.lp .prose blockquote > * + * { margin-top: var(--sp-75); }
+.lp .prose img { display: block; margin: 0 auto; border: 1px solid var(--lp-border); background: #fff; }
+.lp .prose p > em:only-child { display: block; font-size: 13px; line-height: 19px; color: var(--lp-muted); font-style: normal; }
+.lp .prose td:first-child, .lp .prose th:first-child { white-space: nowrap; }

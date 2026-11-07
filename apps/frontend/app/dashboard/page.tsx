@@ -69,14 +69,14 @@ export default async function DashboardPage() {
   const year = new Date().getFullYear()
   const { getToken } = await auth()
   const token = (await getToken()) ?? undefined
-  const user = await currentUser().catch(() => null)
 
-  const [next, sessions, drivers, constructors, convos] = await Promise.all([
+  const [next, sessions, drivers, constructors, convos, user] = await Promise.all([
     load<NextRace>('/api/v1/schedule/next-race', undefined, 30),
     load<SessionRow[]>('/api/v1/sessions', token, 120),
     load<StandingsPayload<DriverStanding>>(`/api/v1/standings/drivers?year=${year}`, token, 300),
     load<StandingsPayload<ConstructorStanding>>(`/api/v1/standings/constructors?year=${year}`, token, 300),
     load<ConversationSummary[]>('/api/v1/agent/conversations', token, 0),
+    currentUser().catch(() => null),
   ])
 
   const lastRace = sessions.ok

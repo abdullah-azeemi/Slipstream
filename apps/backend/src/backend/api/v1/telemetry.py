@@ -145,6 +145,24 @@ def _get_telemetry_samples(
     return []
 
 
+def _has_samples(conn, session_key: int, driver_number: int, lap_number: int) -> bool:
+    """Cheap existence check: avoids loading a whole lap just to see if it is there."""
+    return bool(
+        conn.execute(
+            text("""
+        SELECT EXISTS (
+            SELECT 1 FROM telemetry
+            WHERE session_key = :sk AND driver_number = :dn AND lap_number = :ln
+        ) OR EXISTS (
+            SELECT 1 FROM telemetry_artifacts
+            WHERE session_key = :sk AND driver_number = :dn AND lap_number = :ln
+        )
+    """),
+            {"sk": session_key, "dn": driver_number, "ln": lap_number},
+        ).scalar()
+    )
+
+
 def _resolve_telemetry_lap(
     conn,
     session_key: int,
@@ -156,10 +174,7 @@ def _resolve_telemetry_lap(
     telemetry if that specific lap has no telemetry samples.
     """
     if pinned_lap_number is not None:
-        pinned_samples = _get_telemetry_samples(
-            conn, session_key, driver_number, pinned_lap_number
-        )
-        if pinned_samples:
+        if _has_samples(conn, session_key, driver_number, pinned_lap_number):
             return pinned_lap_number
 
         # If the exact pinned lap has no telemetry, stay as close as possible
@@ -187,7 +202,7 @@ def _resolve_telemetry_lap(
             .all()
         )
         for lap_number in nearby_rows:
-            if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
+            if _has_samples(conn, session_key, driver_number, lap_number):
                 return lap_number
 
     rows = (
@@ -208,7 +223,7 @@ def _resolve_telemetry_lap(
         .all()
     )
     for lap_number in rows:
-        if _get_telemetry_samples(conn, session_key, driver_number, lap_number):
+        if _has_samples(conn, session_key, driver_number, lap_number):
             return lap_number
     return None
 
@@ -318,127 +333,52 @@ def telemetry_stats(session_key: int):
     """
     drivers_param = request.args.get("drivers", "")
     params: dict = {"sk": session_key}
-
+    driver_filter = ""
     if drivers_param:
         try:
-            dns = [int(d.strip()) for d in drivers_param.split(",")]
-            params["dns"] = dns
+            params["dns"] = [int(d.strip()) for d in drivers_param.split(",")]
         except ValueError:
             return {"error": "Driver numbers must be integers"}, 400
+        driver_filter = "WHERE f.driver_number = ANY(:dns)"
 
-    with extensions.engine.connect() as conn:
-        # Get fastest lap per driver first
-        fastest = (
-            conn.execute(
-                text("""
-            SELECT DISTINCT ON (driver_number)
-                driver_number, lap_number, lap_time_ms
+    query = f"""
+        WITH fastest AS (
+            SELECT DISTINCT ON (driver_number) driver_number, lap_number, lap_time_ms
             FROM lap_times
-            WHERE session_key = :sk
-              AND lap_time_ms  IS NOT NULL
-              AND deleted      = FALSE
+            WHERE session_key = :sk AND lap_time_ms IS NOT NULL AND deleted = FALSE
             ORDER BY driver_number, lap_time_ms ASC
-        """),
-                {"sk": session_key},
-            )
-            .mappings()
-            .all()
         )
-
-        results = []
-        for lap in fastest:
-            dn = lap["driver_number"]
-            ln = lap["lap_number"]
-
-            if drivers_param and dn not in params.get("dns", []):
-                continue
-
-            stats = (
-                conn.execute(
-                    text("""
-                SELECT
-                    MAX(speed_kmh)                              AS max_speed,
-                    AVG(speed_kmh)                             AS avg_speed,
-                    AVG(throttle_pct) FILTER (WHERE throttle_pct IS NOT NULL) AS avg_throttle,
-                    -- % of lap at full throttle (throttle >= 98)
-                    ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE throttle_pct >= 98)
-                        / NULLIF(COUNT(*), 0), 1
-                    )                                          AS full_throttle_pct,
-                    -- % of lap braking
-                    ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE brake = TRUE)
-                        / NULLIF(COUNT(*), 0), 1
-                    )                                          AS braking_pct,
-                    -- DRS usage
-                    ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE drs >= 10)
-                        / NULLIF(COUNT(*), 0), 1
-                    )                                          AS drs_pct,
-                    MAX(rpm)                                   AS max_rpm,
-                    MAX(gear)                                  AS max_gear,
-                    -- Approx late braking: avg distance_m into corner where brake first applied
-                    -- We use the average distance between throttle-off and brake-on as a proxy
-                    COUNT(*) FILTER (WHERE brake = TRUE)       AS brake_sample_count
-                FROM telemetry
-                WHERE session_key   = :sk
-                  AND driver_number = :dn
-                  AND lap_number    = :ln
-            """),
-                    {"sk": session_key, "dn": dn, "ln": ln},
-                )
-                .mappings()
-                .first()
-            )
-
-            # Speed trap data from lap_times
-            traps = (
-                conn.execute(
-                    text("""
-                SELECT speed_i1, speed_i2, speed_fl, speed_st
-                FROM lap_times
-                WHERE session_key   = :sk
-                  AND driver_number = :dn
-                  AND lap_number    = :ln
-            """),
-                    {"sk": session_key, "dn": dn, "ln": ln},
-                )
-                .mappings()
-                .first()
-            )
-
-            # Driver info
-            driver = (
-                conn.execute(
-                    text("""
-                SELECT abbreviation, team_name, team_colour
-                FROM drivers
-                WHERE session_key   = :sk
-                  AND driver_number = :dn
-            """),
-                    {"sk": session_key, "dn": dn},
-                )
-                .mappings()
-                .first()
-            )
-
-            if not driver:
-                continue
-
-            results.append(
-                {
-                    "driver_number": dn,
-                    "abbreviation": driver["abbreviation"],
-                    "team_name": driver["team_name"],
-                    "team_colour": driver["team_colour"],
-                    "lap_number": ln,
-                    "lap_time_ms": lap["lap_time_ms"],
-                    **(dict(stats) if stats else {}),
-                    "speed_i1": traps["speed_i1"] if traps else None,
-                    "speed_i2": traps["speed_i2"] if traps else None,
-                    "speed_fl": traps["speed_fl"] if traps else None,
-                    "speed_st": traps["speed_st"] if traps else None,
-                }
-            )
-
-    return jsonify(results)
+        SELECT
+            f.driver_number, f.lap_number, f.lap_time_ms,
+            d.abbreviation, d.team_name, d.team_colour,
+            MAX(t.speed_kmh) AS max_speed,
+            AVG(t.speed_kmh) AS avg_speed,
+            AVG(t.throttle_pct) AS avg_throttle,
+            ROUND(100.0 * COUNT(t.session_key) FILTER (WHERE t.throttle_pct >= 98)
+                  / NULLIF(COUNT(t.session_key), 0), 1) AS full_throttle_pct,
+            ROUND(100.0 * COUNT(t.session_key) FILTER (WHERE t.brake = TRUE)
+                  / NULLIF(COUNT(t.session_key), 0), 1) AS braking_pct,
+            ROUND(100.0 * COUNT(t.session_key) FILTER (WHERE t.drs >= 10)
+                  / NULLIF(COUNT(t.session_key), 0), 1) AS drs_pct,
+            MAX(t.rpm) AS max_rpm,
+            MAX(t.gear) AS max_gear,
+            COUNT(t.session_key) FILTER (WHERE t.brake = TRUE) AS brake_sample_count,
+            lt.speed_i1, lt.speed_i2, lt.speed_fl, lt.speed_st
+        FROM fastest f
+        JOIN drivers d
+          ON d.session_key = :sk AND d.driver_number = f.driver_number
+        LEFT JOIN lap_times lt
+          ON lt.session_key = :sk AND lt.driver_number = f.driver_number
+         AND lt.lap_number = f.lap_number
+        LEFT JOIN telemetry t
+          ON t.session_key = :sk AND t.driver_number = f.driver_number
+         AND t.lap_number = f.lap_number
+        {driver_filter}
+        GROUP BY f.driver_number, f.lap_number, f.lap_time_ms,
+                 d.abbreviation, d.team_name, d.team_colour,
+                 lt.speed_i1, lt.speed_i2, lt.speed_fl, lt.speed_st
+        ORDER BY f.driver_number
+    """
+    with extensions.engine.connect() as conn:
+        rows = conn.execute(text(query), params).mappings().all()
+    return jsonify([dict(r) for r in rows])

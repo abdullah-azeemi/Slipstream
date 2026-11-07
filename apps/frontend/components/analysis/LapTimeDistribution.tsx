@@ -1,5 +1,6 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import React, { useEffect, useState, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { COMPOUND_COLOURS } from '@/lib/utils'
@@ -60,10 +61,7 @@ export default function LapTimeDistribution({ sessionKey }: { sessionKey: number
     let active = true
     setLoading(true)
     setError(null)
-    fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/lap-evolution`, { signal: abort.signal })
-      .then(r => { if (!r.ok) throw new Error('Failed to load')
-        return r.json() as Promise<LapEvolutionResponse>
-      })
+    getJson<LapEvolutionResponse>(`${BASE}/api/v1/sessions/${sessionKey}/analysis/lap-evolution`)
       .then(d => {
         if (!active) return
         setData(d)

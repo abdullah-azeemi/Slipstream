@@ -45,3 +45,7 @@ Thumbs.db
 
 # Private planning
 docs/plan.md
+
+.skills-lock.json
+# Agent eval run outputs
+apps/backend/evals/results/

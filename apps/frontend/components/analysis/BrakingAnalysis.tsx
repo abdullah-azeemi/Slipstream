@@ -1,5 +1,6 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import { useEffect, useRef, useState } from 'react'
 import { teamColour } from '@/lib/utils'
 import type { InsightsData } from './CornerInsights'
@@ -109,13 +110,7 @@ export default function BrakingAnalysis({
     setLoading(true)
     setError(null)
 
-    fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/driver-compare-stats?drivers=${drivers.join(',')}`, {
-      signal: abort.signal,
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to load braking analysis')
-        return res.json()
-      })
+    getJson<CompareStats>(`${BASE}/api/v1/sessions/${sessionKey}/analysis/driver-compare-stats?drivers=${drivers.join(',')}`)
       .then((d: CompareStats) => {
         if (!active) return
         setData(d)

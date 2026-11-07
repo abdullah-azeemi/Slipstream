@@ -20,6 +20,8 @@ def test_app_factory_does_not_start_an_ingestion_thread(monkeypatch):
 
 
 def test_personal_memory_endpoint_is_not_registered():
-    response = create_app().test_client().delete("/api/v1/agent/memory")
+    response = create_app().test_client().delete(
+        "/api/v1/agent/memory", headers={"Authorization": "Bearer test-token"}
+    )
 
     assert response.status_code == 404
