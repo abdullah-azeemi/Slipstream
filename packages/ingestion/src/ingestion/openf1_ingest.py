@@ -803,12 +803,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="replace sessions that already have laps")
     args = parser.parse_args(argv)
 
-    if args.all:
-        print(backfill_year(args.year, force=args.force))
-        return 0
-    if not (args.gp and args.session):
-        parser.error("give --gp and --session, or --all")
-    key = ingest_session_openf1(args.year, args.gp, args.session, force=args.force)
+    try:
+        if args.all:
+            print(backfill_year(args.year, force=args.force))
+            return 0
+        if not (args.gp and args.session):
+            parser.error("give --gp and --session, or --all")
+        key = ingest_session_openf1(args.year, args.gp, args.session, force=args.force)
+    except of1.OpenF1Restricted as exc:
+        # Not a crash: OpenF1 lifts this restriction when the live session ends.
+        print(f"OpenF1 is blocking access right now: {exc}. Retry after the session ends.")
+        return 2
     print({"session_key": key})
     return 0 if key else 1
 

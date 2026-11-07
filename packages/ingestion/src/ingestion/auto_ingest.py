@@ -24,6 +24,38 @@ log = structlog.get_logger()
 
 AUTO_INGEST_LOCK_ID = 48219031
 
+# A session still "not ready" this many days after its event began is not
+# waiting for upstream any more: the data source is blocking us. Fail loudly.
+STUCK_AFTER_DAYS = 6
+
+
+class IngestStuckError(RuntimeError):
+    """Completed sessions could not be ingested for days (e.g. F1 livetiming and
+    OpenF1 both answer 401). ``new_sessions`` says whether anything else did land."""
+
+    def __init__(self, sessions: list[str], new_sessions: bool) -> None:
+        super().__init__(
+            f"{len(sessions)} completed session(s) could not be ingested for "
+            f"more than {STUCK_AFTER_DAYS} days: {', '.join(sessions)}. F1 "
+            "livetiming returns 401 without an F1TV login and OpenF1 refuses "
+            "unauthenticated access during live sessions; see "
+            "docs/repository.md for the options."
+        )
+        self.sessions = sessions
+        self.new_sessions = new_sessions
+
+
+def _event_is_stuck(event: dict, now: datetime) -> bool:
+    started = event.get("date_start")
+    if started is None:
+        return False
+    try:
+        if getattr(started, "tzinfo", None) is None:
+            started = started.replace(tzinfo=timezone.utc)
+        return (now - started).days > STUCK_AFTER_DAYS
+    except Exception:
+        return False
+
 CONVENTIONAL_SESSIONS = [
     ("FP1", False),
     ("FP2", False),
@@ -301,6 +333,8 @@ def run_once() -> bool:
         new_sessions = 0
         not_ready = 0
         failed = 0
+        stuck: list[str] = []
+        now = datetime.now(timezone.utc)
         latest_gp_ingested: str | None = None
 
         for event in schedule:
@@ -326,6 +360,8 @@ def run_once() -> bool:
                     latest_gp_ingested = gp_name
                 elif result is None:
                     not_ready += 1
+                    if _event_is_stuck(event, now):
+                        stuck.append(f"{current_year} {gp_name} {session_type}")
                 else:
                     failed += 1
 
@@ -351,6 +387,10 @@ def run_once() -> bool:
                     deleted=deleted,
                 )
 
+        if stuck:
+            log.error("auto_ingest.stuck", sessions=stuck)
+            raise IngestStuckError(stuck, new_sessions > 0)
+
         return new_sessions > 0
     finally:
         try:
@@ -370,12 +410,21 @@ def run_once() -> bool:
             engine.dispose()
 
 
-def main():
-    new_sessions = run_once()
+def _write_output(new_sessions: bool) -> None:
     output_file = os.environ.get("GITHUB_OUTPUT")
     if output_file:
         with open(output_file, "a", encoding="utf-8") as output:
             output.write(f"new_sessions={'true' if new_sessions else 'false'}\n")
+
+
+def main():
+    try:
+        new_sessions = run_once()
+    except IngestStuckError as exc:
+        # Record what did land (so training still runs), then fail the job.
+        _write_output(exc.new_sessions)
+        raise
+    _write_output(new_sessions)
 
 
 if __name__ == "__main__":

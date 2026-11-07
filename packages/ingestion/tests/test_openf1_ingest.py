@@ -150,3 +150,39 @@ def test_session_info_maps_names_and_skips_cancelled():
     assert oi.build_session_info(meeting, sess)["session_type"] == "SQ"
     assert oi.build_session_info(meeting, {**sess, "is_cancelled": True}) is None
     assert oi.build_session_info(meeting, {**sess, "session_name": "Day 1"}) is None
+
+
+def test_401_is_reported_as_restricted_without_retrying(monkeypatch):
+    import io
+    import urllib.error
+
+    import pytest
+
+    from ingestion import openf1_client as of1
+
+    calls = {"n": 0}
+
+    def deny(*_a, **_k):
+        calls["n"] += 1
+        raise urllib.error.HTTPError("u", 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+
+    monkeypatch.setattr(of1.urllib.request, "urlopen", deny)
+    monkeypatch.setattr(of1, "_throttle", lambda: None)
+
+    with pytest.raises(of1.OpenF1Restricted):
+        of1._get_json("meetings", {"year": 2026}, strict=True)
+    assert calls["n"] == 1
+    assert of1._get_json("meetings", {"year": 2026}) == []
+
+
+def test_cli_reports_restriction_instead_of_a_traceback(monkeypatch, capsys):
+    from ingestion import openf1_client as of1
+    from ingestion import openf1_ingest
+
+    def blocked(*_a, **_k):
+        raise of1.OpenF1Restricted("OpenF1 /meetings is restricted (HTTP 401)")
+
+    monkeypatch.setattr(openf1_ingest, "ingest_session_openf1", blocked)
+    code = openf1_ingest.main(["--year", "2026", "--gp", "Mexico City", "--session", "Q"])
+    assert code == 2
+    assert "Retry after the session ends" in capsys.readouterr().out
