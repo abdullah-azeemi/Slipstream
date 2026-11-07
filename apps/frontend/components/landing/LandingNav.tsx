@@ -21,6 +21,7 @@ const APP_LINKS = [
   { label: 'Schedule', href: '/schedule' },
   { label: 'Predictions', href: '/predictions' },
   { label: 'Agent', href: '/agent' },
+  { label: 'Analyst', href: '/analyst' },
 ]
 
 /**
