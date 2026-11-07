@@ -42,7 +42,9 @@ def load_questions(path: Path = QUESTIONS_PATH) -> list[dict]:
         if q["tier"] not in TIERS:
             raise ValueError(f"{q['id']}: unknown tier {q['tier']!r}")
         if (q["tier"] == "trap") != q["expect_refusal"]:
-            raise ValueError(f"{q['id']}: trap tier must be exactly the expect_refusal ones")
+            raise ValueError(
+                f"{q['id']}: trap tier must be exactly the expect_refusal ones"
+            )
         for check in q["numeric_checks"]:
             if not {"name", "unit", "min", "max"} <= check.keys():
                 raise ValueError(f"{q['id']}: bad numeric_check {check}")
@@ -76,7 +78,13 @@ UNIT_ALIASES: dict[str, tuple[tuple[str, float], ...]] = {
         ("milliseconds per lap", 0.001),
     ),
     "km/h": (("km/h", 1.0), ("kph", 1.0), ("kmh", 1.0), ("km/hr", 1.0)),
-    "s": (("s", 1.0), ("sec", 1.0), ("seconds", 1.0), ("ms", 0.001), ("milliseconds", 0.001)),
+    "s": (
+        ("s", 1.0),
+        ("sec", 1.0),
+        ("seconds", 1.0),
+        ("ms", 0.001),
+        ("milliseconds", 0.001),
+    ),
 }
 
 # Phrases that mean the agent had no evidence for part of the answer. A good
@@ -135,7 +143,9 @@ def score_run(question: dict, run: dict) -> QuestionScore:
         return score
 
     if refused:
-        score.failures.append("refused: " + "; ".join(run.get("refusals") or ["clarification"]))
+        score.failures.append(
+            "refused: " + "; ".join(run.get("refusals") or ["clarification"])
+        )
 
     missing_terms = [t for t in question["must_mention"] if t.lower() not in lowered]
     score.checks["must_mention"] = not missing_terms
@@ -154,7 +164,9 @@ def score_run(question: dict, run: dict) -> QuestionScore:
         ok = bool(values) and all(check["min"] <= v <= check["max"] for v in values)
         score.checks[f"num:{check['name']}"] = ok
         if not values:
-            score.failures.append(f"{check['name']}: no value with unit {check['unit']!r}")
+            score.failures.append(
+                f"{check['name']}: no value with unit {check['unit']!r}"
+            )
         elif not ok:
             score.failures.append(
                 f"{check['name']}: {values} outside [{check['min']}, {check['max']}]"

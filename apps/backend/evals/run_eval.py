@@ -61,7 +61,9 @@ def main() -> int:
     parser.add_argument("--limit", type=int, help="run only the first N questions")
     parser.add_argument("--ids", nargs="+", help="run only these question ids")
     parser.add_argument("--tier", choices=scoring.TIERS)
-    parser.add_argument("--dry-run", action="store_true", help="validate and list, no calls")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="validate and list, no calls"
+    )
     parser.add_argument("--rescore", type=Path, help="re-score a saved results file")
     args = parser.parse_args()
 
@@ -70,7 +72,9 @@ def main() -> int:
 
     if args.rescore:
         runs = json.loads(args.rescore.read_text())["runs"]
-        scores = [scoring.score_run(by_id[r["id"]], r) for r in runs if r["id"] in by_id]
+        scores = [
+            scoring.score_run(by_id[r["id"]], r) for r in runs if r["id"] in by_id
+        ]
         _print_report(scores)
         return 0
 

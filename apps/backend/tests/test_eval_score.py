@@ -29,12 +29,17 @@ def test_real_question_file_is_valid():
 
 
 def test_extract_numbers_reads_value_before_unit():
-    assert score.extract_numbers("deg was 0.08 s/lap then 0,12 s/lap", "s/lap") == [0.08, 0.12]
+    assert score.extract_numbers("deg was 0.08 s/lap then 0,12 s/lap", "s/lap") == [
+        0.08,
+        0.12,
+    ]
     assert score.extract_numbers("no units here 0.08", "s/lap") == []
 
 
 def test_extract_numbers_converts_aliases_to_canonical_unit():
-    assert score.extract_numbers("slope -126.51 ms per lap", "s/lap") == [pytest.approx(-0.12651)]
+    assert score.extract_numbers("slope -126.51 ms per lap", "s/lap") == [
+        pytest.approx(-0.12651)
+    ]
     assert score.extract_numbers("slope −0.08 s per lap", "s/lap") == [-0.08]
     assert score.extract_numbers("top speed 313 kph", "km/h") == [313.0]
 
@@ -47,7 +52,11 @@ def test_seconds_unit_does_not_match_inside_other_units():
 
 def test_alias_value_is_range_checked_after_conversion():
     # -126 ms/lap is -0.126 s/lap: outside [0, 0.6], so it must fail, not be missed
-    run = {"answer": "Degradation slope was -126.51 ms per lap.", "refusals": [], "trace": []}
+    run = {
+        "answer": "Degradation slope was -126.51 ms per lap.",
+        "refusals": [],
+        "trace": [],
+    }
     result = score.score_run(_q(), run)
     assert not result.passed
     assert any("outside" in f for f in result.failures)
@@ -102,8 +111,12 @@ def test_tool_error_fails_run():
 
 
 def test_summary_groups_by_tier():
-    a = score.QuestionScore(id="a", tier="supported", passed=True, refused=False, latency_s=2)
-    b = score.QuestionScore(id="b", tier="trap", passed=False, refused=False, latency_s=4)
+    a = score.QuestionScore(
+        id="a", tier="supported", passed=True, refused=False, latency_s=2
+    )
+    b = score.QuestionScore(
+        id="b", tier="trap", passed=False, refused=False, latency_s=4
+    )
     summary = score.summarize([a, b])
     assert summary["overall"]["pass_rate"] == 0.5
     assert summary["supported"]["passed"] == 1
