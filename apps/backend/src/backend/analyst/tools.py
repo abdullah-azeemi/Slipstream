@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.analyst.sandbox import Sandbox, Workspace
-from backend.f1lab import data, sanity
+from backend.f1lab import data, report, sanity
 
 MAX_TOOL_TEXT = 3500
 READ_HINT = "Read staged files with load('<file>') (list of dicts) or df('<file>') (DataFrame); not pd.read_json."
@@ -89,6 +89,14 @@ TOOL_SCHEMAS: list[dict] = [
             "session_type": {"type": "string", "description": "R race, Q qualifying"},
         },
         [],
+    ),
+    _schema(
+        "race_summary",
+        "Facts for a race, one line per driver: final order, tyre compounds, stops with pit "
+        "loss and position before each stop, median clean lap, laps in traffic. Call this FIRST "
+        "for any question about a race, before loading laps.",
+        {"session_key": {"type": "integer"}},
+        ["session_key"],
     ),
     _schema(
         "load_laps",
@@ -175,6 +183,7 @@ class ToolBox:
     def call(self, name: str, args: dict) -> ToolOutput:
         handlers: dict[str, Callable[..., ToolOutput]] = {
             "find_sessions": self._find_sessions,
+            "race_summary": self._race_summary,
             "load_laps": self._load_laps,
             "load_telemetry": self._load_telemetry,
             "load_context": self._load_context,
@@ -234,6 +243,41 @@ class ToolBox:
             "\n".join(lines),
             title=f"Find sessions · {gp or year or 'all'}",
             preview="\n".join(lines[:4]),
+        )
+
+    def _race_summary(self, session_key: int) -> ToolOutput:
+        with self.conn_factory() as conn:
+            session_type = conn.execute(
+                text("SELECT session_type FROM sessions WHERE session_key = :sk"),
+                {"sk": session_key},
+            ).scalar()
+            if session_type != "R":
+                return ToolOutput(
+                    f"race_summary only works for races; this session is {session_type!r}",
+                    ok=False,
+                    title="Race summary",
+                )
+            laps = data.load_laps(conn, session_key, include_deleted=True)
+            labels = {
+                row[0]: row[1]
+                for row in conn.execute(
+                    text(
+                        "SELECT driver_number, abbreviation FROM drivers WHERE session_key = :sk"
+                    ),
+                    {"sk": session_key},
+                )
+            }
+        if not laps:
+            return ToolOutput(
+                "no lap data for that session", ok=False, title="Race summary"
+            )
+        summary = report.race_summary(laps, labels)
+        self.workspace.write_json(f"race_summary_{session_key}.json", summary)
+        text_out = report.format_race_summary(summary)
+        return ToolOutput(
+            text_out,
+            title=f"Race summary · session {session_key}",
+            preview="\n".join(text_out.splitlines()[1:5]),
         )
 
     def _load_laps(self, session_key: int, driver: str | None = None) -> ToolOutput:
@@ -432,6 +476,8 @@ def describe_call(name: str, args: dict) -> tuple[str, str]:
     if name == "find_sessions":
         label = args.get("gp") or args.get("year") or "all"
         return f"Find sessions · {label}", ""
+    if name == "race_summary":
+        return f"Race summary · session {args.get('session_key')}", ""
     if name == "load_laps":
         return (
             f"Laps · {args.get('driver') or 'all drivers'}",

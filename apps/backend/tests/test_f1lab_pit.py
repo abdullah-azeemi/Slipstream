@@ -75,3 +75,8 @@ def test_pit_losses_accept_nan_for_missing_pit_times():
         lap.setdefault("pit_out_time_ms", nan)
     [stop] = pit_losses(laps, TOTAL)
     assert (stop.lap_in, stop.loss_s is not None) == (15, True)
+
+
+def test_retirement_into_the_pits_is_not_a_stop():
+    laps = _race(stop_in=29, n_laps=29)
+    assert pit_losses(laps, TOTAL) == []

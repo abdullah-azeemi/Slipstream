@@ -232,3 +232,21 @@ def test_profile_lists_categories_and_missing_values():
     assert "category values: Flag x2, SafetyCar x1" in text_
     assert "lap_number is empty in 1 of 3 rows" in text_
     assert "message values" not in text_  # too many distinct values to list
+
+
+def test_race_summary_tool_works_for_races_and_stages_a_file(seeded, box):
+    out = box.call("race_summary", {"session_key": SK})
+    assert (
+        out.ok and "P" in out.text and "HAM" in out.text and "not official" in out.text
+    )
+    assert (box.workspace.data / f"race_summary_{SK}.json").exists()
+
+
+def test_race_summary_refuses_a_non_race_session(db_engine, seeded, box):
+    with db_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE sessions SET session_type = 'Q' WHERE session_key = :sk"),
+            {"sk": SK},
+        )
+    out = box.call("race_summary", {"session_key": SK})
+    assert not out.ok and "only works for races" in out.text

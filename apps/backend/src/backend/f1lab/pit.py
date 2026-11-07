@@ -50,7 +50,7 @@ def pit_losses(
     reference is the mean of up to `ref_window` clean laps before the in-lap
     and after the out-lap (so tyre age roughly cancels). Only green stops get
     a number: under SC/VSC/red the own-lap method is meaningless, so loss_s
-    is None there.
+    is None there. A stop with a missing lap time is still listed, without a loss.
     """
     by_lap = {lap["lap_number"]: lap for lap in laps}
     clean = fuel_correct(
@@ -64,9 +64,7 @@ def pit_losses(
         n = lap["lap_number"]
         nxt = by_lap.get(n + 1)
         if nxt is None or is_missing(nxt.get("pit_out_time_ms")):
-            continue
-        if is_missing(lap.get("lap_time_ms")) or is_missing(nxt.get("lap_time_ms")):
-            continue
+            continue  # came in and never rejoined: a retirement, not a stop
 
         condition = max(
             lap_condition(lap.get("track_status")),
@@ -78,7 +76,10 @@ def pit_losses(
         refs = before + after
 
         loss_s = None
-        if condition == "green" and len(refs) >= 2:
+        times_known = not (
+            is_missing(lap.get("lap_time_ms")) or is_missing(nxt.get("lap_time_ms"))
+        )
+        if condition == "green" and len(refs) >= 2 and times_known:
             in_c, out_c = fuel_correct(
                 [lap, nxt], total_laps, effect_s_per_lap=effect_s_per_lap
             )

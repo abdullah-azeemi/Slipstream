@@ -71,3 +71,10 @@ def test_load_laps_skips_deleted_and_filters_driver(db_engine, seeded):
     assert [lap["lap_number"] for lap in ham] == [1, 2]
     assert data.race_length(everyone) == 2
     assert data.race_length([]) == 0
+
+
+def test_include_deleted_keeps_laps_needed_for_gaps(db_engine, seeded):
+    with db_engine.connect() as conn:
+        laps = data.load_laps(conn, SK, driver_number=44, include_deleted=True)
+    assert [lap["lap_number"] for lap in laps] == [1, 2, 3]
+    assert laps[2]["deleted"] is True

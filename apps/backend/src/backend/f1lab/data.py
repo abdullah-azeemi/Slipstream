@@ -10,7 +10,7 @@ from sqlalchemy import text
 _LAP_COLUMNS = """
     driver_number, lap_number, lap_time_ms, s1_ms, s2_ms, s3_ms, compound,
     stint, tyre_life_laps, pit_in_time_ms, pit_out_time_ms, track_status,
-    position
+    position, deleted
 """
 
 
@@ -31,13 +31,25 @@ def resolve_driver_number(conn, session_key: int, name: str) -> int | None:
     return int(row[0]) if row else None
 
 
-def load_laps(conn, session_key: int, driver_number: int | None = None) -> list[dict]:
-    """Non-deleted laps as dicts, ordered by driver then lap."""
+def load_laps(
+    conn,
+    session_key: int,
+    driver_number: int | None = None,
+    *,
+    include_deleted: bool = False,
+) -> list[dict]:
+    """Laps as dicts, ordered by driver then lap.
+
+    Deleted laps are left out by default. A lap deleted for track limits was still
+    driven, so anything summing lap times (gaps) needs include_deleted=True.
+    """
     sql = f"""
         SELECT {_LAP_COLUMNS}
         FROM lap_times
-        WHERE session_key = :sk AND deleted = FALSE
+        WHERE session_key = :sk
     """
+    if not include_deleted:
+        sql += " AND deleted = FALSE"
     binds: dict = {"sk": session_key}
     if driver_number is not None:
         sql += " AND driver_number = :dn"

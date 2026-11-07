@@ -7,6 +7,7 @@ needs, so a model (or a person) does not have to re-derive them each time.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import median
 
 from backend.f1lab import sanity
 from backend.f1lab.pace import (
@@ -14,8 +15,13 @@ from backend.f1lab.pace import (
     clean_laps,
     fit_degradation,
     fuel_correct,
+    is_missing,
 )
 from backend.f1lab.pit import PitLoss, pit_losses, summarize_green
+
+# Within this gap the car behind loses lap time. From a simulation of aerodynamic interaction
+# (Fieni et al., arXiv 2602.23056, Bahrain), used here as an approximation for every circuit.
+TRAFFIC_GAP_S = 1.35
 
 _COLORS = ("#3d7f8a", "#d9822b", "#7a5aa6", "#4c9a6a", "#c4574c")
 
@@ -164,3 +170,125 @@ def pit_summary(laps_by_driver: dict[str, list[dict]], total_laps: int) -> dict:
         ],
         "green": summarize_green([stop for _, stop in stops]),
     }
+
+
+def gaps_to_car_ahead(laps: list[dict]) -> dict[tuple[int, int], float]:
+    """(driver_number, lap_number) -> seconds behind the car one position ahead.
+
+    Needs every driver's laps including deleted ones, because gaps come from summed
+    lap times. After a missing lap time a driver has no gap for the rest of the race.
+    """
+    elapsed: dict[tuple[int, int], float] = {}
+    by_driver: dict[int, list[dict]] = {}
+    for lap in laps:
+        by_driver.setdefault(lap["driver_number"], []).append(lap)
+    for driver, rows in by_driver.items():
+        total = 0.0
+        for expected, lap in enumerate(sorted(rows, key=lambda r: r["lap_number"]), 1):
+            if lap["lap_number"] != expected or is_missing(lap.get("lap_time_ms")):
+                break
+            total += lap["lap_time_ms"] / 1000
+            elapsed[(driver, expected)] = total
+
+    at_position = {
+        (lap["lap_number"], lap["position"]): lap["driver_number"]
+        for lap in laps
+        if not is_missing(lap.get("position"))
+    }
+    gaps: dict[tuple[int, int], float] = {}
+    for lap in laps:
+        key = (lap["driver_number"], lap["lap_number"])
+        if is_missing(lap.get("position")) or key not in elapsed:
+            continue
+        ahead = at_position.get((lap["lap_number"], lap["position"] - 1))
+        ahead_time = elapsed.get((ahead, lap["lap_number"])) if ahead else None
+        if ahead_time is not None:
+            gaps[key] = elapsed[key] - ahead_time
+    return gaps
+
+
+def race_summary(laps: list[dict], labels: dict[int, str]) -> dict:
+    """Final order, stops, pace and traffic for every driver in a race.
+
+    laps: all drivers, including deleted laps. labels: driver_number -> 'HAM'.
+    The order comes from lap data at each driver's last lap, not official results.
+    """
+    gaps = gaps_to_car_ahead(laps)
+    race_laps = max((lap["lap_number"] for lap in laps), default=0)
+    rows = []
+    for driver in sorted({lap["driver_number"] for lap in laps}):
+        own = sorted(
+            (lap for lap in laps if lap["driver_number"] == driver),
+            key=lambda r: r["lap_number"],
+        )
+        position_on = {lap["lap_number"]: lap.get("position") for lap in own}
+        clean = clean_laps(own)
+        stops = [
+            {
+                "lap_in": stop.lap_in,
+                "condition": stop.condition,
+                "loss_s": None if stop.loss_s is None else round(stop.loss_s, 2),
+                "position_before": position_on.get(stop.lap_in - 1),
+            }
+            for stop in pit_losses(own, race_laps)
+        ]
+        known = [
+            gaps[(driver, lap["lap_number"])]
+            for lap in clean
+            if (driver, lap["lap_number"]) in gaps
+        ]
+        compounds: list[str] = []
+        for lap in own:
+            compound = lap.get("compound")
+            if compound and (not compounds or compounds[-1] != compound):
+                compounds.append(compound)
+        rows.append(
+            {
+                "driver": labels.get(driver, str(driver)),
+                "final_position": own[-1].get("position"),
+                "laps": own[-1]["lap_number"],
+                "compounds": compounds,
+                "stops": stops,
+                "median_clean_lap_s": round(
+                    median(lap["lap_time_ms"] for lap in clean) / 1000, 3
+                )
+                if clean
+                else None,
+                "clean_laps_with_gap": len(known),
+                "clean_laps_in_traffic": sum(g < TRAFFIC_GAP_S for g in known),
+            }
+        )
+    rows.sort(key=lambda r: (-r["laps"], r["final_position"] or 99))
+    return {"race_laps": race_laps, "drivers": rows}
+
+
+def format_race_summary(summary: dict) -> str:
+    """One compact line per driver, for the model to read first."""
+    lines = [
+        f"Race of {summary['race_laps']} laps. Order is from lap data at each driver's last "
+        f"lap, not official results. 'traffic' = clean laps within {TRAFFIC_GAP_S} s of the "
+        "car ahead (an approximate threshold), out of laps where the gap is known; a stop under red, SC or VSC is not a normal racing stop. Lap times already include pit loss."
+    ]
+    for row in summary["drivers"]:
+        stops = (
+            ", ".join(
+                f"L{s['lap_in']} {s['condition']}"
+                + (f" {s['loss_s']}s" if s["loss_s"] is not None else "")
+                + f" from P{s['position_before']}"
+                for s in row["stops"]
+            )
+            or "none"
+        )
+        # gaps vanish after a missing lap time: say unknown rather than imply clean air
+        traffic = (
+            f"{row['clean_laps_in_traffic']}/{row['clean_laps_with_gap']}"
+            if row["clean_laps_with_gap"]
+            else "unknown"
+        )
+        lines.append(
+            f"P{row['final_position']} {row['driver']} {row['laps']}L "
+            f"{'>'.join(c[0] for c in row['compounds'])} "
+            f"median {row['median_clean_lap_s']}s "
+            f"traffic {traffic} stops: {stops}"
+        )
+    return "\n".join(lines)

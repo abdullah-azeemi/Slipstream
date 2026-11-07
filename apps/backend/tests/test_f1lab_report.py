@@ -2,7 +2,14 @@ import json
 
 import pytest
 
-from backend.f1lab.report import degradation_by_stint, degradation_chart, pit_summary
+from backend.f1lab.report import (
+    degradation_by_stint,
+    degradation_chart,
+    format_race_summary,
+    gaps_to_car_ahead,
+    pit_summary,
+    race_summary,
+)
 
 TOTAL = 57
 
@@ -86,3 +93,80 @@ def test_pit_summary_lists_stops_and_summarises_green_ones():
         23.0, abs=0.01
     )
     json.dumps(summary)
+
+
+def _car(number, position, base, stop_in=None, n=30, deleted=()):
+    laps = []
+    for lap in range(1, n + 1):
+        t = base + (12.0 if stop_in and lap in (stop_in, stop_in + 1) else 0)
+        row = {
+            "driver_number": number,
+            "lap_number": lap,
+            "lap_time_ms": round(t * 1000),
+            "position": position,
+            "stint": 1 if not stop_in or lap <= stop_in else 2,
+            "compound": "SOFT" if not stop_in or lap <= stop_in else "HARD",
+            "deleted": lap in deleted,
+        }
+        if stop_in == lap:
+            row["pit_in_time_ms"] = 1
+        if stop_in and lap == stop_in + 1:
+            row["pit_out_time_ms"] = 1
+        laps.append(row)
+    return laps
+
+
+def test_gap_comes_from_summed_lap_times_and_counts_deleted_laps():
+    laps = _car(1, 1, 90.0) + _car(2, 2, 90.1, deleted=(5,))
+    gaps = gaps_to_car_ahead(laps)
+    assert gaps[(2, 10)] == pytest.approx(1.0, abs=0.01)
+    assert (1, 10) not in gaps  # the leader has nobody ahead
+
+
+def test_a_missing_lap_time_stops_the_gap_rather_than_inventing_one():
+    laps = _car(1, 1, 90.0) + _car(2, 2, 90.1)
+    laps[30 + 4]["lap_time_ms"] = None  # driver 2, lap 5
+    gaps = gaps_to_car_ahead(laps)
+    assert (2, 4) in gaps and (2, 5) not in gaps and (2, 20) not in gaps
+
+
+def test_race_summary_gives_order_stops_and_traffic():
+    laps = _car(1, 1, 90.0, stop_in=15) + _car(2, 2, 90.01, stop_in=20)
+    summary = race_summary(laps, {1: "AAA", 2: "BBB"})
+    first, second = summary["drivers"]
+    assert summary["race_laps"] == 30
+    assert (first["driver"], first["final_position"], first["laps"]) == ("AAA", 1, 30)
+    assert first["compounds"] == ["SOFT", "HARD"]
+    assert (
+        first["stops"][0]["lap_in"] == 15 and first["stops"][0]["position_before"] == 1
+    )
+    assert second["clean_laps_in_traffic"] > 0
+    assert second["clean_laps_with_gap"] > 0
+    assert first["clean_laps_in_traffic"] == 0
+    assert "P2 BBB 30L S>H" in format_race_summary(summary)
+
+
+def test_retired_driver_sorts_after_finishers():
+    laps = _car(1, 1, 90.0, n=10) + _car(2, 2, 90.0)
+    assert [
+        r["driver"] for r in race_summary(laps, {1: "OUT", 2: "FIN"})["drivers"]
+    ] == [
+        "FIN",
+        "OUT",
+    ]
+
+
+def test_unknown_gaps_are_reported_as_unknown_not_as_clean_air():
+    laps = _car(1, 1, 90.0) + _car(2, 2, 90.01)
+    laps[30]["lap_time_ms"] = None  # driver 2 has no gap from lap 1 on
+    summary = race_summary(laps, {1: "AAA", 2: "BBB"})
+    assert summary["drivers"][1]["clean_laps_with_gap"] == 0
+    assert "traffic unknown" in format_race_summary(summary).splitlines()[2]
+
+
+def test_red_flag_and_missing_time_stops_are_listed_without_a_loss():
+    laps = _car(1, 1, 90.0, stop_in=5)
+    laps[4]["track_status"] = "125"
+    laps[5]["lap_time_ms"] = None
+    [stop] = race_summary(laps, {1: "AAA"})["drivers"][0]["stops"]
+    assert (stop["lap_in"], stop["condition"], stop["loss_s"]) == (5, "red", None)

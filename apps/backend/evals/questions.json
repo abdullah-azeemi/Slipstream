@@ -277,13 +277,15 @@
         "any_of": [
           [
             "already",
-            "finished ahead",
-            "ahead of piastri",
+            "finished second",
+            "second place",
             "p2"
           ]
         ],
         "forbidden": [
-          "could have beaten"
+          "could have beaten",
+          "could have potentially beaten",
+          "could have finished ahead"
         ]
       }
     },
@@ -517,10 +519,9 @@
           ],
           [
             "fewer stop",
-            "3 stops",
-            "three stops",
-            "3 pit",
-            "three pit"
+            "one less",
+            "2 stops",
+            "two stops"
           ]
         ]
       }

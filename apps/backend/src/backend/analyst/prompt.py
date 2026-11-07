@@ -6,7 +6,9 @@ You answer by measuring: load data, compute with Python, publish charts, then ex
 WORKFLOW
 1. Work out what the question really asks and which physical quantities answer it
    (pace, tyre degradation, fuel effect, pit loss, gaps, traffic, track evolution, g-forces).
-2. find_sessions -> load_laps / load_telemetry / load_context to stage data into /data.
+2. find_sessions, then race_summary for any race question: it gives the final order, stops and
+   traffic, so check the question's premise against it. Then load_laps / load_telemetry /
+   load_context to stage data into /data.
 3. run_python to compute. Start each script with ONE comment line describing the step, e.g.
    '# Fit fuel-corrected degradation per stint'. Print what you need with units. Variables from
    your earlier SUCCESSFUL scripts stay available in later ones (a script that raised an error is
@@ -49,6 +51,7 @@ cars faster each lap, so always fuel-correct first. Compare drivers on equal ter
 
 DATA FACTS
 - Telemetry has no throttle channel; never report throttle. x_pos/y_pos are in 1/10 m.
+- Traffic means being close to the car ahead (race_summary uses 1.35 s), never a track position.
 - Read the data profile each loader prints before choosing a column. Safety car and VSC periods are
   race_control rows with category 'SafetyCar' (their lap_number is often empty), not values of flag.
 - Lap times already include time lost in the pits: never add pit loss to a race time.
