@@ -36,6 +36,8 @@ log = structlog.get_logger()
 
 # Reachable without a login: health checks and the public landing page data.
 _PUBLIC_PREFIXES = ("/health", "/api/v1/stats", "/api/v1/schedule")
+# <img> tags cannot send a token, so driver photos are public (exact path only).
+_PUBLIC_PATTERN = re.compile(r"^/api/v1/drivers/[A-Za-z]{2,4}/image$")
 
 # Per-login responses for finished sessions change rarely; let the browser reuse them.
 _CACHEABLE_PARTS = (
@@ -82,6 +84,7 @@ def create_app() -> Flask:
     from backend.health import health_bp
     from backend.api.v1.agent import agent_bp
     from backend.api.v1.analyst import analyst_bp
+    from backend.api.v1.driver_images import driver_images_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(sessions_bp, url_prefix="/api/v1")
@@ -96,11 +99,16 @@ def create_app() -> Flask:
     app.register_blueprint(stats_bp, url_prefix="/api/v1")
     app.register_blueprint(agent_bp, url_prefix="/api/v1")
     app.register_blueprint(analyst_bp, url_prefix="/api/v1")
+    app.register_blueprint(driver_images_bp, url_prefix="/api/v1")
 
     @app.before_request
     def require_login_for_api():
         path = request.path
-        if not path.startswith("/api/v1") or path.startswith(_PUBLIC_PREFIXES):
+        if (
+            not path.startswith("/api/v1")
+            or path.startswith(_PUBLIC_PREFIXES)
+            or _PUBLIC_PATTERN.match(path)
+        ):
             return None
         return auth.require_api_auth()
 

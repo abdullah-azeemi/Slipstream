@@ -120,7 +120,7 @@ export default function DriverHero({ profile: raw }: { profile: DriverProfile })
             )}
           </section>
 
-          <Figure code={profile.code} alt={`${name}${id?.team_name ? `, ${id.team_name}` : ''}`} headshot={id?.headshot_url} number={id?.driver_number} />
+          <Figure code={profile.code} alt={`${name}${id?.team_name ? `, ${id.team_name}` : ''}`} number={id?.driver_number} />
 
           <section className="dp-col" aria-label="Career statistics">
             <h2 className="dp-side-h">Career statistics</h2>
