@@ -96,3 +96,47 @@ jobs:
         run: cd apps/frontend && pnpm build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
+
+  # Deploys the API to Fly after every green push to main: migrate Neon first
+  # (the new code reads columns the migrations add), then ship the image.
+  deploy:
+    needs: [test, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-backend
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --package slipstream-backend
+
+      - name: Apply database migrations
+        run: uv run alembic -c apps/backend/alembic.ini upgrade head
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly
+        run: flyctl deploy --remote-only -a pitwall-api
+
+      - name: Check the API is healthy
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS https://pitwall-api.fly.dev/health; then exit 0; fi
+            sleep 10
+          done
+          echo "API did not become healthy after the deploy" && exit 1
