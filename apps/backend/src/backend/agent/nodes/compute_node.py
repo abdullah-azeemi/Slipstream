@@ -50,16 +50,17 @@ def _build_prompt(inp: ComputeInput) -> str:
 
 def _execute(script: str, data_csv: str) -> tuple[str, bool]:
     """Run the model's script in the Docker sandbox (no network, no secrets)."""
-    from backend.analyst.sandbox import DockerSandbox, Workspace
+    from backend.analyst.sandbox import Workspace, default_sandbox
 
-    if not DockerSandbox.available():
+    sandbox = default_sandbox()
+    if sandbox is None:
         return "Error: analysis sandbox is unavailable.", False
 
     workspace = Workspace()
     try:
         (workspace.data / "data.csv").write_text(data_csv)
         code = "df = pd.read_csv('/data/data.csv')\n" + textwrap.dedent(script)
-        result = DockerSandbox().run(code, workspace, timeout_s=TIMEOUT_SECONDS)
+        result = sandbox.run(code, workspace, timeout_s=TIMEOUT_SECONDS)
     finally:
         workspace.cleanup()
 
