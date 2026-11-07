@@ -1,14 +1,8 @@
-import { Geist, Geist_Mono } from 'next/font/google'
+// Self-hosted Geist (the `geist` package ships the font files), so builds never
+// depend on fetching Google Fonts, which broke the Vercel build.
+import { GeistSans } from 'geist/font/sans'
+import { GeistMono } from 'geist/font/mono'
 
-export const geist = Geist({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  display: 'swap',
-})
-
-export const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-geist-mono',
-  display: 'swap',
-})
+export const geist = GeistSans
+// exposes the --font-geist-mono variable that globals.css already uses
+export const geistMono = GeistMono
