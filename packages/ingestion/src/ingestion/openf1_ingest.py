@@ -175,6 +175,7 @@ def build_drivers(rows: list[dict], session_key: int) -> list[dict]:
             "abbreviation": r.get("name_acronym") or str(num),
             "team_name": r.get("team_name"),
             "team_colour": r.get("team_colour"),
+            "headshot_url": r.get("headshot_url") or None,
         }
     return list(out.values())
 
