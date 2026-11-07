@@ -10,7 +10,9 @@ def _stint(deg=0.08, fuel=0.05, first=2, n=20):
     return [
         {
             "lap_number": lap,
-            "lap_time_ms": round((95.0 + deg * (lap - first) + fuel * (TOTAL - lap)) * 1000),
+            "lap_time_ms": round(
+                (95.0 + deg * (lap - first) + fuel * (TOTAL - lap)) * 1000
+            ),
             "stint": 1,
         }
         for lap in range(first, first + n)
@@ -36,8 +38,12 @@ def test_fuel_correct_does_not_mutate_input():
 def test_clean_laps_drops_start_pit_sc_deleted_and_slow_outlier():
     laps = _stint(n=6)
     laps.append({"lap_number": 1, "lap_time_ms": 103000, "stint": 1})
-    laps.append({"lap_number": 9, "lap_time_ms": 96000, "stint": 1, "pit_in_time_ms": 1})
-    laps.append({"lap_number": 10, "lap_time_ms": 96000, "stint": 1, "track_status": "14"})
+    laps.append(
+        {"lap_number": 9, "lap_time_ms": 96000, "stint": 1, "pit_in_time_ms": 1}
+    )
+    laps.append(
+        {"lap_number": 10, "lap_time_ms": 96000, "stint": 1, "track_status": "14"}
+    )
     laps.append({"lap_number": 11, "lap_time_ms": 96000, "stint": 1, "deleted": True})
     laps.append({"lap_number": 12, "lap_time_ms": 120000, "stint": 1})
     kept = clean_laps(laps)

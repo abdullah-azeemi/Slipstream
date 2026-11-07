@@ -14,13 +14,17 @@ SLOW_TRACK_STATUS = frozenset({"4", "5", "6", "7"})
 # Calibrate per circuit later; every answer that uses it must say so.
 FUEL_EFFECT_S_PER_LAP = 0.05
 
+
 def clean_laps(laps: list[dict], *, outlier_pct: float = 0.07) -> list[dict]:
     """Keep only representative racing laps, sorted by lap number."""
     usable: list[dict] = []
     for lap in laps:
         if lap.get("lap_time_ms") is None or lap["lap_number"] == 1:
-            continue  
-        if lap.get("pit_in_time_ms") is not None or lap.get("pit_out_time_ms") is not None:
+            continue
+        if (
+            lap.get("pit_in_time_ms") is not None
+            or lap.get("pit_out_time_ms") is not None
+        ):
             continue
         if lap.get("deleted"):
             continue
@@ -39,7 +43,12 @@ def clean_laps(laps: list[dict], *, outlier_pct: float = 0.07) -> list[dict]:
     return sorted(kept, key=lambda lap: lap["lap_number"])
 
 
-def fuel_correct( laps: list[dict], total_laps: int, *, effect_s_per_lap: float = FUEL_EFFECT_S_PER_LAP ) -> list[dict]:
+def fuel_correct(
+    laps: list[dict],
+    total_laps: int,
+    *,
+    effect_s_per_lap: float = FUEL_EFFECT_S_PER_LAP,
+) -> list[dict]:
     """Copies of `laps` with lap_time_ms adjusted to an empty-tank car.
 
     Lap n still carries (total_laps - n) laps of fuel, each costing
@@ -56,8 +65,8 @@ def fuel_correct( laps: list[dict], total_laps: int, *, effect_s_per_lap: float 
 @dataclass(frozen=True)
 class DegFit:
     laps: int
-    slope_s_per_lap: float  
-    intercept_s: float  
+    slope_s_per_lap: float
+    intercept_s: float
     r2: float
 
 
@@ -75,12 +84,12 @@ def fit_degradation(laps: list[dict], *, min_laps: int = 5) -> DegFit | None:
     sxx = sum((x - x_mean) ** 2 for x in xs)
     if sxx == 0:
         return None
-    
+
     slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / sxx
     intercept = y_mean - slope * x_mean
 
     ss_tot = sum((y - y_mean) ** 2 for y in ys)
     ss_res = sum((y - (intercept + slope * x)) ** 2 for x, y in zip(xs, ys))
     r2 = 1 - ss_res / ss_tot if ss_tot else 0.0
-    
+
     return DegFit(len(laps), slope, intercept, r2)
