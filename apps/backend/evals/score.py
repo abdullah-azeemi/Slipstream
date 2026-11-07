@@ -104,6 +104,9 @@ DEFAULT_FORBIDDEN = (
     "could not determine",
     "cannot confirm",
     "cannot provide",
+    "could not establish",
+    "insufficient data",
+    "cannot conclude",
 )
 
 _MINUS = "−"  # LLMs sometimes write a unicode minus
@@ -124,6 +127,25 @@ def extract_numbers(text: str, unit: str) -> list[float]:
             for m in re.findall(pattern, text, re.IGNORECASE)
         ]
     return values
+
+
+def check_facts(facts: dict, answer: str) -> list[str]:
+    """Failures against ground truth pulled from the database by hand."""
+    lowered = answer.lower()
+    failures = []
+    for check in facts.get("numbers", []):
+        values = extract_numbers(answer, check["unit"])
+        if not any(abs(abs(v) - check["value"]) <= check["tol"] for v in values):
+            failures.append(
+                f"fact {check['name']}: expected {check['value']} {check['unit']}, found {values}"
+            )
+    for options in facts.get("any_of", []):
+        if not any(o in lowered for o in options):
+            failures.append(f"fact missing, expected one of {options}")
+    for phrase in facts.get("forbidden", []):
+        if phrase in lowered:
+            failures.append(f"contradicts the data: {phrase!r}")
+    return failures
 
 
 def score_run(question: dict, run: dict) -> QuestionScore:
@@ -169,7 +191,13 @@ def score_run(question: dict, run: dict) -> QuestionScore:
     if forbidden:
         score.failures.append(f"admits missing evidence: {forbidden}")
 
-    for check in question["numeric_checks"]:
+    facts = question.get("facts")
+    if facts:
+        fact_failures = check_facts(facts, answer)
+        score.checks["facts"] = not fact_failures
+        score.failures += fact_failures
+
+    for check in [] if facts else question["numeric_checks"]:
         values = extract_numbers(answer, check["unit"])
         ok = bool(values) and all(check["min"] <= v <= check["max"] for v in values)
         score.checks[f"num:{check['name']}"] = ok
@@ -190,7 +218,7 @@ def score_run(question: dict, run: dict) -> QuestionScore:
     score.checks["tool_error_count"] = len(tool_errors)
     last_failed = bool(trace) and trace[-1].get("status") == "error"
     score.checks["tool_errors"] = not last_failed
-    if last_failed:
+    if last_failed and not facts:
         score.failures.append(
             f"final tool call errored ({len(tool_errors)} errors in total)"
         )

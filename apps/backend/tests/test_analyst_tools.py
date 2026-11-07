@@ -218,3 +218,17 @@ def test_load_context_lists_columns_and_a_sample_row_when_data_exists(
             )
     assert "weather_" in out.text and "Columns: lap_number, track_temp_c" in out.text
     assert '"track_temp_c": 31.5' in out.text
+
+
+def test_profile_lists_categories_and_missing_values():
+    from backend.analyst.tools import profile_rows
+
+    rows = [
+        {"category": "SafetyCar", "lap_number": None, "message": "x"},
+        {"category": "Flag", "lap_number": 3, "message": "y"},
+        {"category": "Flag", "lap_number": 4, "message": "z"},
+    ]
+    text_ = profile_rows(rows, max_values=2)
+    assert "category values: Flag x2, SafetyCar x1" in text_
+    assert "lap_number is empty in 1 of 3 rows" in text_
+    assert "message values" not in text_  # too many distinct values to list

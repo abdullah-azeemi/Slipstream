@@ -149,3 +149,40 @@ def test_a_polite_non_answer_does_not_pass_just_because_it_mentions_the_topic():
     }
     q = _q(numeric_checks=[])
     assert not score.score_run(q, run).passed
+
+
+def _facts_q(**facts):
+    return _q(must_mention=[], facts=facts)
+
+
+def test_facts_replace_range_and_tool_checks():
+    q = _facts_q(
+        numbers=[{"name": "deg", "unit": "s/lap", "value": 0.112, "tol": 0.005}]
+    )
+    run = {
+        "answer": "Raw -0.5 s/lap, corrected +0.112 s/lap.",
+        "refusals": [],
+        "trace": [{"status": "error"}],
+    }
+    assert score.score_run(
+        q, run
+    ).passed  # raw value and a failed last call do not matter
+
+
+def test_wrong_fact_fails_even_if_it_looks_plausible():
+    q = _facts_q(numbers=[{"name": "temp", "unit": "°C", "value": 40.0, "tol": 0.1}])
+    assert not score.score_run(
+        q, {"answer": "Average 37.9 °C", "refusals": [], "trace": []}
+    ).passed
+
+
+def test_confident_contradiction_of_the_data_fails():
+    q = _facts_q(any_of=[["deployed"]], forbidden=["no safety car"])
+    wrong = {"answer": "There was no safety car.", "refusals": [], "trace": []}
+    right = {
+        "answer": "The safety car was deployed twice.",
+        "refusals": [],
+        "trace": [],
+    }
+    assert not score.score_run(q, wrong).passed
+    assert score.score_run(q, right).passed

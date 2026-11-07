@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
@@ -29,6 +30,22 @@ with _cx.redirect_stdout(_io.StringIO()):
 _pw._state["suppress"] = False
 del _cx, _io, _pw
 """
+
+
+def profile_rows(rows: list[dict], max_values: int = 12) -> str:
+    """Which values text columns hold and where data is missing, so models need not guess."""
+    parts = []
+    for column in rows[0]:
+        values = [r.get(column) for r in rows]
+        present = [v for v in values if v is not None]
+        missing = len(values) - len(present)
+        if missing:
+            parts.append(f"{column} is empty in {missing} of {len(values)} rows")
+        counts = Counter(v for v in present if isinstance(v, (str, bool)))
+        if counts and len(counts) <= max_values:
+            listed = ", ".join(f"{k} x{n}" for k, n in counts.most_common())
+            parts.append(f"{column} values: {listed}")
+    return "Data profile: " + "; ".join(parts) if parts else ""
 
 
 @dataclass
@@ -268,6 +285,7 @@ class ToolBox:
             + "\nlap_time_ms is milliseconds; track_status is a string of codes "
             "(4=SC, 5=red, 6/7=VSC); pit_in_time_ms is set on the in-lap, pit_out_time_ms on the out-lap."
             f"\n{READ_HINT}"
+            f"\n{profile_rows(laps)}"
         )
         return ToolOutput(
             summary,
@@ -335,6 +353,9 @@ class ToolBox:
                     lines.append(
                         f"{name}: {len(rows)} rows. Columns: {', '.join(rows[0])}. First row: {sample}"
                     )
+                    profile = profile_rows(rows)
+                    if profile:
+                        lines.append(profile)
                 else:
                     lines.append(f"{name}: NO DATA")
         lines.append(READ_HINT)
