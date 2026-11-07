@@ -195,3 +195,25 @@ def test_an_incomplete_run_does_not_pass():
         "trace": [],
     }
     assert not score.score_run(_q(numeric_checks=[]), run).passed
+
+
+def test_lap_times_written_as_minutes_are_read_as_seconds():
+    assert score.extract_numbers("Fastest was 1:37.221 and 99.4 s", "s") == [
+        97.221,
+        99.4,
+    ]
+    assert score.extract_numbers("at 12:30 pm", "s") == [
+        750.0
+    ]  # a clock time is a rare false match
+
+
+def test_facts_can_require_an_order():
+    q = _facts_q(in_order=[["medium", "hard"]])
+    ok = {"answer": "He used Medium then Hard.", "refusals": [], "trace": []}
+    bad = {"answer": "Hard first, then Medium.", "refusals": [], "trace": []}
+    assert score.score_run(q, ok).passed and not score.score_run(q, bad).passed
+
+
+def test_simple_tier_exists_and_has_facts_for_every_question():
+    simple = [x for x in score.load_questions() if x["tier"] == "simple"]
+    assert len(simple) >= 10 and all(x.get("facts") for x in simple)

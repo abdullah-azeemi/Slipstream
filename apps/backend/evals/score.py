@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 QUESTIONS_PATH = Path(__file__).parent / "questions.json"
-TIERS = ("supported", "analytical", "trap")
+TIERS = ("simple", "supported", "analytical", "trap")
 _REQUIRED_KEYS = {
     "id",
     "tier",
@@ -113,6 +113,9 @@ DEFAULT_FORBIDDEN = (
 _MINUS = "−"  # LLMs sometimes write a unicode minus
 
 
+_LAP_TIME = re.compile(r"(?<![\w.:])(\d{1,2}):(\d{2}(?:\.\d+)?)(?![\d:])")
+
+
 def extract_numbers(text: str, unit: str) -> list[float]:
     """Numbers written directly before `unit` (or an alias), normalised to `unit`.
 
@@ -120,6 +123,8 @@ def extract_numbers(text: str, unit: str) -> list[float]:
     """
     text = text.replace(_MINUS, "-")
     values: list[float] = []
+    if unit == "s":  # a lap time written as 1:37.221 is 97.221 s
+        values.extend(int(m) * 60 + float(sec) for m, sec in _LAP_TIME.findall(text))
     for spelling, factor in UNIT_ALIASES.get(unit, ((unit, 1.0),)):
         # (?![\w/]) stops 's' matching inside 's/lap' or 'seconds'
         pattern = r"(-?\d+(?:[.,]\d+)?)\s*" + re.escape(spelling) + r"(?![\w/])"
@@ -143,6 +148,10 @@ def check_facts(facts: dict, answer: str) -> list[str]:
     for options in facts.get("any_of", []):
         if not any(o in lowered for o in options):
             failures.append(f"fact missing, expected one of {options}")
+    for first, second in facts.get("in_order", []):
+        a, b = lowered.find(first), lowered.find(second)
+        if a == -1 or b == -1 or a > b:
+            failures.append(f"expected {first!r} before {second!r}")
     for phrase in facts.get("forbidden", []):
         if phrase in lowered:
             failures.append(f"contradicts the data: {phrase!r}")
