@@ -1,4 +1,4 @@
-import { whenAuthToken } from '@/lib/auth-token'
+import { fetchWithAuth } from '@/lib/auth-token'
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -13,8 +13,7 @@ const cache = new Map<string, { at: number; promise: Promise<unknown> }>()
 export function getJson<T>(url: string, ttlMs = 60_000): Promise<T> {
   const hit = cache.get(url)
   if (hit && Date.now() - hit.at < ttlMs) return hit.promise as Promise<T>
-  const promise = whenAuthToken()
-    .then((token) => fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} }))
+  const promise = fetchWithAuth(url)
     .then((res) => {
       if (!res.ok) throw new HttpError(res.status, `Request failed (${res.status})`)
       return res.json() as Promise<T>

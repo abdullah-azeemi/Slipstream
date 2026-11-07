@@ -1,4 +1,4 @@
-import { authHeaders } from '@/lib/auth-token'
+import { fetchWithAuth } from '@/lib/auth-token'
 import type { TelemetrySample } from '@/types/f1'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -15,9 +15,9 @@ export async function fetchTelemetryCompare(
   signal?: AbortSignal,
 ): Promise<{ samples: TelemetrySample[]; lapNumbers: Map<number, number> }> {
   const query = laps ? `&laps=${laps}` : ''
-  const res = await fetch(
+  const res = await fetchWithAuth(
     `${BASE}/api/v1/sessions/${sessionKey}/telemetry/compare?drivers=${drivers.join(',')}${query}`,
-    { signal, headers: authHeaders() },
+    { signal },
   )
   if (!res.ok) throw new Error(`telemetry ${res.status}`)
   const data = await res.json()

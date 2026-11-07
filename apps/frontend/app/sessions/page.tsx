@@ -7,7 +7,7 @@ import '@/components/landing/landing.css'
 import { geist } from '@/components/landing/font'
 import { ToggleGroup } from '@/components/landing/Tabs'
 import { getSessionRoute } from '@/lib/session-routing'
-import { authHeaders } from '@/lib/auth-token'
+import { fetchWithAuth } from '@/lib/auth-token'
 import { sessionTypeLabel } from '@/lib/utils'
 import type { Session } from '@/types/f1'
 
@@ -139,7 +139,7 @@ export default function SessionsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${BASE}/api/v1/sessions`, { headers: authHeaders() })
+    fetchWithAuth(`${BASE}/api/v1/sessions`)
       .then(async r => {
         const data = await r.json().catch(() => null)
         if (!r.ok || !Array.isArray(data)) throw new Error(data?.error ?? `Sessions request failed (${r.status})`)

@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { UserButton, useAuth } from '@clerk/nextjs'
 import { ArrowRight } from '@phosphor-icons/react'
-import { DRIVERS_PAGE_ENABLED } from '@/lib/features'
 
 const SITE_LINKS = [
   { label: 'Features', href: '/#features' },
@@ -14,17 +13,16 @@ const SITE_LINKS = [
   { label: 'FAQ', href: '/#faq' },
 ]
 
-const APP_LINKS_ALL = [
+// The drivers pages are unfinished, so they are not linked from the product
+// navigation. `/drivers` is still reachable by URL in local development.
+const APP_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Telemetry', href: '/telemetry' },
   { label: 'Sessions', href: '/sessions' },
-  { label: 'Drivers', href: '/drivers' },
   { label: 'Schedule', href: '/schedule' },
   { label: 'Predictions', href: '/predictions' },
   { label: 'Agent', href: '/analyst' },
 ]
-
-const APP_LINKS = APP_LINKS_ALL.filter(l => l.href !== '/drivers' || DRIVERS_PAGE_ENABLED)
 
 /**
  * One navigation for the whole product. `app` switches it to the signed in product links

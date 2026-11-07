@@ -514,7 +514,7 @@
 }
 .lp .empty h3 { color: var(--lp-text); margin-bottom: var(--sp-75); }
 
-.lp .article { max-width: 680px; margin: 0 auto; padding-top: calc(var(--sp-900) + var(--sp-600)); }
+.lp .article { max-width: 840px; margin: 0 auto; padding-top: calc(var(--sp-900) + var(--sp-600)); }
 .lp .article h1 { margin: var(--sp-200) 0; }
 .lp .prose { margin-top: var(--sp-500); }
 .lp .prose > * + * { margin-top: var(--sp-200); }

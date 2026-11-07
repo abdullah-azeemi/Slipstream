@@ -5,7 +5,7 @@ import { Cube, Pulse, CheckCircle, ClockCounterClockwise, Database } from '@phos
 import '@/components/landing/landing.css'
 import { geist } from '@/components/landing/font'
 import { ToggleGroup } from '@/components/landing/Tabs'
-import { authHeaders } from '@/lib/auth-token'
+import { fetchWithAuth } from '@/lib/auth-token'
 import {
   GridShift,
   HeatGrid,
@@ -56,7 +56,7 @@ export default function PredictionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    fetch(`${BASE}/api/v1/sessions`, { headers: authHeaders() })
+    fetchWithAuth(`${BASE}/api/v1/sessions`)
       .then(r => r.json())
       .then((rows: Session[] | { error?: string }) => {
         if (cancelled) return
@@ -82,7 +82,7 @@ export default function PredictionsPage() {
     setModelUnavailable(null)
     setData(null)
     setFocus(null)
-    fetch(`${BASE}/api/v1/sessions/${selectedKey}/predictions`, { headers: authHeaders() })
+    fetchWithAuth(`${BASE}/api/v1/sessions/${selectedKey}/predictions`)
       .then(async r => {
         const body = await r.json().catch(() => null)
         if (cancelled) return
@@ -104,7 +104,7 @@ export default function PredictionsPage() {
   useEffect(() => {
     if (selectedKey == null) return
     let cancelled = false
-    fetch(`${BASE}/api/v1/sessions/${selectedKey}/drivers`, { headers: authHeaders() })
+    fetchWithAuth(`${BASE}/api/v1/sessions/${selectedKey}/drivers`)
       .then(r => (r.ok ? r.json() : []))
       .then((rows: { driver_number: number; full_name: string }[]) => {
         if (cancelled || !Array.isArray(rows)) return
