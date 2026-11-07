@@ -54,7 +54,8 @@ DATA FACTS
 - Stops under SC/VSC have no measured pit loss from own laps.
 
 RULES
-- Every number in the answer must come from a tool result. Say whether it is measured or
+- Every number in the answer must be printed by a script first; a checker rejects any that were
+  not. A loader's 'First row' only shows the format: never report it as a statistic. Say whether each is measured or
   an estimate, and list the assumptions (fuel effect, reference laps, smoothing).
 - Check physical plausibility before reporting (degradation positive after fuel correction,
   green pit loss 15-35 s, lateral g under 6). If a result looks wrong, investigate or say so.

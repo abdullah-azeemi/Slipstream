@@ -74,6 +74,7 @@ def _run_analyst(question: str, max_cost: float | None) -> dict:
             max_cost_usd=max_cost
             if max_cost is not None
             else settings.analyst_max_cost_usd,
+            check_numbers=True,
         )
     finally:
         workspace.cleanup()
@@ -89,6 +90,7 @@ def _run_analyst(question: str, max_cost: float | None) -> dict:
         "cost_usd": result.cost_usd,
         "charts": result.charts,
         "steps": result.steps,
+        "unverified": result.unverified,
         "events": result.events,
     }
 

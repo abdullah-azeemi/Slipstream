@@ -182,6 +182,9 @@ def score_run(question: dict, run: dict) -> QuestionScore:
                 f"{check['name']}: {values} outside [{check['min']}, {check['max']}]"
             )
 
+    if run.get("unverified"):
+        score.failures.append(f"untraceable numbers: {run['unverified']}")
+
     # Models legitimately hit and fix errors; what matters is that the last call worked.
     # The count is kept in checks so wasted steps stay visible.
     score.checks["tool_error_count"] = len(tool_errors)

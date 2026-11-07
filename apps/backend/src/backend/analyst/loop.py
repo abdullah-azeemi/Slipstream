@@ -18,6 +18,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from backend.analyst import checker
 from backend.analyst.client import AnalystLLMError, ChatClient, Reply
 from backend.analyst.prompt import SYSTEM_PROMPT
 from backend.analyst.tools import TOOL_SCHEMAS, ToolBox, describe_call, parse_args
@@ -40,6 +41,7 @@ class AnalystResult:
     events: list[dict] = field(default_factory=list)
     charts: list[dict] = field(default_factory=list)
     error: str | None = None
+    unverified: list[str] = field(default_factory=list)
 
 
 def _assistant_message(reply: Reply) -> dict:
@@ -66,6 +68,7 @@ def run_analyst(
     max_cost_usd: float = 0.03,
     max_runtime_s: float = 150.0,
     reviewer: Reviewer | None = None,
+    check_numbers: bool = False,
 ) -> AnalystResult:
     started = time.perf_counter()
     events: list[dict] = []
@@ -92,6 +95,7 @@ def run_analyst(
     cost = 0.0
     answer: str | None = None
     reviewed = False
+    numbers_checked = False
     bad_final = False  # the model produced an unusable final_answer
     rounds = 0
     record("run_start", question=question)
@@ -165,6 +169,21 @@ def run_analyst(
                     )
                 rounds += 1 if answer is None else 0
 
+            if answer is not None and check_numbers and not numbers_checked:
+                numbers_checked = True
+                unverified = checker.find_unverified(answer, messages)
+                if unverified:
+                    note = checker.feedback(unverified)
+                    record("thought", round=rounds, text=f"Number check: {note}")
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"Review feedback, please revise: {note}",
+                        }
+                    )
+                    answer = None
+                    continue
+
             if answer is not None and reviewer is not None and not reviewed:
                 reviewed = True
                 feedback = reviewer(answer, messages)
@@ -190,8 +209,19 @@ def run_analyst(
             cost_usd=round(cost, 6), steps=rounds, events=events, charts=charts, error=str(exc),
         )  # fmt: skip
 
-    record("final", markdown=answer, cost_usd=round(cost, 6), steps=rounds)
-    return AnalystResult(answer, round(cost, 6), rounds, events, charts)
+    unverified = checker.find_unverified(answer, messages) if check_numbers else []
+    if unverified:
+        answer = checker.annotate(answer, unverified)
+    record(
+        "final",
+        unverified=unverified,
+        markdown=answer,
+        cost_usd=round(cost, 6),
+        steps=rounds,
+    )
+    return AnalystResult(
+        answer, round(cost, 6), rounds, events, charts, unverified=unverified
+    )
 
 
 def dump_events(events: list[dict]) -> str:

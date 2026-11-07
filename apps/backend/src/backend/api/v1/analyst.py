@@ -99,6 +99,7 @@ def analyst_stream():
                 emit=lambda e: events.put(("analyst", e)),
                 max_steps=settings.analyst_max_steps,
                 max_cost_usd=settings.analyst_max_cost_usd,
+                check_numbers=True,
             )
             with extensions.engine.begin() as conn:
                 user_id = agent_persistence.ensure_user(conn, clerk_user_id)

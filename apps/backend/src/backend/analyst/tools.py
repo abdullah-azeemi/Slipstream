@@ -362,6 +362,11 @@ class ToolBox:
             parts.append("stderr:\n" + result.stderr.strip()[-1500:])
         if not result.ok:
             parts += self._hints(result.stderr)
+        elif not result.stdout.strip() and not result.charts:
+            parts.append(
+                "Note: this script printed nothing, so it produced no result. "
+                "Use print() to see values."
+            )
         if result.charts:
             parts.append(f"{len(result.charts)} chart(s) published")
         return ToolOutput(
