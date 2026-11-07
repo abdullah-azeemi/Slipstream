@@ -34,17 +34,63 @@ def _select(questions: list[dict], args: argparse.Namespace) -> list[dict]:
     return questions[: args.limit] if args.limit else questions
 
 
-def _run_one(question: str) -> dict:
-    from backend.agent import orchestrator
-
+def _run_one(
+    question: str, engine: str = "agent", max_cost: float | None = None
+) -> dict:
     started = time.perf_counter()
     try:
-        answer = orchestrator.run(question)
-        record = asdict(answer)
+        record = (
+            _run_analyst(question, max_cost)
+            if engine == "analyst"
+            else _run_agent(question)
+        )
     except Exception as exc:  # a crash is a failed run, not a crashed eval
         record = {"answer": "", "refusals": [], "trace": [], "crash": repr(exc)}
     record["latency_s"] = round(time.perf_counter() - started, 2)
     return record
+
+
+def _run_agent(question: str) -> dict:
+    from backend.agent import orchestrator
+
+    return asdict(orchestrator.run(question))
+
+
+def _run_analyst(question: str, max_cost: float | None) -> dict:
+    """Run the analyst engine and shape its result like an AgentAnswer record."""
+    from backend.analyst.client import OpenRouterClient
+    from backend.analyst.loop import run_analyst
+    from backend.analyst.sandbox import DockerSandbox, Workspace
+    from backend.analyst.tools import ToolBox
+    from backend.config import settings
+
+    workspace = Workspace()
+    try:
+        result = run_analyst(
+            question,
+            llm=OpenRouterClient(),
+            toolbox=ToolBox(workspace, DockerSandbox()),
+            max_steps=settings.analyst_max_steps,
+            max_cost_usd=max_cost
+            if max_cost is not None
+            else settings.analyst_max_cost_usd,
+        )
+    finally:
+        workspace.cleanup()
+    trace = [
+        {"tool_name": e["title"], "status": "ok" if e["ok"] else "error"}
+        for e in result.events
+        if e["type"] == "tool_end"
+    ]
+    return {
+        "answer": result.answer,
+        "refusals": [result.error] if result.error else [],
+        "trace": trace,
+        "cost_usd": result.cost_usd,
+        "charts": result.charts,
+        "steps": result.steps,
+        "events": result.events,
+    }
 
 
 def _print_report(scores: list[scoring.QuestionScore]) -> None:
@@ -61,6 +107,15 @@ def main() -> int:
     parser.add_argument("--limit", type=int, help="run only the first N questions")
     parser.add_argument("--ids", nargs="+", help="run only these question ids")
     parser.add_argument("--tier", choices=scoring.TIERS)
+    parser.add_argument(
+        "--engine",
+        choices=("agent", "analyst"),
+        default="agent",
+        help="agent = current orchestrator, analyst = tool-calling analyst loop",
+    )
+    parser.add_argument(
+        "--max-cost", type=float, help="per-question USD cap (analyst only)"
+    )
     parser.add_argument(
         "--dry-run", action="store_true", help="validate and list, no calls"
     )
@@ -93,7 +148,7 @@ def main() -> int:
     scores: list[scoring.QuestionScore] = []
     for q in selected:
         print(f"running {q['id']} ...", flush=True)
-        run = _run_one(q["question"])
+        run = _run_one(q["question"], args.engine, args.max_cost)
         run["id"] = q["id"]
         runs.append(run)
         scores.append(scoring.score_run(q, run))

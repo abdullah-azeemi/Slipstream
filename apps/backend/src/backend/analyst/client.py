@@ -18,6 +18,11 @@ from backend.config import settings
 _PRICES = {"openai/gpt-4o-mini": (0.15, 0.60)}
 
 
+# Per reply. Generous for a script or an answer, small enough that a runaway
+# generation (seen: a 4-minute empty final answer) cannot burn time and money.
+MAX_OUTPUT_TOKENS = 2500
+
+
 class AnalystLLMError(RuntimeError):
     pass
 
@@ -55,6 +60,7 @@ class OpenRouterClient:
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
+            "max_tokens": MAX_OUTPUT_TOKENS,
             "usage": {"include": True},
         }
         if tools:

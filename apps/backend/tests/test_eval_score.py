@@ -128,3 +128,24 @@ def test_validation_rejects_trap_without_refusal(tmp_path):
     path.write_text(json.dumps({"questions": [_q(tier="trap", expect_refusal=False)]}))
     with pytest.raises(ValueError):
         score.load_questions(path)
+
+
+def test_recovered_tool_error_is_counted_but_does_not_fail_the_run():
+    run = {
+        "answer": "Degradation was 0.08 s/lap.",
+        "refusals": [],
+        "trace": [{"status": "error"}, {"status": "ok"}],
+    }
+    result = score.score_run(_q(), run)
+    assert result.passed
+    assert result.checks["tool_error_count"] == 1
+
+
+def test_a_polite_non_answer_does_not_pass_just_because_it_mentions_the_topic():
+    run = {
+        "answer": "I was unable to determine whether there was a degradation stint issue.",
+        "refusals": [],
+        "trace": [],
+    }
+    q = _q(numeric_checks=[])
+    assert not score.score_run(q, run).passed

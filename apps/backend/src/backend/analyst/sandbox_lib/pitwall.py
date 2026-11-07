@@ -11,6 +11,7 @@ import pandas as pd  # type: ignore[import-untyped]
 
 DATA_DIR = "/data"
 OUT_DIR = "/out"
+_state = {"suppress": False}  # set while earlier steps are replayed
 
 
 def load(name):
@@ -26,6 +27,8 @@ def df(name):
 
 def emit_chart(option, title="chart"):
     """Publish an ECharts option (a plain dict) as a chart in the answer."""
+    if _state["suppress"]:
+        return
     n = len([f for f in os.listdir(OUT_DIR) if f.startswith("chart_")])
     with open(os.path.join(OUT_DIR, f"chart_{n:02d}.json"), "w") as f:
         json.dump({"title": title, "option": option}, f)

@@ -172,3 +172,24 @@ def test_a_crashing_emit_callback_does_not_stop_the_run():
         "q", llm=ScriptedLLM([Reply("ok")]), toolbox=StubToolBox(), emit=bad_emit
     )
     assert result.answer == "ok"
+
+
+def test_empty_final_answer_falls_back_to_a_plain_text_answer():
+    llm = ScriptedLLM(
+        [
+            Reply("", (_call("c1", "final_answer", "{broken json"),)),
+            Reply("Plain text answer."),
+        ]
+    )
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox())
+    assert result.answer == "Plain text answer."
+    forced = llm.calls[1]
+    assert forced[1] is None  # the retry offers no tools
+    assert "plain text" in forced[0][-2]["content"]  # the tool message explains why
+
+
+def test_runtime_limit_forces_a_final_answer():
+    llm = ScriptedLLM([Reply("Out of time answer.")])
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox(), max_runtime_s=0.0)
+    assert result.answer == "Out of time answer."
+    assert llm.calls[0][1] is None

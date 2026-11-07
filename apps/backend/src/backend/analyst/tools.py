@@ -14,6 +14,21 @@ from backend.analyst.sandbox import Sandbox, Workspace
 from backend.f1lab import data, sanity
 
 MAX_TOOL_TEXT = 3500
+READ_HINT = "Read staged files with load('<file>') (list of dicts) or df('<file>') (DataFrame); not pd.read_json."
+
+# Earlier successful scripts are replayed (output and charts suppressed) before each new one,
+# so variables persist between run_python calls, which models assume they do.
+_REPLAY = """import contextlib as _cx, io as _io, pitwall as _pw
+_pw._state["suppress"] = True
+with _cx.redirect_stdout(_io.StringIO()):
+    for _src in {sources!r}:
+        try:
+            exec(compile(_src, "<earlier step>", "exec"), globals())
+        except Exception:
+            pass
+_pw._state["suppress"] = False
+del _cx, _io, _pw
+"""
 
 
 @dataclass
@@ -84,8 +99,8 @@ TOOL_SCHEMAS: list[dict] = [
     ),
     _schema(
         "run_python",
-        "Run Python in an isolated sandbox (pandas, numpy, scipy, backend.f1lab; no network). "
-        "Start the code with a one-line '# title' comment. Read staged files with load()/df(); "
+        "Run Python in an isolated sandbox (pandas, numpy, scipy, backend.f1lab; no network). Variables from earlier successful calls stay available. "
+        "Start the code with one comment line describing the step. Read staged files with load()/df(); "
         "print results; publish charts with emit_chart(echarts_option_dict, title). Variables do "
         "not persist between calls.",
         {"code": {"type": "string"}},
@@ -138,6 +153,7 @@ class ToolBox:
         self.conn_factory = conn_factory
         self.telemetry_reader = telemetry_reader
         self.sandbox_timeout_s = sandbox_timeout_s
+        self._history: list[str] = []  # successful scripts, replayed for persistence
 
     def call(self, name: str, args: dict) -> ToolOutput:
         handlers: dict[str, Callable[..., ToolOutput]] = {
@@ -251,6 +267,7 @@ class ToolBox:
             + ", ".join(f"{d['abbreviation']}={d['driver_number']}" for d in drivers)
             + "\nlap_time_ms is milliseconds; track_status is a string of codes "
             "(4=SC, 5=red, 6/7=VSC); pit_in_time_ms is set on the in-lap, pit_out_time_ms on the out-lap."
+            f"\n{READ_HINT}"
         )
         return ToolOutput(
             summary,
@@ -282,6 +299,7 @@ class ToolBox:
             summary += "\nData-quality notes: " + "; ".join(
                 f"{i.code}: {i.message}" for i in issues
             )
+        summary += f"\n{READ_HINT}"
         return ToolOutput(
             summary,
             title=f"Telemetry · {driver} L{lap}",
@@ -313,9 +331,13 @@ class ToolBox:
                 ]
                 if rows:
                     self.workspace.write_json(name, rows)
-                lines.append(
-                    f"{name}: {len(rows)} rows" if rows else f"{name}: NO DATA"
-                )
+                    sample = json.dumps(rows[0], default=str)[:220]
+                    lines.append(
+                        f"{name}: {len(rows)} rows. Columns: {', '.join(rows[0])}. First row: {sample}"
+                    )
+                else:
+                    lines.append(f"{name}: NO DATA")
+        lines.append(READ_HINT)
         return ToolOutput(
             "\n".join(lines),
             title=f"Context · session {session_key}",
@@ -327,14 +349,19 @@ class ToolBox:
     def _run_python(self, code: str) -> ToolOutput:
         first = code.strip().splitlines()[0] if code.strip() else ""
         title = first.lstrip("# ").strip()[:60] if first.startswith("#") else "Compute"
+        script = _REPLAY.format(sources=self._history) + code if self._history else code
         result = self.sandbox.run(
-            code, self.workspace, timeout_s=self.sandbox_timeout_s
+            script, self.workspace, timeout_s=self.sandbox_timeout_s
         )
+        if result.ok:
+            self._history.append(code)
         parts = [("OK" if result.ok else "ERROR") + f" ({result.duration_s}s)"]
         if result.stdout.strip():
             parts.append("stdout:\n" + result.stdout.strip())
         if result.stderr.strip():
             parts.append("stderr:\n" + result.stderr.strip()[-1500:])
+        if not result.ok:
+            parts += self._hints(result.stderr)
         if result.charts:
             parts.append(f"{len(result.charts)} chart(s) published")
         return ToolOutput(
@@ -344,6 +371,20 @@ class ToolBox:
             preview="\n".join(code.strip().splitlines()[:14]),
             charts=result.charts,
         )
+
+    def _hints(self, stderr: str) -> list[str]:
+        """Plain-language pointers for the mistakes models make most often."""
+        hints = []
+        if "read_json" in stderr or "FileNotFoundError" in stderr:
+            hints.append(
+                f"Hint: {READ_HINT} Staged files: {', '.join(self.workspace.data_files())}."
+            )
+        if "NameError" in stderr:
+            hints.append(
+                "Hint: variables from earlier SUCCESSFUL run_python calls are available; "
+                "a name that was never defined in one of them is not."
+            )
+        return hints
 
 
 def parse_args(raw: str) -> dict:

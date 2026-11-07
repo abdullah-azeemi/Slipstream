@@ -25,7 +25,13 @@ _REQUIRED_KEYS = {
     "expect_refusal",
     "rubric",
 }
-_VISUAL_FIELDS = ("telemetry_overlay", "stint_degradation", "gap_position", "weather")
+_VISUAL_FIELDS = (
+    "telemetry_overlay",
+    "stint_degradation",
+    "gap_position",
+    "weather",
+    "charts",
+)
 
 
 def load_questions(path: Path = QUESTIONS_PATH) -> list[dict]:
@@ -94,6 +100,10 @@ DEFAULT_FORBIDDEN = (
     "no evidence",
     "could not compose",
     "not available in the evidence",
+    "unable to",
+    "could not determine",
+    "cannot confirm",
+    "cannot provide",
 )
 
 _MINUS = "−"  # LLMs sometimes write a unicode minus
@@ -172,9 +182,15 @@ def score_run(question: dict, run: dict) -> QuestionScore:
                 f"{check['name']}: {values} outside [{check['min']}, {check['max']}]"
             )
 
-    score.checks["tool_errors"] = not tool_errors
-    if tool_errors:
-        score.failures.append(f"{len(tool_errors)} tool call(s) errored")
+    # Models legitimately hit and fix errors; what matters is that the last call worked.
+    # The count is kept in checks so wasted steps stay visible.
+    score.checks["tool_error_count"] = len(tool_errors)
+    last_failed = bool(trace) and trace[-1].get("status") == "error"
+    score.checks["tool_errors"] = not last_failed
+    if last_failed:
+        score.failures.append(
+            f"final tool call errored ({len(tool_errors)} errors in total)"
+        )
 
     # needs_chart is recorded, not enforced: the LLM judge will own it later.
     score.checks["chart_expected"] = question["needs_chart"]

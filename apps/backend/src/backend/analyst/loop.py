@@ -64,6 +64,7 @@ def run_analyst(
     emit: Emit | None = None,
     max_steps: int = 10,
     max_cost_usd: float = 0.03,
+    max_runtime_s: float = 150.0,
     reviewer: Reviewer | None = None,
 ) -> AnalystResult:
     started = time.perf_counter()
@@ -91,11 +92,18 @@ def run_analyst(
     cost = 0.0
     answer: str | None = None
     reviewed = False
+    bad_final = False  # the model produced an unusable final_answer
     rounds = 0
     record("run_start", question=question)
 
     try:
-        while answer is None and rounds < max_steps and cost < max_cost_usd:
+        while (
+            answer is None
+            and not bad_final
+            and rounds < max_steps
+            and cost < max_cost_usd
+            and time.perf_counter() - started < max_runtime_s
+        ):
             reply = llm.chat(messages, TOOL_SCHEMAS)
             cost += reply.cost_usd
             messages.append(_assistant_message(reply))
@@ -113,14 +121,19 @@ def run_analyst(
                         answer = (
                             str(args.get("markdown", "")).strip()
                             or reply.content.strip()
+                            or None
                         )
                         messages.append(
                             {
                                 "role": "tool",
                                 "tool_call_id": call.id,
-                                "content": "answer recorded",
+                                "content": "answer recorded"
+                                if answer
+                                else "final_answer was empty or invalid JSON; write the answer as plain text",
                             }
                         )
+                        if answer is None:
+                            bad_final = True
                         continue
                     title, preview = describe_call(call.name, args)
                     record(

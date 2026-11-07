@@ -42,7 +42,7 @@ class Sandbox(Protocol):
 
 
 class Workspace:
-    """Per-run directory: data/ (read-only in the sandbox), out/ (writable)."""
+    """Per-run directory: data/ (loaders write it, scripts may add files), out/ (charts)."""
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path(tempfile.mkdtemp(prefix="pitwall-run-"))
@@ -51,7 +51,9 @@ class Workspace:
         self.code = self.root / "code"
         for d in (self.data, self.out, self.code):
             d.mkdir(parents=True, exist_ok=True)
-        self.out.chmod(0o777)  # the container runs as an unprivileged user
+        # the container runs as an unprivileged user and may save intermediate files in data/
+        self.out.chmod(0o777)
+        self.data.chmod(0o777)
 
     def write_json(self, name: str, obj: object) -> Path:
         import json
@@ -126,12 +128,12 @@ class DockerSandbox:
             "--read-only", "--tmpfs", "/tmp:size=64m",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--user", "65534:65534",
-            "-v", f"{workspace.data}:/data:ro",
+            "-v", f"{workspace.data}:/data",
             "-v", f"{workspace.out}:/out",
             "-v", f"{script.parent}:/code:ro",
             "-v", f"{_lib_dir()}:/pylib:ro",
             "-e", "PYTHONPATH=/pylib",
-            "-w", "/out",
+            "-w", "/data",
             self.image, "python", f"/code/{script.name}",
         ]  # fmt: skip
         import time

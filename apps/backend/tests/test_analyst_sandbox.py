@@ -63,10 +63,18 @@ def test_no_network(ws):
     assert not result.ok
 
 
-def test_data_dir_is_read_only_and_root_fs_is_read_only(ws):
+def test_scripts_can_save_files_in_data_but_not_elsewhere(ws):
     ws.write_json("x.json", [1])
-    assert not _run(ws, "open('/data/new.json', 'w').write('x')").ok
+    saved = _run(ws, "open('notes.json', 'w').write('[2]')\nprint(load('notes.json'))")
+    assert saved.ok and saved.stdout.strip() == "[2]"
+    assert (ws.data / "notes.json").exists()
     assert not _run(ws, "open('/etc/evil', 'w').write('x')").ok
+    assert not _run(ws, "open('/pylib/evil.py', 'w').write('x')").ok
+
+
+def test_relative_paths_resolve_inside_the_data_dir(ws):
+    ws.write_json("laps.json", [{"a": 1}])
+    assert _run(ws, "print(len(open('laps.json').read()) > 0)").stdout.strip() == "True"
 
 
 def test_infinite_loop_times_out(ws):
@@ -77,3 +85,17 @@ def test_infinite_loop_times_out(ws):
 def test_output_is_truncated(ws):
     result = _run(ws, "print('x' * 50000)")
     assert result.ok and len(result.stdout) < 7000 and "truncated" in result.stdout
+
+
+def test_replayed_earlier_steps_keep_variables_without_repeating_output_or_charts(ws):
+    from backend.analyst.tools import ToolBox
+
+    box = ToolBox(ws, DockerSandbox())
+    first = box.call(
+        "run_python",
+        {"code": "total = 41\nprint('first')\nemit_chart({'series': []}, 'one')"},
+    )
+    second = box.call("run_python", {"code": "print(total + 1)"})
+    assert first.ok and len(first.charts) == 1
+    assert second.ok and second.text.count("first") == 0 and "42" in second.text
+    assert second.charts == []

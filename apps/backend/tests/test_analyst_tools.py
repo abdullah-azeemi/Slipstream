@@ -160,3 +160,61 @@ def test_parse_args_and_describe_call():
         == "Telemetry · HAM L20"
     )
     assert describe_call("run_python", {"code": "print(1)"})[0] == "Compute"
+
+
+def test_variables_persist_by_replaying_successful_scripts(db_engine):
+    workspace = Workspace()
+    sandbox = FakeSandbox()
+    box = ToolBox(workspace, sandbox, conn_factory=db_engine.connect)
+    box.call("run_python", {"code": "x = 1"})
+    box.call("run_python", {"code": "print(x)"})
+    assert sandbox.codes[0] == "x = 1"  # nothing to replay yet
+    assert "'x = 1'" in sandbox.codes[1] and sandbox.codes[1].endswith("print(x)")
+    workspace.cleanup()
+
+
+def test_failed_scripts_are_not_replayed(db_engine):
+    workspace = Workspace()
+    sandbox = FakeSandbox(
+        SandboxResult(False, "", "NameError: name 'y' is not defined", 0.1)
+    )
+    box = ToolBox(workspace, sandbox, conn_factory=db_engine.connect)
+    out = box.call("run_python", {"code": "y"})
+    assert "Hint: variables from earlier SUCCESSFUL" in out.text
+    sandbox.result = SandboxResult(True, "", "", 0.1)
+    box.call("run_python", {"code": "z = 2"})
+    assert "'y'" not in sandbox.codes[-1] and sandbox.codes[-1] == "z = 2"
+    workspace.cleanup()
+
+
+def test_read_json_mistake_gets_a_hint_with_the_staged_files(db_engine):
+    workspace = Workspace()
+    workspace.write_json("laps_1.json", [])
+    sandbox = FakeSandbox(SandboxResult(False, "", "ValueError in read_json", 0.1))
+    out = ToolBox(workspace, sandbox, conn_factory=db_engine.connect).call(
+        "run_python", {"code": "pd.read_json(1)"}
+    )
+    assert "load('<file>')" in out.text and "laps_1.json" in out.text
+    workspace.cleanup()
+
+
+def test_load_context_lists_columns_and_a_sample_row_when_data_exists(
+    seeded, db_engine, box
+):
+    with db_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO weather_events (session_key, timestamp, lap_number, track_temp_c, rainfall) "
+                "VALUES (:sk, NOW(), 3, 31.5, false)"
+            ),
+            {"sk": SK},
+        )
+    try:
+        out = box.call("load_context", {"session_key": SK})
+    finally:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM weather_events WHERE session_key = :sk"), {"sk": SK}
+            )
+    assert "weather_" in out.text and "Columns: lap_number, track_temp_c" in out.text
+    assert '"track_temp_c": 31.5' in out.text
