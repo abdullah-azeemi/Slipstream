@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation'
 import type { DriverProfile } from '@/types/f1'
 import { driverImageCandidates, ordinal, teamColour } from '@/lib/driver-image'
 import { framingFor } from '@/lib/driver-framing'
-import DriverInsights from './DriverInsights'
+import dynamic from 'next/dynamic'
 import { withSample } from '@/lib/driver-sample'
+
+const DriverInsights = dynamic(() => import('./DriverInsights'), { loading: () => null })
 import { ageFromDob, DRIVER_LIST, flagEmoji, getDriverMeta } from '@/lib/driver-meta'
 import '@/components/landing/landing.css'
 import './driver.css'

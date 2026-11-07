@@ -24,11 +24,10 @@ export default function AuthTokenSync() {
     let active = true
 
     const refresh = () => {
-      // skipCache: Clerk returns the *cached* session token by default, which
-      // can already be expired ("Signature has expired" 401s). Forcing a fresh
-      // issuance guarantees we only ever send a live JWT (or null once the
-      // session truly dies, which then yields "Missing bearer token" + prompt).
-      getToken({ skipCache: true })
+      // Clerk's cached token is refreshed by Clerk itself shortly before it
+      // expires, and the 4 minute interval plus focus handlers below re-read it,
+      // so no forced network round trip is needed on every call.
+      getToken()
         .then(token => {
           if (active) setAuthToken(token)
         })

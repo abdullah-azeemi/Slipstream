@@ -19,6 +19,7 @@ dependencies = [
     "lancedb>=0.17",
     "pyjwt[crypto]>=2.11.0",
     "gunicorn>=22.0",
+    "flask-compress>=1.26",
 ]
 
 [build-system]

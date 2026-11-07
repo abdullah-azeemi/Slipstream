@@ -1,5 +1,6 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import { use, useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from '@phosphor-icons/react'
@@ -98,12 +99,12 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
       setSession(s)
       setSessionType(s.session_type ?? null)
       setSessionName(s.session_name || s.gp_name || 'Session')
-    }).catch(() => { })
+    }).catch(() => { if (active) setTelemetryError('Could not load this session. Refresh to try again.') })
     api.drivers.list(sessionKey).then(d => {
       if (!active) return
       setDrivers(d)
       if (d.length >= 2) setSelected([d[0].driver_number, d[1].driver_number])
-    }).catch(() => { })
+    }).catch(() => { if (active) setTelemetryError('Could not load this session. Refresh to try again.') })
 
     const handleResize = () => setIsMobile(window.innerWidth < 1024)
     handleResize()
@@ -236,11 +237,7 @@ export default function TelemetryPage({ params }: { params: Promise<{ key: strin
     }
     const abort = new AbortController()
     let active = true
-    fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/quali-segments`, { signal: abort.signal })
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to load qualifying segments')
-        return r.json()
-      })
+    getJson<QualiSegmentsData>(`${BASE}/api/v1/sessions/${sessionKey}/analysis/quali-segments`)
       .then((data: QualiSegmentsData) => {
         if (!active) return
         setQualiSegments(data)

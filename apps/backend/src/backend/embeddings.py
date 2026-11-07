@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 
 from backend.config import settings
+from backend.net import safe_urlopen
 
 
 class EmbeddingError(Exception):
@@ -62,14 +63,14 @@ def _provider_embeddings(texts: list[str]) -> list[list[float]]:
         },
     )
     try:
-        with urllib.request.urlopen(
+        with safe_urlopen(
             request, timeout=settings.embedding_timeout_seconds
         ) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise EmbeddingError(f"embedding HTTP {exc.code}: {detail[:300]}") from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         raise EmbeddingError(f"embedding call failed: {exc}") from exc
 
     data = body.get("data")

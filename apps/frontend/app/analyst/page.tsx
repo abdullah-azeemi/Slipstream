@@ -16,6 +16,8 @@ const EXAMPLES = [
   'What was the green-flag pit loss at the 2026 Spanish Grand Prix, and who lost the most?',
 ]
 
+const CHAT_LIMIT = 3
+
 export default function AnalystPage() {
   const { getToken } = useAuth()
   const replay = useReplay()
@@ -26,6 +28,8 @@ export default function AnalystPage() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [history, setHistory] = useState<AnalystRunSummary[]>([])
+  const [conversationId, setConversationId] = useState<number | null>(null)
+  const [chatCount, setChatCount] = useState(0)
   const abort = useRef<AbortController | null>(null)
 
   const events = mode === 'live' ? live : replay.events
@@ -49,9 +53,43 @@ export default function AnalystPage() {
     }
   }, [authedFetch])
 
+  const loadChats = useCallback(async () => {
+    try {
+      setChatCount((await authedFetch('/api/v1/agent/conversations')).length)
+    } catch {
+      // the counter is a convenience; the server enforces the limit
+    }
+  }, [authedFetch])
+
   useEffect(() => {
     void loadHistory()
-  }, [loadHistory])
+    void loadChats()
+  }, [loadHistory, loadChats])
+
+  function newChat() {
+    replay.stop()
+    setMode('live')
+    setLive([])
+    setSelected(null)
+    setError(null)
+    setConversationId(null)
+  }
+
+  async function deleteChat() {
+    if (conversationId == null) return
+    try {
+      const token = await getToken()
+      const resp = await fetch(`${API_URL}/api/v1/agent/conversations/${conversationId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!resp.ok) throw new Error(`Could not delete chat (${resp.status})`)
+      newChat()
+      void loadChats()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   async function ask(text: string) {
     const q = text.trim()
@@ -69,10 +107,15 @@ export default function AnalystPage() {
         apiUrl: API_URL,
         token: await getToken(),
         question: q,
+        conversationId,
         signal: abort.current.signal,
-        handlers: { onEvent: (e) => setLive((cur) => [...cur, e]) },
+        handlers: {
+          onEvent: (e) => setLive((cur) => [...cur, e]),
+          onSaved: (info) => setConversationId(info.conversation_id),
+        },
       })
       void loadHistory()
+      void loadChats()
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError((e as Error).message)
     } finally {
@@ -133,10 +176,26 @@ export default function AnalystPage() {
             className="border-t border-[#e3e6e3] p-4"
           >
             {error && <p className="mb-2 text-sm text-[#8a3b32]">{error}</p>}
+            <div className="mb-2 flex items-center justify-between text-[12px] text-[#5a6a6e]">
+              <span>
+                {chatCount} of {CHAT_LIMIT} chats used
+              </span>
+              <span className="flex gap-3">
+                <button type="button" onClick={newChat} disabled={busy || conversationId == null || chatCount >= CHAT_LIMIT} className="disabled:opacity-40">
+                  New chat
+                </button>
+                {conversationId != null && (
+                  <button type="button" onClick={() => void deleteChat()} disabled={busy}>
+                    Delete this chat
+                  </button>
+                )}
+              </span>
+            </div>
             <div className="flex gap-2">
               <input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
+                maxLength={500}
                 placeholder="Ask about pace, degradation, pit strategy…"
                 disabled={busy}
                 className="min-w-0 flex-1 rounded border border-[#cfd6d4] px-3 py-2 text-sm outline-none focus:border-[#3d7f8a] disabled:opacity-60"

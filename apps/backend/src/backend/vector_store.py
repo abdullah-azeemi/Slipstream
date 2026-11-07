@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from backend import embeddings, strategy_documents
 from backend.config import settings
+from backend.net import safe_urlopen
 
 
 class VectorStoreError(Exception):
@@ -88,14 +89,14 @@ def _vectorize_request(path: str, payload, content_type: str = "application/json
         },
     )
     try:
-        with urllib.request.urlopen(
+        with safe_urlopen(
             request, timeout=settings.embedding_timeout_seconds
         ) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise VectorStoreError(f"Vectorize HTTP {exc.code}: {detail[:300]}") from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         raise VectorStoreError(f"Vectorize call failed: {exc}") from exc
 
 

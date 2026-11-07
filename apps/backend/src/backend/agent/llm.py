@@ -12,6 +12,7 @@ from collections.abc import Generator
 
 from backend.agent import types
 from backend.config import settings
+from backend.net import safe_urlopen
 from backend.agent import circuit_breaker
 from backend.agent import intent_classifier
 from backend.agent.semantic_cache import cache as semantic_cache
@@ -131,7 +132,7 @@ def _post(
         raise types.LLMError("LLM provider temporarily unavailable (circuit open)")
 
     try:
-        with urllib.request.urlopen(
+        with safe_urlopen(
             request, timeout=settings.openrouter_timeout_seconds
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -139,7 +140,7 @@ def _post(
         circuit_breaker.breaker.record_failure()
         detail = exc.read().decode("utf-8", errors="replace")
         raise types.LLMError(f"OpenRouter HTTP {exc.code}: {detail[:300]}") from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         circuit_breaker.breaker.record_failure()
         raise types.LLMError(f"OpenRouter call failed: {exc}") from exc
 
@@ -490,7 +491,7 @@ def _stream_chunks(
 
     usage: dict = {}
     try:
-        with urllib.request.urlopen(
+        with safe_urlopen(
             request, timeout=settings.openrouter_timeout_seconds
         ) as response:
             for raw_line in response:
@@ -512,7 +513,12 @@ def _stream_chunks(
                     delta = None
                 if delta:
                     yield delta
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+    except (
+        urllib.error.HTTPError,
+        urllib.error.URLError,
+        TimeoutError,
+        ValueError,
+    ) as exc:
         circuit_breaker.breaker.record_failure()
         raise types.LLMError(f"OpenRouter streaming call failed: {exc}") from exc
 

@@ -50,6 +50,10 @@ class Settings(CommonSettings):
     openrouter_capable_model: str = "openai/gpt-4o-mini"
     openrouter_timeout_seconds: int = 30
     agent_free_daily_limit: int = 10
+    agent_max_conversations: int = 3
+    agent_max_question_chars: int = 500
+    cors_origins: str = "http://localhost:3000"
+    outbound_allowed_hosts: str = "openrouter.ai,api.openai.com,api.cloudflare.com"
     agent_free_daily_cost_usd: float = 0.30
     llm_breaker_failure_threshold: int = 3
     llm_breaker_open_timeout_seconds: int = 60

@@ -59,7 +59,9 @@ def require_api_auth() -> tuple[dict, int] | None:
     """
     if request.method == "OPTIONS":
         return None
-    header = request.headers.get("Authorization", "")
+    if getattr(g, "clerk_user_id", None):
+        return None  # already verified by the app-wide hook
+    header =request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         return jsonify({"error": "Missing bearer token"}), 401
     try:

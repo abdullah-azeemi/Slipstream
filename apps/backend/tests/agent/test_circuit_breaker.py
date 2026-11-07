@@ -91,7 +91,7 @@ def test_provider_outage_opens_breaker_then_short_circuits(monkeypatch):
         provider_calls["n"] += 1
         raise urllib.error.URLError("simulated provider outage")
 
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    monkeypatch.setattr("backend.agent.llm.safe_urlopen", boom)
 
     breaker = _fresh(failure_threshold=2, open_timeout_seconds=3600)
     monkeypatch.setattr(circuit_breaker, "breaker", breaker)

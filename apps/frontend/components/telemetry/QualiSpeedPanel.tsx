@@ -1,5 +1,6 @@
 'use client'
 
+import { getJson } from '@/lib/http'
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -550,8 +551,7 @@ export default function QualiSpeedPanel({ sessionKey }: { sessionKey: number }) 
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${BASE}/api/v1/sessions/${sessionKey}/analysis/quali-speed`)
-      .then(r => r.json())
+    getJson<QualiSpeedData>(`${BASE}/api/v1/sessions/${sessionKey}/analysis/quali-speed`)
       .then((d: QualiSpeedData) => {
         setData(d)
         // Default: first two drivers in speed trap order

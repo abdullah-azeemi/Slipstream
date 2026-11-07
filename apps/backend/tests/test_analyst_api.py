@@ -52,6 +52,8 @@ def fakes(monkeypatch, db_engine):
     yield
     with db_engine.begin() as conn:
         conn.execute(text("DELETE FROM analyst_runs"))
+        conn.execute(text("DELETE FROM agent_messages"))
+        conn.execute(text("DELETE FROM agent_conversations"))
 
 
 def _frames(response):
@@ -148,3 +150,62 @@ def test_model_failure_is_saved_as_an_error_run(client, monkeypatch):
     saved = next(d for n, d in frames if n == "saved")
     run = client.get(f"/api/v1/agent/analyst/runs/{saved['run_id']}").get_json()
     assert run["error"] == "provider down"
+
+
+def _saved(response):
+    return next(d for n, d in _frames(response) if n == "saved")
+
+
+def test_fourth_new_chat_is_rejected(client, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 99)
+    for _ in range(3):
+        assert _ask(client).status_code == 200
+    fourth = _ask(client)
+    assert fourth.status_code == 429
+    assert "chat limit" in fourth.get_json()["error"].lower()
+
+
+def test_follow_up_in_same_chat_does_not_use_a_new_slot(client, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 99)
+    conv = _saved(_ask(client))["conversation_id"]
+    for _ in range(4):
+        resp = client.post(
+            "/api/v1/agent/analyst/stream",
+            json={"question": "another", "conversation_id": conv},
+        )
+        assert resp.status_code == 200
+        resp.get_data()  # finish the stream so the run guard is released
+
+
+def test_deleting_a_chat_frees_a_slot_but_keeps_usage(client, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 99)
+    convs = [_saved(_ask(client))["conversation_id"] for _ in range(3)]
+    assert _ask(client).status_code == 429
+    assert client.delete(f"/api/v1/agent/conversations/{convs[0]}").status_code == 200
+    assert client.delete(f"/api/v1/agent/conversations/{convs[0]}").status_code == 404
+    assert _ask(client).status_code == 200
+    # runs of the deleted chat still count toward today's usage
+    assert client.get("/api/v1/agent/usage").get_json()["used"] >= 0
+    listed = client.get("/api/v1/agent/conversations").get_json()
+    assert convs[0] not in [c["id"] for c in listed]
+
+
+def test_cannot_continue_a_deleted_chat(client, monkeypatch):
+    monkeypatch.setattr(settings, "agent_free_daily_limit", 99)
+    conv = _saved(_ask(client))["conversation_id"]
+    client.delete(f"/api/v1/agent/conversations/{conv}")
+    resp = client.post(
+        "/api/v1/agent/analyst/stream",
+        json={"question": "again", "conversation_id": conv},
+    )
+    assert resp.status_code == 404
+
+
+def test_second_run_while_one_is_active_is_rejected(client):
+    from backend.agent import concurrency
+
+    assert concurrency.try_acquire("test-clerk-user")
+    try:
+        assert _ask(client).status_code == 429
+    finally:
+        concurrency.release("test-clerk-user")

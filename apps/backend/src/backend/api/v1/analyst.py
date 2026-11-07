@@ -13,6 +13,7 @@ import structlog
 from flask import Blueprint, Response, g, jsonify, stream_with_context
 
 from backend import auth, extensions
+from backend.agent import concurrency
 from backend.agent import persistence as agent_persistence
 from backend.analyst import persistence
 from backend.analyst.client import ChatClient, OpenRouterClient
@@ -77,8 +78,11 @@ def analyst_stream():
     if not sandbox_ready():
         return jsonify({"error": "Analysis sandbox is unavailable"}), 503
 
+    if not concurrency.try_acquire(g.clerk_user_id):
+        return jsonify({"error": "You already have a run in progress"}), 429
     conv_id, _context, error_response = _prepare_conversation(payload, question)
     if error_response:
+        concurrency.release(g.clerk_user_id)
         return error_response
 
     clerk_user_id = g.clerk_user_id
@@ -113,6 +117,7 @@ def analyst_stream():
             events.put(("error", {"error": "Analysis failed"}))
         finally:
             workspace.cleanup()
+            concurrency.release(clerk_user_id)
             events.put(("done", {}))
 
     threading.Thread(target=worker, name="pitwall-analyst-stream", daemon=True).start()

@@ -235,7 +235,7 @@ def test_telemetry_compare_reads_r2_parquet_artifact(client, db_engine, monkeypa
         )
 
         assert response.status_code == 200
-        assert read_keys == [storage_key, storage_key]
+        assert read_keys == [storage_key]
         payload = response.get_json()
         assert payload["63"]["lap_number"] == 4
         assert len(payload["63"]["samples"]) == 2

@@ -1,4 +1,5 @@
 import { getAuthToken } from '@/lib/auth-token'
+import { getJson } from '@/lib/http'
 import type {
   Session, Driver, Lap, FastestLap, DriverComparison, HealthStatus, DriverProfile
 } from '@/types/f1'
@@ -13,6 +14,8 @@ class APIError extends Error {
 }
 
 async function get<T>(path: string, serverOnly = false, token?: string): Promise<T> {
+  // Browser calls go through the shared cache; server calls keep Next's own fetch cache.
+  if (!serverOnly && !token) return getJson<T>(`${BASE}${path}`)
   const bearer = token ?? getAuthToken()
   const options: RequestInit = {
     headers: {

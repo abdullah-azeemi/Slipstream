@@ -175,7 +175,8 @@ CREATE TABLE IF NOT EXISTS agent_conversations (
     user_id     INTEGER NOT NULL REFERENCES users(id),
     title       TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at  TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS agent_messages (

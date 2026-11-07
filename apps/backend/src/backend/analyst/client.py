@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from backend.config import settings
+from backend.net import safe_urlopen
 
 # USD per 1M tokens (input, output). Used only when the provider reports no cost.
 _PRICES = {"openai/gpt-4o-mini": (0.15, 0.60)}
@@ -74,7 +75,7 @@ class OpenRouterClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as resp:
+            with safe_urlopen(request, timeout=self.timeout_s) as resp:
                 body = json.loads(resp.read().decode())
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             raise AnalystLLMError(f"LLM request failed: {exc}") from exc

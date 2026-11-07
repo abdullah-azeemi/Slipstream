@@ -33,6 +33,7 @@ export async function streamAnalyst(opts: {
   apiUrl: string
   token: string | null
   question: string
+  conversationId?: number | null
   signal?: AbortSignal
   handlers: StreamHandlers
 }): Promise<void> {
@@ -44,7 +45,7 @@ export async function streamAnalyst(opts: {
       Accept: 'text/event-stream',
       ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
     },
-    body: JSON.stringify({ question: opts.question }),
+    body: JSON.stringify({ question: opts.question, conversation_id: opts.conversationId ?? undefined }),
   })
   if (!resp.ok) {
     const body = await resp.json().catch(() => null)

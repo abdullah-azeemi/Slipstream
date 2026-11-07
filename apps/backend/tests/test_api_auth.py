@@ -42,7 +42,7 @@ def test_cors_preflight_is_permitted(app):
     resp = app.test_client().options(
         "/api/v1/sessions",
         headers={
-            "Origin": "https://pitwall.example",
+            "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "GET",
             "Access-Control-Request-Headers": "authorization",
         },
@@ -57,3 +57,35 @@ def test_valid_bearer_passes_sessions_guard(client, seed_session):
     resp = client.get("/api/v1/sessions/99999")
     assert resp.status_code == 200
     assert resp.get_json()["session_key"] == 99999
+
+
+def test_analysis_requires_bearer_token(app):
+    resp = app.test_client().get("/api/v1/sessions/1/analysis/lap-evolution")
+    assert resp.status_code == 401
+
+
+def test_laps_and_strategy_require_bearer_token(app):
+    c = app.test_client()
+    assert c.get("/api/v1/sessions/1/laps").status_code == 401
+    assert c.get("/api/v1/sessions/1/strategy").status_code == 401
+
+
+def test_health_stays_public(app):
+    assert app.test_client().get("/health").status_code != 401
+
+
+def test_public_landing_routes_stay_public(app):
+    c = app.test_client()
+    assert c.get("/api/v1/stats").status_code != 401
+    assert c.get("/api/v1/schedule/next-race").status_code != 401
+
+
+def test_cors_blocks_unknown_origin(app):
+    resp = app.test_client().options(
+        "/api/v1/sessions",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert "Access-Control-Allow-Origin" not in resp.headers

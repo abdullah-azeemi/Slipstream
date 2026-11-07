@@ -1,7 +1,4 @@
 from __future__ import annotations
-import subprocess
-import sys
-import tempfile
 import textwrap
 from dataclasses import dataclass
 from backend.agent import llm as llm_client
@@ -52,32 +49,22 @@ def _build_prompt(inp: ComputeInput) -> str:
 
 
 def _execute(script: str, data_csv: str) -> tuple[str, bool]:
-    """Run the script in the subprocess with the CSV preloaded as 'df'"""
-    wrapper = "\n".join(
-        [
-            "import pandas as pd, io",
-            f'_csv = """{data_csv}"""',
-            "df = pd.read_csv(io.StringIO(_csv.strip()))",
-            textwrap.dedent(script),
-            "",
-        ]
-    )
+    """Run the model's script in the Docker sandbox (no network, no secrets)."""
+    from backend.analyst.sandbox import DockerSandbox, Workspace
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(wrapper)
-        tmp_path = f.name
+    if not DockerSandbox.available():
+        return "Error: analysis sandbox is unavailable.", False
 
+    workspace = Workspace()
     try:
-        proc = subprocess.run(
-            [sys.executable, tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-        )
-        if proc.returncode != 0:
-            return f"Script error: {proc.stderr[:500]}", False
-        return proc.stdout.strip(), True
-    except subprocess.TimeoutExpired:
+        (workspace.data / "data.csv").write_text(data_csv)
+        code = "df = pd.read_csv('/data/data.csv')\n" + textwrap.dedent(script)
+        result = DockerSandbox().run(code, workspace, timeout_s=TIMEOUT_SECONDS)
+    finally:
+        workspace.cleanup()
+
+    if result.timed_out:
         return "Error: script exceeded 10-second timeout.", False
-    except Exception as e:
-        return f"Execution error: {e}", False
+    if not result.ok:
+        return f"Script error: {result.stderr[:500]}", False
+    return result.stdout.strip(), True
