@@ -65,3 +65,13 @@ def test_summary_ignores_unmeasured_and_non_green():
         "max_s": 26.0,
     }
     assert summarize_green([]) is None
+
+
+def test_pit_losses_accept_nan_for_missing_pit_times():
+    nan = float("nan")
+    laps = _race()
+    for lap in laps:
+        lap.setdefault("pit_in_time_ms", nan)
+        lap.setdefault("pit_out_time_ms", nan)
+    [stop] = pit_losses(laps, TOTAL)
+    assert (stop.lap_in, stop.loss_s is not None) == (15, True)

@@ -52,3 +52,21 @@ def test_clean_laps_drops_start_pit_sc_deleted_and_slow_outlier():
 
 def test_too_few_laps_returns_none():
     assert fit_degradation(_stint(n=4)) is None
+
+
+def test_nan_is_treated_like_missing_so_pandas_laps_work():
+    nan = float("nan")
+    laps = [
+        {
+            "lap_number": n,
+            "lap_time_ms": 95000.0 + n,
+            "stint": 1,
+            "pit_in_time_ms": nan,
+            "pit_out_time_ms": nan,
+            "track_status": None,
+        }
+        for n in range(2, 12)
+    ]
+    laps.append({"lap_number": 12, "lap_time_ms": nan, "stint": 1})
+    kept = clean_laps(laps)
+    assert [lap["lap_number"] for lap in kept] == list(range(2, 12))

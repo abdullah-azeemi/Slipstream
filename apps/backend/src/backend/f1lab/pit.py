@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from statistics import fmean, median
 
-from backend.f1lab.pace import FUEL_EFFECT_S_PER_LAP, clean_laps, fuel_correct
+from backend.f1lab.pace import (
+    FUEL_EFFECT_S_PER_LAP,
+    clean_laps,
+    fuel_correct,
+    is_missing,
+)
 
 # worst condition wins when the in-lap and out-lap differ
 _SEVERITY = {"green": 0, "vsc": 1, "sc": 2, "red": 3}
@@ -54,13 +59,13 @@ def pit_losses(
 
     stops: list[PitLoss] = []
     for lap in sorted(laps, key=lambda lap: lap["lap_number"]):
-        if lap.get("pit_in_time_ms") is None:
+        if is_missing(lap.get("pit_in_time_ms")):
             continue
         n = lap["lap_number"]
         nxt = by_lap.get(n + 1)
-        if nxt is None or nxt.get("pit_out_time_ms") is None:
+        if nxt is None or is_missing(nxt.get("pit_out_time_ms")):
             continue
-        if lap.get("lap_time_ms") is None or nxt.get("lap_time_ms") is None:
+        if is_missing(lap.get("lap_time_ms")) or is_missing(nxt.get("lap_time_ms")):
             continue
 
         condition = max(

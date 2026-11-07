@@ -4,6 +4,7 @@ Pure functions: no DB, no LLM. Laps are dicts shaped like lap_times rows.
 """
 
 from __future__ import annotations
+import math
 from dataclasses import dataclass
 from statistics import fmean, median
 
@@ -15,15 +16,19 @@ SLOW_TRACK_STATUS = frozenset({"4", "5", "6", "7"})
 FUEL_EFFECT_S_PER_LAP = 0.05
 
 
+def is_missing(value: object) -> bool:
+    """None or NaN. Laps coming from pandas carry NaN where the database has NULL."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
 def clean_laps(laps: list[dict], *, outlier_pct: float = 0.07) -> list[dict]:
     """Keep only representative racing laps, sorted by lap number."""
     usable: list[dict] = []
     for lap in laps:
-        if lap.get("lap_time_ms") is None or lap["lap_number"] == 1:
+        if is_missing(lap.get("lap_time_ms")) or lap["lap_number"] == 1:
             continue
-        if (
-            lap.get("pit_in_time_ms") is not None
-            or lap.get("pit_out_time_ms") is not None
+        if not is_missing(lap.get("pit_in_time_ms")) or not is_missing(
+            lap.get("pit_out_time_ms")
         ):
             continue
         if lap.get("deleted"):
