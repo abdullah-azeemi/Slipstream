@@ -38,6 +38,7 @@ def create_app() -> Flask:
     from backend.api.v1.stats import stats_bp
     from backend.health import health_bp
     from backend.api.v1.agent import agent_bp
+    from backend.api.v1.analyst import analyst_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(sessions_bp, url_prefix="/api/v1")
@@ -51,6 +52,7 @@ def create_app() -> Flask:
     app.register_blueprint(schedule_bp, url_prefix="/api/v1")
     app.register_blueprint(stats_bp, url_prefix="/api/v1")
     app.register_blueprint(agent_bp, url_prefix="/api/v1")
+    app.register_blueprint(analyst_bp, url_prefix="/api/v1")
 
     @app.errorhandler(404)
     def not_found(e):

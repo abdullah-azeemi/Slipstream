@@ -186,6 +186,19 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS analyst_runs (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id),
+    conversation_id INTEGER REFERENCES agent_conversations(id),
+    question        TEXT NOT NULL,
+    answer          TEXT NOT NULL,
+    cost_usd        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    steps           INTEGER NOT NULL DEFAULT 0,
+    error           TEXT,
+    events          JSONB NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS agent_runs (
     id                  SERIAL PRIMARY KEY,
     conversation_id     INTEGER REFERENCES agent_conversations(id),
@@ -374,6 +387,7 @@ def _create_tables(db_engine):
     # Tear down tables after the full test suite finishes.
     # Drop in reverse dependency order.
     with db_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS analyst_runs CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS strategy_document_chunks CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS strategy_documents CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS agent_tool_calls CASCADE;"))
