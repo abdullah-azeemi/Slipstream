@@ -56,6 +56,12 @@ class Settings(CommonSettings):
 
     agent_planner_mode: Literal["template", "llm"] = "template"
 
+    # Analyst engine (backend.analyst): tool-calling loop + sandboxed Python
+    analyst_model: str = "openai/gpt-4o-mini"
+    analyst_max_steps: int = 10
+    analyst_max_cost_usd: float = 0.03
+    analyst_sandbox_timeout_seconds: int = 20
+
     clerk_issuer: str = ""
     clerk_admin_user_ids: str = ""
 
