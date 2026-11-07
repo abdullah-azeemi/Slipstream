@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 from sqlalchemy import create_engine, text
 from ingestion.config import settings
+from ingestion.headshots import upsize
 import structlog
 
 log = structlog.get_logger()
@@ -196,13 +197,17 @@ def load_drivers(drivers: list[dict]) -> None:
                 text("""
                 INSERT INTO drivers (
                     session_key, driver_number, full_name,
-                    abbreviation, team_name, team_colour
+                    abbreviation, team_name, team_colour, headshot_url
                 ) VALUES (
                     :session_key, :driver_number, :full_name,
-                    :abbreviation, :team_name, :team_colour
+                    :abbreviation, :team_name, :team_colour, :headshot_url
                 )
             """),
-                {**d, "team_colour": resolved_colour},
+                {
+                    **d,
+                    "team_colour": resolved_colour,
+                    "headshot_url": upsize(d.get("headshot_url")),
+                },
             )
     log.info("loader.drivers_loaded", count=len(drivers))
 

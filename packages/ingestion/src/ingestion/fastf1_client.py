@@ -116,6 +116,7 @@ def extract_drivers(session: fastf1.core.Session, session_key: int) -> list[dict
                     "abbreviation": info.get("Abbreviation", drv),
                     "team_name": info.get("TeamName", None),
                     "team_colour": info.get("TeamColour", None),
+                    "headshot_url": info.get("HeadshotUrl") or None,
                 }
             )
         except Exception as e:
