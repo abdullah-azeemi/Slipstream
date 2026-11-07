@@ -1,6 +1,6 @@
 ---
 title: Rebuilding the Pitwall agent as an analyst, with the numbers
-summary: The first agent answered simple questions with fixed recipes. We measured it, found where it breaks, and built one that writes and runs its own analysis. Here is what the eval says, including what still fails.
+summary: The first agent answered simple questions with fixed recipes. We measured it, built one that writes and runs its own analysis, and checked every answer by hand. Here is what got better and what still fails.
 date: 2026-11-07
 tag: Build notes
 draft: true
@@ -33,7 +33,8 @@ The new engine is a loop. The model sees the question, picks a tool, reads the r
 1. **Loaders** stage lap, telemetry, weather and race-control data into a per-run workspace. The model never sees the database.
 2. **A sandbox** runs the Python the model writes: no network, read-only root file system, non-root user, 512 MB and one CPU.
 3. **`f1lab`**, a small library of tested F1 methods: lap cleaning, fuel correction, degradation fits, pit loss, lateral and longitudinal g, and physics sanity checks. The model is told to use it instead of re-deriving methods.
-4. **A live canvas.** Every tool call becomes a card, the model's thoughts float over the cards they led to, and the graph grows as the agent decides what to do next. [Watch a recorded run](/analyst/demo).
+4. **Checks on the answer.** Every number with a decimal or a unit must appear in computed output, or the answer goes back once and is then labelled unverified. A `race_summary` tool hands the model the final order, stops and gaps before it starts.
+5. **A live canvas.** Every tool call becomes a card, the model's thoughts float over the cards they led to, and the graph grows as the agent decides what to do next. [Watch a recorded run](/analyst/demo).
 
 ## The methods, measured
 
@@ -61,26 +62,24 @@ Spain's old figure of 41.5 s is not a plausible green pit loss. We suspect it co
 
 ## Does the analyst do better?
 
-We ran the new engine on 8 of the 22 questions (the budget for model calls was capped at $0.20 in total).
+We ran the new engine on 8 of the 22 questions and checked every answer against the database by hand, because our scorer only checks text and number ranges. It has passed wrong answers and failed right ones.
 
-| | Old agent | Analyst |
-|---|---|---|
-| Passed by the scorer, same 8 questions | 0 | **2** |
-| Correct when we checked by hand | 0 | **1** |
-| Median latency | about 10 s | about 30 s |
-| Mean model cost per question | about $0.0003 | about $0.003 |
+| | Old agent | Analyst, `gpt-4o-mini` | Analyst, `qwen3.7-plus` |
+|---|---|---|---|
+| Correct | 0 | 1 | **4** |
+| Partly right | | 5 | 2 |
+| No answer | | 0 | 2 |
+| Wrong | | 2 | **0** |
+| Model cost per question | about $0.0003 | about $0.003 | about $0.014 |
+| Median time per question | about 10 s | about 28 s | about 118 s |
 
-The old agent's cost counts only its router and answer calls, so the gap is smaller than it looks.
+The old agent's eight all failed the scorer, mostly through refusals; we did not grade them further. Its cost counts only router and answer calls.
 
-We checked every analyst answer against the database, because the scorer only checks text and ranges:
+The larger model is about five times the price and four times as slow, and it got more right. Each column is one run, and scores moved between runs on the same model.
 
-- **Hamilton's degradation in Singapore** is right, and matches our own calculation above.
-- **British Grand Prix weather** passed the scorer and is half right: "no rain" is correct, but it reported an average track temperature of 37.9 °C where the stored data averages **40.0 °C**.
-- **"Was there a safety car in Azerbaijan?"** it answered "cannot confirm". The race-control data holds **four safety-car events**; it never found them. The scorer failed it for the wrong reason, because the answer was honest but wrong.
-- It explained away negative fuel-corrected slopes as "fuel burn", the one explanation we had already removed. We added a rule against it, and the next run called the data noisy instead.
-- On strategy questions a small model reasons shallowly (one run defined "traffic" as "position 4 or lower"). One run made 51 tool calls and still ended with "unable to".
+The clearest case: *could Verstappen have undercut the car ahead in Singapore?* The small model compared the wrong laps and said he spent 60 laps in traffic. The larger one read the race summary and answered that he led every lap, so there was no car ahead to undercut. That is right, though one gap it quoted was about 4 seconds off.
 
-So the honest summary is **one verified correct answer out of eight**, against none before. That is progress, and it is also the reason the next step is a reviewer, not a bigger model.
+Its other misses were smaller or plainly admitted. It gave a wrong 135.4 s gap between Norris and Piastri while getting the rest right. Two runs hit their limit and returned no conclusion.
 
 ## What the eval caught while we built it
 
@@ -89,14 +88,20 @@ Running real questions found problems no unit test did:
 - Laps loaded through pandas carry NaN where the database has NULL, and our cleaner dropped every lap as a pit lap.
 - Each Python call was a fresh process, but the model assumed variables persisted. We now replay earlier successful scripts.
 - One reply spent **245 seconds** producing an empty final answer. Replies are now capped at 2,500 tokens and a run has a 150-second limit.
+- We showed the model a sample row, and it reported that row as the race average: 37.9 °C against a true **40.0 °C**. A sample is no longer accepted as evidence.
+- It missed two safety-car deployments by reading the wrong column, so loaders now list the values each column holds.
+- Our own check was wrong too: we first counted a red-flag pit entry at the Dutch Grand Prix as a stop.
 
 ## Limits
 
-- Eight questions, one small model, and a scorer that checks text and number ranges rather than correctness (it passed a wrong temperature). These are directional numbers, not a benchmark.
+- Eight questions and one run per model, graded by hand by the people who built it. We wrote the expected facts after seeing early answers. These are directional numbers, not a benchmark.
 - The "trap" tier has not been run against the analyst.
 - The sandbox runs in Docker. Production on Fly will need a hosted runner behind the same interface.
-- Fuel effect, smoothing and reference windows are assumptions we will calibrate per circuit.
+- Fuel effect, smoothing and the 1.35 s traffic threshold are assumptions. The threshold comes from a simulation at one circuit ([Fieni et al.](https://arxiv.org/abs/2602.23056)).
+- Two minutes per question is slow for a live product.
 
 ## Next
 
-A reviewer that checks every number in an answer against the tool results and the physics ranges before it is shown, a model-graded rubric on the eval, and a stronger model for the analytical tier. The same 22 questions will tell us whether each change helps.
+Send simple questions to the fast, cheap path and hard ones to the larger model, using measured results rather than guesses: work on model routing finds that a router short of information is the main limit ([Agent-as-a-Router](https://arxiv.org/abs/2606.22902), on coding tasks). Add a separate judge for reasoning, as [DS-STAR](https://arxiv.org/abs/2509.21825) does, and build a lap-time model that measures the fuel effect instead of assuming it.
+
+This is also a thin corner of the field: one [recent scoping review](https://pdfs.semanticscholar.org/3fd2/71ffc72994e47c885397b9b3abb6edd3cfd4.pdf) of AI in motorsport counted 4 of 50 sources on telemetry and race data analysis.
