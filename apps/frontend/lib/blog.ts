@@ -7,6 +7,10 @@ export interface PostMeta {
   summary: string
   date: string // ISO yyyy-mm-dd
   tag: string
+  /** Small line above the title, e.g. a series name. */
+  kicker?: string
+  /** A closing phrase of the title shown in italics. */
+  emphasis?: string
   readingMinutes: number
 }
 
@@ -33,6 +37,8 @@ export function parsePost(slug: string, raw: string): (Post & { draft: boolean }
     summary: data.summary ?? '',
     date: data.date,
     tag: data.tag ?? 'Notes',
+    kicker: data.kicker,
+    emphasis: data.emphasis,
     draft: data.draft === 'true',
     readingMinutes: Math.max(1, Math.round(body.split(/\s+/).length / 220)),
     body,
@@ -58,4 +64,25 @@ export function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+/** URL-safe id for a heading, shared by the page and its contents box. */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/** The `## ` headings of a post body, for an "In this article" box. */
+export function getHeadings(body: string): { id: string; text: string }[] {
+  const out: { id: string; text: string }[] = []
+  let inCode = false
+  for (const line of body.split(/\r?\n/)) {
+    if (line.trim().startsWith('```')) inCode = !inCode
+    const m = !inCode && line.match(/^##\s+(.+?)\s*$/)
+    // the contents box is generated from the headings, so its own heading is not listed
+    if (m && m[1].trim().toLowerCase() !== 'in this article') out.push({ id: slugify(m[1]), text: m[1] })
+  }
+  return out
 }
