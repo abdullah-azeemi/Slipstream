@@ -96,7 +96,7 @@ export default function AnalystPage() {
     <div className="flex h-[calc(100vh-72px)] flex-col">
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative min-h-[360px] flex-1">
-          <AnalystCanvas run={run} selectedId={selected} onSelect={setSelected} />
+          <AnalystCanvas run={run} selectedId={selected} onSelect={setSelected} live={mode === 'live'} />
           {run.question == null && (
             <div className="absolute inset-x-0 bottom-24 mx-auto flex max-w-xl flex-wrap justify-center gap-2 px-4">
               {EXAMPLES.map((ex) => (

@@ -1,6 +1,7 @@
 'use client'
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Activity, CloudSun, Flag, Search, Table2, Terminal, type LucideIcon } from 'lucide-react'
 import {
   Background,
   BackgroundVariant,
@@ -20,15 +21,28 @@ import './analyst.css'
 import {
   CARD_H,
   QUESTION_ID,
+  currentActivity,
   edgesOf,
+  formatElapsed,
   layoutRun,
+  roundSizes,
+  runCounts,
   thoughtsByRound,
   type AnalystRunState,
   type AnalystStep,
 } from '@/lib/analyst-graph'
 import EChart from './EChart'
 
-type StepData = { step: AnalystStep; selected: boolean }
+type StepData = { step: AnalystStep; selected: boolean; siblings: number }
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+  find_sessions: Search,
+  race_summary: Flag,
+  load_laps: Table2,
+  load_telemetry: Activity,
+  load_context: CloudSun,
+  run_python: Terminal,
+}
 
 function Target() {
   return (
@@ -39,16 +53,18 @@ function Target() {
   )
 }
 
-function footerOf(step: AnalystStep): string {
-  if (step.state === 'running') return 'running…'
+function footerOf(step: AnalystStep, siblings: number): string {
+  if (step.state === 'running') return siblings > 1 ? `running · 1 of ${siblings} in parallel` : 'running…'
   const secs = step.durationMs == null ? '' : step.durationMs < 1000 ? `${step.durationMs} ms` : `${(step.durationMs / 1000).toFixed(1)} s`
   if (step.state === 'error') return `failed${secs ? ` · ${secs}` : ''}`
   const charts = step.charts.length ? `${step.charts.length} chart${step.charts.length > 1 ? 's' : ''} · ` : ''
-  return `${charts}${secs}`
+  const parallel = siblings > 1 ? `${siblings} in parallel · ` : ''
+  return `${parallel}${charts}${secs}`
 }
 
 const StepCard = memo(function StepCard({ data }: NodeProps<FlowNode<StepData>>) {
-  const { step, selected } = data
+  const { step, selected, siblings } = data
+  const Icon = TOOL_ICONS[step.tool] ?? Terminal
   return (
     <div className="an-card" data-state={step.state} data-selected={selected}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
@@ -58,21 +74,28 @@ const StepCard = memo(function StepCard({ data }: NodeProps<FlowNode<StepData>>)
       </div>
       <div className="an-thumb">
         {step.charts[0] ? (
-          <EChart option={step.charts[0].option} height={128} mini />
-        ) : step.preview ? (
+          <EChart option={step.charts[0].option} height={150} mini />
+        ) : step.tool === 'run_python' && step.preview ? (
           <pre className="an-code">{step.preview}</pre>
         ) : (
-          <div className="an-stat">{step.state === 'running' ? 'working…' : step.summary.slice(0, 160)}</div>
+          <div className="an-stat">
+            <Icon className="an-stat-icon" size={22} strokeWidth={1.6} aria-hidden />
+            <div className="an-stat-text">
+              {step.state === 'running' ? 'working…' : (step.preview || step.summary).slice(0, 170)}
+            </div>
+          </div>
         )}
         {step.state === 'running' && <Target />}
       </div>
-      <div className="an-foot" data-state={step.state}>{footerOf(step)}</div>
+      <div className="an-foot" data-state={step.state}>{footerOf(step, siblings)}</div>
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   )
 })
 
-const QuestionCard = memo(function QuestionCard({ data }: NodeProps<FlowNode<{ question: string; thinking: boolean }>>) {
+const QuestionCard = memo(function QuestionCard({
+  data,
+}: NodeProps<FlowNode<{ question: string; thinking: boolean; starts: number }>>) {
   return (
     <div className="an-q">
       <div className="an-card-head">
@@ -80,6 +103,7 @@ const QuestionCard = memo(function QuestionCard({ data }: NodeProps<FlowNode<{ q
         <span className="an-title">{data.thinking ? 'thinking…' : 'asked'}</span>
       </div>
       <div className="an-q-body">{data.question}</div>
+      <div className="an-foot">{data.starts > 0 ? `start · ${data.starts}` : 'start'}</div>
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   )
@@ -100,23 +124,77 @@ const Chip = memo(function Chip({ data }: NodeProps<FlowNode<{ text: string }>>)
 
 const nodeTypes: NodeTypes = { step: StepCard, question: QuestionCard, chip: Chip }
 
+function StatusBar({ run, live }: { run: AnalystRunState; live: boolean }) {
+  const counts = runCounts(run)
+  const [now, setNow] = useState(0)
+  const base = useRef({ ms: 0, at: 0 })
+  useEffect(() => {
+    base.current = { ms: run.elapsedMs, at: performance.now() }
+    setNow(0)
+  }, [run.elapsedMs])
+  useEffect(() => {
+    if (!live || run.status !== 'running') return
+    const t = setInterval(() => setNow(performance.now() - base.current.at), 250)
+    return () => clearInterval(t)
+  }, [live, run.status])
+
+  if (run.question == null) return null
+  const finished = counts.done + counts.failed
+  const pct = run.status === 'done' ? 100 : counts.total ? Math.round((finished / counts.total) * 100) : 4
+  const label =
+    run.status === 'done' ? 'Done' : run.status === 'error' ? 'Stopped' : counts.total === 0 ? 'Thinking' : counts.running ? 'Running' : 'Reading'
+  const detail =
+    run.status === 'done'
+      ? `${counts.total} steps${run.costUsd > 0 ? ` · $${run.costUsd.toFixed(4)}` : ''}`
+      : `${counts.running} in progress · ${counts.done} done${counts.failed ? ` · ${counts.failed} failed` : ''}`
+  return (
+    <div className="an-status" data-status={run.status}>
+      <span className="an-status-dot" aria-hidden />
+      <strong>{label}</strong>
+      <span className="an-status-detail">{detail}</span>
+      <div className="an-status-bar" aria-hidden><i style={{ width: `${pct}%` }} /></div>
+      <span className="an-status-num">{finished}/{counts.total}</span>
+      <span className="an-status-num">{formatElapsed(run.elapsedMs + (live ? now : 0))}</span>
+    </div>
+  )
+}
+
+function ActivityPill({ run }: { run: AnalystRunState }) {
+  const activity = currentActivity(run)
+  if (!activity) return null
+  const counts = runCounts(run)
+  return (
+    <div className="an-pill" data-busy={activity.busy}>
+      <span className="an-pill-dots" aria-hidden><i /><i /><i /></span>
+      <span className="an-pill-verb">{activity.verb}</span>
+      <span className="an-pill-detail">{activity.detail}</span>
+      {counts.total > 0 && (
+        <span className="an-pill-counts">
+          <b className="an-sq an-sq-run" />{counts.running}
+          <b className="an-sq an-sq-done" />{counts.done}
+          {counts.failed > 0 && (<><b className="an-sq an-sq-fail" />{counts.failed}</>)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function AutoFit({ trigger, focus }: { trigger: string; focus: string[] | null }) {
   const { fitView } = useReactFlow()
   const width = useStore((s) => s.width)
   const height = useStore((s) => s.height)
   useEffect(() => {
     if (!width || !height) return
-    const t = setTimeout(
-      () =>
-        fitView({
-          padding: 0.2,
-          maxZoom: 1,
-          duration: 450,
-          ...(focus ? { nodes: focus.map((id) => ({ id })) } : {}),
-        }),
-      150
-    )
-    return () => clearTimeout(t)
+    const fit = () =>
+      fitView({
+        padding: 0.2,
+        maxZoom: 1,
+        duration: 450,
+        ...(focus ? { nodes: focus.map((id) => ({ id })) } : {}),
+      })
+    // a second attempt covers a fit that lands while an earlier animation is still running
+    const timers = [setTimeout(fit, 150), ...(focus ? [] : [setTimeout(fit, 800)])]
+    return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger, width, height, fitView])
   return null
@@ -126,10 +204,12 @@ export default function AnalystCanvas({
   run,
   selectedId,
   onSelect,
+  live = false,
 }: {
   run: AnalystRunState
   selectedId: string | null
   onSelect: (id: string | null) => void
+  live?: boolean
 }) {
   const boardRef = useRef<HTMLDivElement>(null)
   const [cols, setCols] = useState(3)
@@ -152,16 +232,21 @@ export default function AnalystCanvas({
         type: 'question',
         position: pos[QUESTION_ID],
         draggable: false,
-        data: { question: run.question, thinking: run.status === 'running' && run.steps.length === 0 },
+        data: {
+          question: run.question,
+          thinking: run.status === 'running' && run.steps.length === 0,
+          starts: roundSizes(run).get(Math.min(...run.steps.map((s) => s.round))) ?? 0,
+        },
       },
     ]
+    const sizes = roundSizes(run)
     for (const step of run.steps) {
       list.push({
         id: step.id,
         type: 'step',
         position: pos[step.id],
         draggable: false,
-        data: { step, selected: step.id === selectedId } satisfies StepData,
+        data: { step, selected: step.id === selectedId, siblings: sizes.get(step.round) ?? 1 } satisfies StepData,
       })
     }
     // thoughts float over the first card of their turn, like annotations on a screenshot
@@ -204,7 +289,7 @@ export default function AnalystCanvas({
   }, [run])
 
   return (
-    <div ref={boardRef} className="an-board h-full w-full">
+    <div ref={boardRef} className="an-board relative h-full w-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -222,6 +307,8 @@ export default function AnalystCanvas({
         <Controls showInteractive={false} position="bottom-left" />
         <AutoFit trigger={`${run.steps.length}:${run.status}:${cols}`} focus={focus} />
       </ReactFlow>
+      <StatusBar run={run} live={live} />
+      <ActivityPill run={run} />
       {run.question == null && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-[#8a9498] an-mono">
           Ask a question to watch the analyst work.

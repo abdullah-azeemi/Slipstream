@@ -3,7 +3,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './analyst.css'
-import { thoughtsByRound, type AnalystRunState, type AnalystStep } from '@/lib/analyst-graph'
+import { roundSizes, thoughtsByRound, type AnalystRunState, type AnalystStep } from '@/lib/analyst-graph'
 import EChart from './EChart'
 
 function StateDot({ state }: { state: AnalystStep['state'] }) {
@@ -23,6 +23,7 @@ export default function AnswerPanel({
   const selected = run.steps.find((s) => s.id === selectedId) ?? null
   const byRound = thoughtsByRound(run)
   const rounds = [...new Set(run.steps.map((s) => s.round))].sort((a, b) => a - b)
+  const sizes = roundSizes(run)
 
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
@@ -40,8 +41,11 @@ export default function AnswerPanel({
         </div>
         {run.steps.length === 0 && <p className="text-sm text-[#8a9498]">Waiting for the first step…</p>}
         <ol className="space-y-2">
-          {rounds.map((round) => (
+          {rounds.map((round, turn) => (
             <li key={round} className="space-y-1.5">
+              <div className="an-mono text-[10px] uppercase tracking-wider text-[#a3adb0]">
+                Turn {turn + 1}{(sizes.get(round) ?? 1) > 1 ? ` · ${sizes.get(round)} in parallel` : ''}
+              </div>
               {(byRound.get(round) ?? []).map((t) => (
                 <p key={t.seq} className="border-l-2 border-[#6c9aa3] pl-2.5 text-[13px] leading-snug text-[#2c4a52]">{t.text}</p>
               ))}

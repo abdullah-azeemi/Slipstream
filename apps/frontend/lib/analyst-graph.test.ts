@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalystEvent } from '@/types/analyst'
-import { CARD_H, QUESTION_ID, edgesOf, layoutRun, reduceEvents, thoughtsByRound } from './analyst-graph'
+import { CARD_H, QUESTION_ID, currentActivity, edgesOf, formatElapsed, roundSizes, runCounts, layoutRun, reduceEvents, thoughtsByRound } from './analyst-graph'
 
 const base = (seq: number) => ({ seq, t_ms: seq * 100 })
 const start = (id: string, round: number, title = id): AnalystEvent => ({
@@ -98,5 +98,81 @@ describe('thoughtsByRound', () => {
     ])
     const map = thoughtsByRound(run)
     expect(map.get(0)?.map((t) => t.text)).toEqual(['first', 'Reviewer: fix'])
+  })
+})
+
+
+describe('run progress helpers', () => {
+  const parallel = reduceEvents([
+    { ...base(0), type: 'run_start', question: 'q' },
+    start('a', 0),
+    start('b', 0),
+    start('c', 1),
+    end('a', 0),
+  ])
+
+  it('counts steps by state and sizes each turn', () => {
+    expect(runCounts(parallel)).toEqual({ running: 2, done: 1, failed: 0, total: 3 })
+    expect([...roundSizes(parallel)]).toEqual([[0, 2], [1, 1]])
+  })
+
+  it('describes parallel work and the quiet moments between steps', () => {
+    expect(currentActivity(parallel)?.verb).toBe('Running 2 steps in parallel')
+    const between = reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, start('a', 0), end('a', 0)])
+    expect(currentActivity(between)).toMatchObject({ verb: 'Reading the results', busy: true })
+    expect(currentActivity(reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }]))?.verb).toBe('Planning')
+    expect(currentActivity(reduceEvents([]))).toBeNull()
+  })
+
+  it('names a single running tool and the finished and failed states', () => {
+    const one = reduceEvents([
+      { ...base(0), type: 'run_start', question: 'q' },
+      { ...base(1), type: 'tool_start', round: 0, call_id: 'x', tool: 'load_laps', title: 'Laps · HAM', preview: '' },
+    ])
+    expect(currentActivity(one)).toMatchObject({ verb: 'Loading', detail: 'Laps · HAM' })
+    expect(currentActivity(reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, { ...base(2), type: 'final', markdown: 'a', cost_usd: 0, steps: 0 }]))?.verb).toBe('Answer ready')
+    expect(currentActivity(reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, { ...base(2), type: 'error', message: 'boom' }]))).toMatchObject({ verb: 'Stopped', detail: 'boom' })
+  })
+
+  it('tracks elapsed time from the latest event and formats it', () => {
+    expect(reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, { seq: 1, t_ms: 65_400, type: 'thought', round: 0, text: 't' }]).elapsedMs).toBe(65_400)
+    expect(formatElapsed(65_400)).toBe('1:05')
+    expect(formatElapsed(900)).toBe('0.9s')
+    expect(formatElapsed(12_340)).toBe('12.3s')
+  })
+})
+
+
+describe('layout of parallel steps', () => {
+  const run = reduceEvents([
+    { ...base(0), type: 'run_start', question: 'q' },
+    start('s', 0),
+    start('a', 1), start('b', 1), start('c', 1), start('d', 1),
+    start('p', 2),
+  ])
+
+  it('lays four parallel steps out two across and two down, without overlap', () => {
+    const pos = layoutRun(run, 3)
+    expect(pos.a.x).not.toBe(pos.b.x)
+    expect(pos.a.x).toBe(pos.c.x)
+    expect(pos.c.y).toBeGreaterThan(pos.a.y + CARD_H)
+    const cards = ['a', 'b', 'c', 'd'].map((id) => pos[id])
+    for (const [i, one] of cards.entries()) {
+      for (const other of cards.slice(i + 1)) {
+        const apart = Math.abs(one.x - other.x) >= 288 || Math.abs(one.y - other.y) >= CARD_H
+        expect(apart).toBe(true)
+      }
+    }
+  })
+
+  it('moves the parallel block to the next grid row when it does not fit, and the next turn follows it', () => {
+    const pos = layoutRun(run, 3)
+    expect(pos.a.x).toBe(pos[QUESTION_ID].x) // starts the second row at the left edge
+    expect(pos.p.x).toBeGreaterThan(pos.b.x) // the following turn sits to its right
+  })
+
+  it('stays one card wide on a narrow canvas', () => {
+    const pos = layoutRun(run, 1)
+    expect(new Set(Object.values(pos).map((p) => p.x)).size).toBe(1)
   })
 })

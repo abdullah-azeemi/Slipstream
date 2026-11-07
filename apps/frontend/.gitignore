@@ -44,3 +44,6 @@ next-env.d.ts
 # Private driver cutouts (licensing): keep local only, never commit
 /public/drivers/*
 !/public/drivers/README.md
+
+# alternate build folders (NEXT_DIST_DIR) for a second dev server
+.next-*

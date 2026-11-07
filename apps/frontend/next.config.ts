@@ -6,6 +6,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
 }
 
 const nextConfig: NextConfig = {
+  // Two `next dev` servers must not share one build folder; set NEXT_DIST_DIR for the second.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // The original /agent page was replaced by the analyst canvas; keep old links working.
   async redirects() {
     return [{ source: '/agent', destination: '/analyst', permanent: false }]
