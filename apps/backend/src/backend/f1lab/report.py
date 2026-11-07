@@ -207,10 +207,13 @@ def gaps_to_car_ahead(laps: list[dict]) -> dict[tuple[int, int], float]:
     return gaps
 
 
-def race_summary(laps: list[dict], labels: dict[int, str]) -> dict:
+def race_summary(
+    laps: list[dict], labels: dict[int, str], names: dict[int, str] | None = None
+) -> dict:
     """Final order, stops, pace and traffic for every driver in a race.
 
     laps: all drivers, including deleted laps. labels: driver_number -> 'HAM'.
+    names: driver_number -> full name, so a model need not guess who a code means.
     The order comes from lap data at each driver's last lap, not official results.
     """
     gaps = gaps_to_car_ahead(laps)
@@ -245,6 +248,7 @@ def race_summary(laps: list[dict], labels: dict[int, str]) -> dict:
         rows.append(
             {
                 "driver": labels.get(driver, str(driver)),
+                "name": (names or {}).get(driver),
                 "final_position": own[-1].get("position"),
                 "laps": own[-1]["lap_number"],
                 "compounds": compounds,
@@ -279,6 +283,7 @@ def format_race_summary(summary: dict) -> str:
             )
             or "none"
         )
+        name = f" ({row['name']})" if row.get("name") else ""
         # gaps vanish after a missing lap time: say unknown rather than imply clean air
         traffic = (
             f"{row['clean_laps_in_traffic']}/{row['clean_laps_with_gap']}"
@@ -286,7 +291,7 @@ def format_race_summary(summary: dict) -> str:
             else "unknown"
         )
         lines.append(
-            f"P{row['final_position']} {row['driver']} {row['laps']}L "
+            f"P{row['final_position']} {row['driver']}{name} {row['laps']}L "
             f"{'>'.join(c[0] for c in row['compounds'])} "
             f"median {row['median_clean_lap_s']}s "
             f"traffic {traffic} stops: {stops}"

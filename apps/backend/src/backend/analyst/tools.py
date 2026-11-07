@@ -258,20 +258,20 @@ class ToolBox:
                     title="Race summary",
                 )
             laps = data.load_laps(conn, session_key, include_deleted=True)
-            labels = {
-                row[0]: row[1]
-                for row in conn.execute(
-                    text(
-                        "SELECT driver_number, abbreviation FROM drivers WHERE session_key = :sk"
-                    ),
-                    {"sk": session_key},
-                )
-            }
+            roster = conn.execute(
+                text(
+                    "SELECT driver_number, abbreviation, full_name FROM drivers "
+                    "WHERE session_key = :sk"
+                ),
+                {"sk": session_key},
+            ).all()
+            labels = {row[0]: row[1] for row in roster}
+            names = {row[0]: row[2] for row in roster}
         if not laps:
             return ToolOutput(
                 "no lap data for that session", ok=False, title="Race summary"
             )
-        summary = report.race_summary(laps, labels)
+        summary = report.race_summary(laps, labels, names)
         self.workspace.write_json(f"race_summary_{session_key}.json", summary)
         text_out = report.format_race_summary(summary)
         return ToolOutput(

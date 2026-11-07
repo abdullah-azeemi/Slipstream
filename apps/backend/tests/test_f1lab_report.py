@@ -170,3 +170,8 @@ def test_red_flag_and_missing_time_stops_are_listed_without_a_loss():
     laps[5]["lap_time_ms"] = None
     [stop] = race_summary(laps, {1: "AAA"})["drivers"][0]["stops"]
     assert (stop["lap_in"], stop["condition"], stop["loss_s"]) == (5, "red", None)
+
+
+def test_full_names_appear_so_codes_are_not_guessed():
+    summary = race_summary(_car(12, 1, 90.0), {12: "ANT"}, {12: "Kimi Antonelli"})
+    assert "P1 ANT (Kimi Antonelli) 30L" in format_race_summary(summary)

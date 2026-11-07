@@ -51,6 +51,7 @@ cars faster each lap, so always fuel-correct first. Compare drivers on equal ter
 
 DATA FACTS
 - Telemetry has no throttle channel; never report throttle. x_pos/y_pos are in 1/10 m.
+- Use driver names exactly as the tools give them; never expand a driver code from memory.
 - Traffic means being close to the car ahead (race_summary uses 1.35 s), never a track position.
 - Read the data profile each loader prints before choosing a column. Safety car and VSC periods are
   race_control rows with category 'SafetyCar' (their lap_number is often empty), not values of flag.
