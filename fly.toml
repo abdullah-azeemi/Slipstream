@@ -11,6 +11,8 @@ primary_region = 'sin'
 
 [env]
   FLASK_ENV = 'production'
+  # Browser origins allowed to call the API; add preview URLs comma-separated if needed.
+  CORS_ORIGINS = 'https://slipstream-f1.vercel.app'
   ML_MODELS_DIR = '/data/ml_models'
   RACE_VECTOR_INDEX_DIR = '/data/lancedb'
   TELEMETRY_ARTIFACT_BACKEND = 'r2'
