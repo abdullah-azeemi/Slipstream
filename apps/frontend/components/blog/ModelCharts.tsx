@@ -90,17 +90,17 @@ function ModelComparison() {
   const rev = [...order].reverse()
   return (
     <EChart
-      height={380}
+      height={440}
       option={{
         ...base,
-        grid: { left: 190, right: 56, top: 8, bottom: 64 },
-        legend: { bottom: 0, textStyle: { color: TEXT }, data: ['Mid-season forecast', 'Next-season forecast'] },
+        grid: { left: 190, right: 56, top: 8, bottom: 72 },
+        legend: { bottom: 0, textStyle: { color: TEXT }, itemGap: 28, itemWidth: 18, itemHeight: 10, data: ['Mid-season forecast', 'Next-season forecast'] },
         tooltip: { trigger: 'axis', axisPointer: { type: 'none' }, valueFormatter: (v: number | null) => (v == null ? 'n/a' : `${v.toFixed(3)}% of lap`) },
         xAxis: { type: 'value', min: 0.6, name: 'Held-out RMSE, % of lap (lower is better)', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: TEXT }, ...axis },
         yAxis: { type: 'category', data: rev, ...axis, splitLine: { show: false } },
         series: [
-          { name: 'Mid-season forecast', type: 'bar', itemStyle: { color: RED }, data: rev.map(m => get(inSeason, m)), label: { show: true, position: 'right', color: TEXT, formatter: ({ value }: { value: number | null }) => (value == null ? '' : value.toFixed(3)) } },
-          { name: 'Next-season forecast', type: 'bar', itemStyle: { color: MUTED }, data: rev.map(m => get(ahead, m)), label: { show: true, position: 'right', color: TEXT, formatter: ({ value }: { value: number | null }) => (value == null ? '' : value.toFixed(3)) } },
+          { name: 'Mid-season forecast', type: 'bar', barGap: '20%', barCategoryGap: '38%', itemStyle: { color: RED }, data: rev.map(m => get(inSeason, m)), label: { show: true, position: 'right', color: TEXT, formatter: ({ value }: { value: number | null }) => (value == null ? '' : value.toFixed(3)) } },
+          { name: 'Next-season forecast', type: 'bar', barGap: '20%', barCategoryGap: '38%', itemStyle: { color: MUTED }, data: rev.map(m => get(ahead, m)), label: { show: true, position: 'right', color: TEXT, formatter: ({ value }: { value: number | null }) => (value == null ? '' : value.toFixed(3)) } },
         ],
       }}
     />
