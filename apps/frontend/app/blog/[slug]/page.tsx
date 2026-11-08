@@ -8,6 +8,7 @@ import '@/components/landing/landing.css'
 import { geist } from '@/components/landing/font'
 import LandingNav from '@/components/landing/LandingNav'
 import LandingFooter from '@/components/landing/LandingFooter'
+import BlogChart from '@/components/blog/AlonsoCharts'
 import { formatDate, getAllPosts, getHeadings, getPost, slugify } from '@/lib/blog'
 
 type Params = { params: Promise<{ slug: string }> }
@@ -72,6 +73,16 @@ export default async function PostPage({ params }: Params) {
               components={{
                 table: ({ children }) => <div className="table-wrap"><table>{children}</table></div>,
                 h2: ({ children }) => <h2 id={slugify(textOf(children))}>{children}</h2>,
+                // A ```chart fence holds a chart id, e.g. team-pace. See components/blog/AlonsoCharts.
+                pre: ({ children }) => {
+                  const child = Array.isArray(children) ? children[0] : children
+                  const cls = (child as { props?: { className?: string } } | undefined)?.props?.className
+                  return cls?.includes('language-chart') ? <>{children}</> : <pre>{children}</pre>
+                },
+                code: ({ className, children }) =>
+                  className?.includes('language-chart')
+                    ? <BlogChart id={textOf(children).trim()} />
+                    : <code className={className}>{children}</code>,
               }}
             >
               {post.body}
