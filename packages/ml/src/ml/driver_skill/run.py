@@ -19,7 +19,7 @@ import pandas as pd
 
 from . import cv, data, drift, impute
 from .baselines import CarOnly, DriverOnly, GlobalMean, TeammateDelta
-from .model import Hyper, SkillModel
+from .model import SkillModel
 
 TUNE_YEARS = list(range(2010, 2018))
 TEST_YEARS = list(range(2018, 2027))
@@ -113,7 +113,6 @@ def main(argv: list[str] | None = None) -> int:
     dt["name"] = dt["driver_id"].map(names)
     ct = full.car_table()
 
-    seasons = dt.groupby("driver_id").size()
     ranking = []
     for drv, g in dt.groupby("driver_id"):
         if len(g) < 8:
