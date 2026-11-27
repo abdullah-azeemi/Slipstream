@@ -39,7 +39,7 @@ def _select(questions: list[dict], args: argparse.Namespace) -> list[dict]:
 def _model_of(engine: str) -> str:
     from backend.config import settings
 
-    return settings.analyst_model if engine == "analyst" else "orchestrator"
+    return "orchestrator" if engine == "agent" else settings.analyst_model
 
 
 def _run_one(
@@ -48,9 +48,9 @@ def _run_one(
     started = time.perf_counter()
     try:
         record = (
-            _run_analyst(question, max_cost)
-            if engine == "analyst"
-            else _run_agent(question)
+            _run_agent(question)
+            if engine == "agent"
+            else _run_analyst(question, max_cost, engine)
         )
     except Exception as exc:  # a crash is a failed run, not a crashed eval
         record = {"answer": "", "refusals": [], "trace": [], "crash": repr(exc)}
@@ -64,17 +64,19 @@ def _run_agent(question: str) -> dict:
     return asdict(orchestrator.run(question))
 
 
-def _run_analyst(question: str, max_cost: float | None) -> dict:
+def _run_analyst(question: str, max_cost: float | None, engine: str) -> dict:
     """Run the analyst engine and shape its result like an AgentAnswer record."""
     from backend.analyst.client import OpenRouterClient
     from backend.analyst.loop import run_analyst
     from backend.analyst.sandbox import DockerSandbox, Workspace
     from backend.analyst.tools import ToolBox
+    from backend.analyst.workflow import run_workflow
     from backend.config import settings
 
+    run = run_workflow if engine == "workflow" else run_analyst
     workspace = Workspace()
     try:
-        result = run_analyst(
+        result = run(
             question,
             llm=OpenRouterClient(),
             toolbox=ToolBox(workspace, DockerSandbox()),
@@ -121,12 +123,12 @@ def main() -> int:
     parser.add_argument("--tier", choices=scoring.TIERS)
     parser.add_argument(
         "--engine",
-        choices=("agent", "analyst"),
+        choices=("agent", "analyst", "workflow"),
         default="agent",
-        help="agent = current orchestrator, analyst = tool-calling analyst loop",
+        help="agent = old orchestrator, analyst = loop, workflow = prepare + facts + loop",
     )
     parser.add_argument(
-        "--max-cost", type=float, help="per-question USD cap (analyst only)"
+        "--max-cost", type=float, help="per-question USD cap (analyst and workflow)"
     )
     parser.add_argument(
         "--max-total",
