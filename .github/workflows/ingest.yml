@@ -82,3 +82,27 @@ jobs:
           flyctl ssh console \
             --app pitwall-api \
             --command "/app/.venv/bin/python -m ml.train"
+
+  # Posts the outcome to Slack. Needs the SLACK_WEBHOOK_URL secret; skipped quietly without it.
+  notify:
+    needs: [ingest, train]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post the result to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          INGEST: ${{ needs.ingest.result }}
+          TRAIN: ${{ needs.train.result }}
+          NEW_SESSIONS: ${{ needs.ingest.outputs.new_sessions }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then echo "SLACK_WEBHOOK_URL is not set, skipping"; exit 0; fi
+          if [ "$INGEST" != "success" ]; then text=":x: Weekly ingest failed."
+          elif [ "$NEW_SESSIONS" != "true" ]; then text=":white_check_mark: Weekly ingest ran: no new sessions this week."
+          elif [ "$TRAIN" = "success" ]; then text=":white_check_mark: This week's data has been ingested and the model retrained."
+          else text=":warning: This week's data has been ingested, but retraining ended with: $TRAIN."
+          fi
+          payload=$(jq -n --arg t "$text <$RUN_URL|View run>" '{text: $t}')
+          curl -fsS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
