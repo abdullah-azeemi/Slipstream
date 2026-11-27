@@ -70,7 +70,9 @@ def _missing_drivers(
         ]
 
 
-def gather_facts(plan: Plan, toolbox: ToolBox, today: date | None = None) -> Facts:
+def gather_facts(
+    plan: Plan, toolbox: ToolBox, today: date | None = None, preload: bool = True
+) -> Facts:
     """Refuse only on clear evidence. When unsure, return no facts: the agent searches."""
     today = today or date.today()
     if plan.year is not None and plan.year > today.year:
@@ -81,7 +83,7 @@ def gather_facts(plan: Plan, toolbox: ToolBox, today: date | None = None) -> Fac
         return Facts(
             missing="This question cannot be answered from past F1 session data."
         )
-    if plan.category == "unknown" or plan.year is None or plan.gp is None:
+    if plan.year is None or plan.gp is None:
         return Facts()
 
     session = _find_session(toolbox, plan.year, plan.gp, plan.session_type or "R")
@@ -97,6 +99,9 @@ def gather_facts(plan: Plan, toolbox: ToolBox, today: date | None = None) -> Fac
         return Facts(
             session, missing=f"{', '.join(absent)} did not take part in {label}."
         )
+
+    if not preload:
+        return Facts(session)
 
     key = session["session_key"]
     wanted: list[tuple[str, dict]] = [("load_context", {"session_key": key})]

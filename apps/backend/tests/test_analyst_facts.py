@@ -71,6 +71,7 @@ def test_preloads_the_race(box):
     [
         ({"session_type": "Q"}, "No lap data"),
         ({"drivers": ("Senna",)}, "Senna did not take part"),
+        ({"category": "unknown", "drivers": ("Senna",)}, "Senna did not take part"),
         ({"year": 2027}, "has not happened"),
         ({"category": "out_of_scope", "year": None, "gp": None}, "cannot be answered"),
     ],
@@ -81,9 +82,7 @@ def test_refuses_on_clear_evidence(box, kw, expected):
     assert facts.calls == []
 
 
-@pytest.mark.parametrize(
-    "kw", [{"category": "unknown"}, {"gp": "Nowhere"}, {"year": None}]
-)
+@pytest.mark.parametrize("kw", [{"gp": "Nowhere"}, {"year": None}])
 def test_unsure_cases_leave_it_to_the_agent(box, kw):
     facts = gather_facts(plan(**kw), box)
     assert facts.missing is None

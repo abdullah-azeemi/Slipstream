@@ -4,11 +4,10 @@ import pytest
 
 from backend.analyst import workflow
 from backend.analyst.client import Reply, ToolCall
-from backend.analyst.facts import Facts, PreCall
-from backend.analyst.tools import ToolOutput
+from backend.analyst.facts import Facts
 
 PLAN = '{"category": "result", "year": 2026, "gp": "Dutch", "session_type": "R"}'
-SUMMARY = "Race of 72 laps.\nP1 NOR (Lando Norris) 72L median 76.316s"
+DIGEST = "Race of 72 laps.\nWinner: Lando Norris (NOR)."
 AGENT = Reply(
     content="",
     tool_calls=(
@@ -31,11 +30,9 @@ class ScriptedLLM:
 
 @pytest.fixture(autouse=True)
 def facts(monkeypatch):
-    found = Facts(
-        {"session_key": 1},
-        calls=[PreCall("race_summary", {"session_key": 1}, ToolOutput(SUMMARY))],
-    )
-    monkeypatch.setattr(workflow, "gather_facts", lambda plan, toolbox: found)
+    found = Facts({"session_key": 1, "session_type": "R"})
+    monkeypatch.setattr(workflow, "gather_facts", lambda plan, toolbox, **kw: found)
+    monkeypatch.setattr(workflow, "race_digest", lambda *args: DIGEST)
     return found
 
 
@@ -56,8 +53,6 @@ def test_result_question_takes_two_calls():
         "run_start",
         "llm_call",
         "plan",
-        "tool_start",
-        "tool_end",
         "llm_call",
         "final",
     ]
@@ -74,8 +69,14 @@ def test_weak_answer_falls_back_to_the_agent(weak):
     assert result.events[-1]["cost_usd"] == 0.0022
 
 
+def test_unlabelled_question_tries_the_facts_first():
+    plan = PLAN.replace('"result"', '"unknown"')
+    result = run(ScriptedLLM(plan, "Lando Norris won."))
+    assert result.answer == "Lando Norris won."
+
+
 def test_missing_data_refuses_without_the_agent(facts):
-    facts.missing, facts.calls = "No lap data is stored.", []
+    facts.missing = "No lap data is stored."
     result = run(ScriptedLLM(PLAN))
     assert result.refused
     assert result.answer == "No lap data is stored."

@@ -1,7 +1,7 @@
 """The outer steps of an analyst run, decided by code.
 
 prepare (one small call) -> facts (code) -> either a one-call answer for a
-simple result question, or the full analyst loop. The model decides things only
+result or unlabelled question, or the full analyst loop. The model decides things only
 inside these steps.
 """
 
@@ -11,17 +11,18 @@ import time
 
 from backend.analyst import checker
 from backend.analyst.client import AnalystLLMError, ChatClient, Reply
+from backend.analyst.digest import race_digest
 from backend.analyst.facts import Facts, gather_facts
 from backend.analyst.loop import AnalystResult, Emit, run_analyst
-from backend.analyst.prepare import prepare
+from backend.analyst.prepare import Plan, prepare
 from backend.analyst.tools import ToolBox, describe_call
 
 NEED_AGENT = "NEED_AGENT"
 
 ANSWER_PROMPT = f"""You are Pitwall, an F1 analyst. Answer the question using only the FACTS.
 Be short: the answer first, then one line of evidence. Copy numbers exactly.
-A median lap time is not a fastest lap. If the FACTS do not state what is asked,
-reply with exactly {NEED_AGENT} and nothing else."""
+Reply with exactly {NEED_AGENT} and nothing else only when the FACTS do not contain
+what is asked."""
 
 
 class _Recorder:
@@ -100,17 +101,16 @@ def _record_facts(record: _Recorder, facts: Facts) -> None:
         )
 
 
-def _answer_from_facts(question: str, facts: Facts, llm: ChatClient) -> str | None:
-    """One call over the race summary. None means the agent should take over."""
-    summary = next(
-        (c.output for c in facts.calls if c.tool == "race_summary" and c.output.ok),
-        None,
-    )
-    if summary is None:
+def _answer_from_facts(
+    question: str, plan: Plan, facts: Facts, toolbox: ToolBox, llm: ChatClient
+) -> str | None:
+    """One call over facts that code selected. None means the agent should take over."""
+    if facts.session is None or facts.session["session_type"] != "R":
         return None
+    digest = race_digest(question, plan, facts.session, toolbox)
     messages = [
         {"role": "system", "content": ANSWER_PROMPT},
-        {"role": "user", "content": f"FACTS\n{summary.text}\n\nQUESTION\n{question}"},
+        {"role": "user", "content": f"FACTS\n{digest}\n\nQUESTION\n{question}"},
     ]
     try:
         answer = llm.chat(messages, None).content.strip()
@@ -119,7 +119,7 @@ def _answer_from_facts(question: str, facts: Facts, llm: ChatClient) -> str | No
     if not answer or NEED_AGENT in answer:
         return None
     evidence = [
-        {"role": "tool", "content": summary.text},
+        {"role": "tool", "content": digest},
         {"role": "user", "content": question},
     ]
     return None if checker.find_unverified(answer, evidence) else answer
@@ -172,12 +172,14 @@ def run_workflow(
         drivers=list(plan.drivers),
         reason=plan.reason,
     )
-    facts = gather_facts(plan, toolbox)
+    # Nothing reads preloaded tool output yet, so loading it would only add time.
+    facts = gather_facts(plan, toolbox, preload=False)
     _record_facts(record, facts)
     if facts.missing:
         return finish(facts.missing, refused=True)
-    if plan.category == "result":
-        answer = _answer_from_facts(question, facts, traced)
+    # "unknown" is often an easy question the plan could not label, so try it too.
+    if plan.category in ("result", "unknown"):
+        answer = _answer_from_facts(question, plan, facts, toolbox, traced)
         if answer is not None:
             return finish(answer)
         record("thought", round=0, text="The facts are not enough: running the agent.")

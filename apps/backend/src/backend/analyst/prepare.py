@@ -44,7 +44,8 @@ Return JSON only, with these keys:
   tyres: tyre degradation or stint pace ["How bad was X's degradation?", "Was the long
     stint limited by tyre wear?"]
   telemetry: corners, braking, speed traces, g-forces ["Why was X slow in the corners?",
-    "Peak lateral g?"]
+    "Peak lateral g?"]. Use it whenever the question says telemetry, even to compare
+    drivers
   what_if: a hypothetical scenario ["What if a safety car came out on lap 15?"]
   compare: drivers compared on pace or style ["Compare X and Y on lap 20"]
   out_of_scope: not about F1, or asks to predict the future ["Who will win 2027?"]
@@ -100,7 +101,7 @@ def _clean(data: dict) -> dict:
 
 
 def prepare(question: str, llm: ChatClient) -> Plan:
-    """Never raises for a bad model reply. "unknown" means: run the full agent."""
+    """Never raises for a bad model reply: the category is then "unknown"."""
     messages = [
         {"role": "system", "content": PREPARE_PROMPT.format(today=date.today())},
         {"role": "user", "content": question},
