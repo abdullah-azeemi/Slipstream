@@ -80,7 +80,10 @@ def test_stream_emits_events_saves_the_run_and_ends(client):
     assert response.status_code == 200
     frames = _frames(response)
     kinds = [data["type"] for name, data in frames if name == "analyst"]
-    assert kinds == ["run_start", "thought", "tool_start", "tool_end", "chart", "final"]
+    assert kinds == [
+        "run_start", "llm_call", "thought", "tool_start", "tool_end",
+        "chart", "llm_call", "final",
+    ]  # fmt: skip
     assert frames[-1][0] == "done"
     saved = next(data for name, data in frames if name == "saved")
     assert saved["run_id"] > 0 and saved["conversation_id"] > 0
