@@ -47,6 +47,7 @@ def _clip_event(text: str) -> str:
         return text
     return f"{text[:MAX_EVENT_TEXT]}\n...[{extra} more characters]"
 
+
 @dataclass
 class AnalystResult:
     answer: str

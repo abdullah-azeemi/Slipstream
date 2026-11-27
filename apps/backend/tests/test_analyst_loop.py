@@ -306,7 +306,6 @@ def test_run_python_waits_for_the_loaders_of_its_turn():
     assert box.max_active == 1
 
 
-
 def _events(result, type_):
     return [e for e in result.events if e["type"] == type_]
 
