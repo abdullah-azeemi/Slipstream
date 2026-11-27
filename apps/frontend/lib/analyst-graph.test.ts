@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalystEvent } from '@/types/analyst'
-import { CARD_H, QUESTION_ID, callForStep, currentActivity, edgesOf, formatElapsed, roundSizes, runCounts, layoutRun, reduceEvents, thoughtsByRound } from './analyst-graph'
+import { CARD_H, QUESTION_ID, callForStep, commandOf, currentActivity, edgesOf, formatElapsed, roundSizes, runCounts, layoutRun, outputExcerpt, reduceEvents, thoughtsByRound } from './analyst-graph'
 
 const base = (seq: number) => ({ seq, t_ms: seq * 100 })
 const start = (id: string, round: number, title = id): AnalystEvent => ({
@@ -200,5 +200,15 @@ describe('tracing', () => {
     expect(run.steps[0]).toMatchObject({ args: {}, output: 'OK' })
     expect(run.calls).toEqual([])
     expect(callForStep(run, 'a')).toBeUndefined()
+  })
+
+  it('shows a script or a call as a command, and the useful end of each output', () => {
+    const [step] = reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, start('a', 0)]).steps
+    const script = { ...step, args: { code: 'print(1)' }, output: 'first\nsecond\nthird' }
+    expect(commandOf(script)).toBe('print(1)')
+    expect(outputExcerpt(script, 2)).toBe('second\nthird')
+    const loader = { ...script, tool: 'load_laps', args: { session_key: 1, driver: 'HAM' } }
+    expect(commandOf(loader)).toBe('load_laps(session_key=1, driver="HAM")')
+    expect(outputExcerpt(loader, 2)).toBe('first\nsecond')
   })
 })

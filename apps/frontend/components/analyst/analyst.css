@@ -78,3 +78,24 @@
 @keyframes anDots { 50% { opacity: 1; transform: translateY(-2px); } }
 @media (max-width: 640px) { .an-status-detail { display: none; } .an-pill-counts { display: none; } }
 @media (prefers-reduced-motion: reduce) { .an-pill-dots i, .an-status-dot { animation: none !important; } }
+
+.an-code-output { height: 100%; background: #1d2528; color: #d3dcde; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* step inspector: what one node saw and did */
+.an-inspector-head { display: flex; gap: 10px; align-items: baseline; padding: 14px 16px 10px; white-space: nowrap; overflow: hidden; font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.an-back { font-size: 12px; color: #3d7f8a; }
+.an-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid #e3e6e3; }
+.an-tabs button { padding: 7px 10px; font-size: 13px; color: #5a666b; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.an-tabs button[aria-selected='true'] { color: #1f2a2e; font-weight: 600; border-bottom-color: #3d7f8a; }
+.an-thinking { margin: 0 0 14px; padding-left: 10px; border-left: 2px solid #6c9aa3; font-size: 14px; line-height: 1.6; color: #2c4a52; white-space: pre-wrap; }
+.an-empty { margin: 0 0 14px; font-size: 13px; color: #5a666b; }
+.an-facts { margin: 0 0 14px; font-size: 12.5px; }
+.an-facts div { display: flex; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eef0ee; }
+.an-facts dt { width: 84px; flex: none; color: #8a9498; }
+.an-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: #1f2a2e; font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.an-block { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e3e6e3; border-radius: 6px; overflow-x: auto; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; color: #46545a; }
+.an-term { padding: 12px; border-radius: 8px; background: #1d2528; color: #d3dcde; font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.an-term pre { margin: 0 0 14px; overflow-x: auto; font-size: 11.5px; line-height: 1.6; }
+.an-term pre:last-child { margin-bottom: 0; }
+.an-term pre[data-state='error'] { color: #f0a49b; }
+.an-term-label { margin-bottom: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #8a9aa0; }

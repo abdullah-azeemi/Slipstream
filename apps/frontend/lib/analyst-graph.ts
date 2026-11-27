@@ -161,6 +161,19 @@ export function callForStep(run: AnalystRunState, stepId: string): AnalystModelC
   return run.calls.find((c) => c.toolCalls.some((t) => t.callId === stepId))
 }
 
+/** What the step ran, as a terminal would show it: the script itself, or the tool call. */
+export function commandOf(step: AnalystStep): string {
+  if (step.tool === 'run_python') return typeof step.args.code === 'string' ? step.args.code : step.preview
+  const args = Object.entries(step.args).map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+  return `${step.tool}(${args.join(', ')})`
+}
+
+/** A few lines for a card: a script's results are at the end, a loader's summary at the start. */
+export function outputExcerpt(step: AnalystStep, lines = 8): string {
+  const all = step.output.split('\n')
+  return (step.tool === 'run_python' ? all.slice(-lines) : all.slice(0, lines)).join('\n')
+}
+
 export const QUESTION_ID = 'question'
 
 export interface AnalystEdge {
