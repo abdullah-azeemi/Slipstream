@@ -10,6 +10,7 @@ import LandingNav from '@/components/landing/LandingNav'
 import LandingFooter from '@/components/landing/LandingFooter'
 import BlogChart from '@/components/blog/AlonsoCharts'
 import { formatDate, getAllPosts, getHeadings, getPost, slugify } from '@/lib/blog'
+import { SITE_NAME, SITE_URL } from '@/lib/site'
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -23,6 +24,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: `${post.title} | Slipstream`,
     description: post.summary,
+    alternates: { canonical: `/blog/${post.slug}` },
     openGraph: { title: post.title, description: post.summary, type: 'article', publishedTime: post.date },
   }
 }
@@ -31,12 +33,27 @@ export default async function PostPage({ params }: Params) {
   const post = getPost((await params).slug)
   if (!post) notFound()
   const headings = getHeadings(post.body)
+  // Structured data so search and answer engines can cite the post with its date and author.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.summary,
+    datePublished: post.date,
+    url: `${SITE_URL}/blog/${post.slug}`,
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+  }
 
   return (
     <div className={`lp ${geist.className}`}>
       <LandingNav />
       <div id="main" className="wrap">
         <article className="article">
+          <script
+            type="application/ld+json"
+            // Escape "<" so post text can never close the script tag.
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+          />
           <Link href="/blog" className="back body-5">
             <ArrowLeft size={16} weight="bold" aria-hidden="true" /> All posts
           </Link>

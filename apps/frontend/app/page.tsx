@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SITE_URL } from '@/lib/site'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -25,7 +26,8 @@ import PrimaryCta from '@/components/landing/PrimaryCta'
 import { getAllPosts } from '@/lib/blog'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(SITE_URL),
+  alternates: { canonical: '/' },
   title: 'Slipstream: F1 telemetry, tyre strategy and race predictions',
   description:
     'Open source Formula 1 analytics. Compare drivers corner by corner, study tyre strategy, read race predictions and ask the Pitwall agent. Built for fans and analysts.',
