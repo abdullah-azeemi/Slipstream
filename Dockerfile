@@ -30,13 +30,19 @@ ENV UV_LINK_MODE=copy \
 
 COPY --from=ghcr.io/astral-sh/uv:0.10.7 /uv /uvx /bin/
 
-# Copy workspace configuration & package sources
+# Third-party dependencies first, from the lock file and the workspace manifests only.
+# This layer is rebuilt only when dependencies change, not on every code change.
+# uv needs every workspace member's pyproject.toml to read the lock file.
 COPY pyproject.toml uv.lock ./
-COPY apps/ apps/
-COPY packages/ packages/
+COPY apps/backend/pyproject.toml apps/backend/
+COPY packages/config/pyproject.toml packages/config/
+COPY packages/ml/pyproject.toml packages/ml/
+COPY packages/ingestion/pyproject.toml packages/ingestion/
+COPY packages/stream/pyproject.toml packages/stream/
+COPY packages/workers/pyproject.toml packages/workers/
 
-# Sync only required packages for web API & AI Agent (omits kafka stream and celery workers)
-RUN uv sync --no-dev \
+# Only the packages the web API & AI Agent need (omits kafka stream and celery workers)
+RUN uv sync --no-dev --no-install-workspace \
     --package slipstream-backend \
     --package ml \
     --package slipstream-ingestion \
@@ -44,6 +50,16 @@ RUN uv sync --no-dev \
     --no-cache \
     && find /app/.venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true \
     && find /app/.venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
+# Then the workspace's own code, which changes often and installs in seconds.
+COPY apps/ apps/
+COPY packages/ packages/
+RUN uv sync --no-dev \
+    --package slipstream-backend \
+    --package ml \
+    --package slipstream-ingestion \
+    --package slipstream-config \
+    --no-cache
 
 
 # ── Development Stage (Optional Target) ─────────────────────────────
