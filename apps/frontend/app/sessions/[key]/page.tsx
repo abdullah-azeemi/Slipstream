@@ -367,14 +367,16 @@ export default async function UnifiedRacePage({ params }: { params: Promise<{ ke
   const round = getWeekendRoundForSeason(weekend, sessions)
   const circuitName = getCircuitName(weekend.gp_name)
 
-  const evoWrap = raceFastest?.length
-    ? await fetchJson<LapEvolutionResponse>(`/api/v1/sessions/${sessionKey}/analysis/lap-evolution`, 120)
-    : null
+  // Independent of each other, so fetch both at once instead of one after the other.
+  const [evoWrap, qualiFastest] = await Promise.all([
+    raceFastest?.length
+      ? fetchJson<LapEvolutionResponse>(`/api/v1/sessions/${sessionKey}/analysis/lap-evolution`, 120)
+      : null,
+    qualiRef.effective
+      ? fetchJson<FastestLapRow[]>(`/api/v1/sessions/${qualiRef.effective.session_key}/analysis/fastest-lap`, 120)
+      : null,
+  ])
   const evo = evoWrap?.drivers ?? null
-
-  const qualiFastest = qualiRef.effective
-    ? await fetchJson<FastestLapRow[]>(`/api/v1/sessions/${qualiRef.effective.session_key}/analysis/fastest-lap`, 120)
-    : null
 
   const podiumResults = raceResults ? [...raceResults].sort((a, b) => (a.finish_pos ?? 99) - (b.finish_pos ?? 99)).slice(0, 3) : []
   const rankOrder = raceResults ? [...raceResults].sort((a, b) => (a.finish_pos ?? 99) - (b.finish_pos ?? 99)) : []
