@@ -53,7 +53,13 @@ class Settings(CommonSettings):
     agent_max_conversations: int = 3
     agent_max_question_chars: int = 500
     cors_origins: str = "http://localhost:3000"
-    outbound_allowed_hosts: str = "openrouter.ai,api.openai.com,api.cloudflare.com"
+    outbound_allowed_hosts: str = (
+        "openrouter.ai,api.openai.com,api.cloudflare.com,hooks.slack.com"
+    )
+    # Slack incoming webhook for sign-up notices; empty turns notices off.
+    slack_webhook_url: str = ""
+    # Signing secret of the Clerk webhook endpoint (whsec_...); empty turns the route off.
+    clerk_webhook_secret: str = ""
     agent_free_daily_cost_usd: float = 0.30
     llm_breaker_failure_threshold: int = 3
     llm_breaker_open_timeout_seconds: int = 60

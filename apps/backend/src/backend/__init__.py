@@ -35,7 +35,8 @@ structlog.configure(
 log = structlog.get_logger()
 
 # Reachable without a login: health checks and the public landing page data.
-_PUBLIC_PREFIXES = ("/health", "/api/v1/stats", "/api/v1/schedule")
+# Webhooks carry no login token; they check their own signature instead.
+_PUBLIC_PREFIXES = ("/health", "/api/v1/stats", "/api/v1/schedule", "/api/v1/webhooks")
 # <img> tags cannot send a token, so driver photos are public (exact path only).
 _PUBLIC_PATTERN = re.compile(r"^/api/v1/drivers/[A-Za-z]{2,4}/image$")
 
@@ -85,6 +86,7 @@ def create_app() -> Flask:
     from backend.api.v1.agent import agent_bp
     from backend.api.v1.analyst import analyst_bp
     from backend.api.v1.driver_images import driver_images_bp
+    from backend.api.v1.webhooks import webhooks_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(sessions_bp, url_prefix="/api/v1")
@@ -100,6 +102,7 @@ def create_app() -> Flask:
     app.register_blueprint(agent_bp, url_prefix="/api/v1")
     app.register_blueprint(analyst_bp, url_prefix="/api/v1")
     app.register_blueprint(driver_images_bp, url_prefix="/api/v1")
+    app.register_blueprint(webhooks_bp, url_prefix="/api/v1")
 
     @app.before_request
     def require_login_for_api():
