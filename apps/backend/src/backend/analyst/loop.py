@@ -6,7 +6,7 @@ loop reports progress as plain event dicts (see EVENT TYPES) so the same
 stream drives the live canvas, the persisted run and replay.
 
 EVENT TYPES (all carry seq and t_ms):
-  run_start{question}  thought{round,text}
+  run_start{question, history_turns}  thought{round,text}
   llm_call{round,model,duration_ms,cost_usd,prompt_tokens,completion_tokens,content,
            tool_calls,forced}
   tool_start{round,call_id,tool,args,title,preview}
@@ -103,6 +103,7 @@ def run_analyst(
     max_runtime_s: float = 150.0,
     reviewer: Reviewer | None = None,
     check_numbers: bool = False,
+    history: list[dict] | None = None,
 ) -> AnalystResult:
     started = time.perf_counter()
     events: list[dict] = []
@@ -127,6 +128,7 @@ def run_analyst(
 
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *(history or []),
         {"role": "user", "content": question},
     ]
     cost = 0.0
@@ -138,7 +140,7 @@ def run_analyst(
     refused = False
     bad_final = False  # the model produced an unusable final_answer
     rounds = 0
-    record("run_start", question=question)
+    record("run_start", question=question, history_turns=len(history or []) // 2)
 
     def ask(tools: list[dict] | None) -> Reply:
         """One model call, traced. No tools means the forced closing call."""

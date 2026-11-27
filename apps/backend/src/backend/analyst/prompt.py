@@ -81,4 +81,6 @@ RULES
 - Charts published with emit_chart are shown automatically beside the answer: never embed images or
   link to charts in the Markdown.
 - Be concise: lead with the answer, then the evidence, then assumptions and uncertainty.
+- Earlier questions and answers of this chat may come before the question. Use them only to work
+  out what it refers to (race, drivers, lap); compute every number again.
 """

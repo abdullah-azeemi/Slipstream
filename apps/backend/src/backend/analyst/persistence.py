@@ -8,6 +8,55 @@ from sqlalchemy import text
 
 from backend.analyst.loop import AnalystResult
 
+# Every earlier turn is sent again on every model call, so history is kept small.
+MAX_HISTORY_TURNS = 3
+MAX_HISTORY_CHARS = 1500
+
+
+def history_messages(
+    rows: list[dict],
+    max_turns: int = MAX_HISTORY_TURNS,
+    max_chars: int = MAX_HISTORY_CHARS,
+) -> list[dict]:
+    """Chat rows (oldest first) as model messages: the last answered turns only.
+
+    A question with no answer is dropped, whether its run failed or it is the one
+    being asked now.
+    """
+
+    turns: list[tuple[str, str]] = []
+    question: str | None = None
+    for row in rows:
+        if row["role"] == "user":
+            question = row["content"]
+        elif row["role"] == "assistant" and question is not None:
+            turns.append((question, row["content"]))
+            question = None
+
+    messages: list[dict] = []
+    for asked, answered in turns[-max_turns:]:
+        if len(answered) > max_chars:
+            answered = answered[:max_chars] + " ...[shortened]"
+        messages.append({"role": "user", "content": asked})
+        messages.append({"role": "assistant", "content": answered})
+    return messages
+
+
+def load_history(conn, conversation_id: int) -> list[dict]:
+    """Earlier turns of a conversation. The caller must already have checked its owner."""
+
+    rows = (
+        conn.execute(
+            text(
+                "SELECT role, content FROM agent_messages WHERE conversation_id = :cid ORDER BY id"
+            ),
+            {"cid": conversation_id},
+        )
+        .mappings()
+        .all()
+    )
+    return history_messages([dict(r) for r in rows])
+
 
 def save_run(
     conn,

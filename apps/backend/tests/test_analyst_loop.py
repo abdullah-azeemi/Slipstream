@@ -3,6 +3,7 @@
 import json
 from backend.analyst.client import AnalystLLMError, Reply, ToolCall
 from backend.analyst.loop import MAX_EVENT_TEXT, run_analyst
+from backend.analyst.persistence import history_messages
 from backend.analyst.tools import ToolOutput
 
 
@@ -394,3 +395,36 @@ def test_a_refusal_sent_back_for_revision_does_not_stick():
         "q", llm=llm, toolbox=StubToolBox(), reviewer=lambda a, m: next(verdicts)
     )
     assert result.refused is False
+
+
+def test_earlier_turns_reach_the_model_between_the_prompt_and_the_question():
+    history = [
+        {"role": "user", "content": "Lap 38 for Hamilton?"},
+        {"role": "assistant", "content": "97.221 s."},
+    ]
+    llm = ScriptedLLM([Reply("Done.")])
+    result = run_analyst(
+        "And Russell?", llm=llm, toolbox=StubToolBox(), history=history
+    )
+    sent = llm.calls[0][0]
+    assert sent[0]["role"] == "system"
+    assert sent[1:3] == history
+    assert sent[3] == {"role": "user", "content": "And Russell?"}
+    assert _events(result, "run_start")[0]["history_turns"] == 1
+
+
+def test_history_keeps_the_last_complete_turns_and_shortens_long_answers():
+    rows = [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "q2, whose run failed"},
+        {"role": "user", "content": "q3"},
+        {"role": "assistant", "content": "x" * 50},
+        {"role": "user", "content": "the question being asked now"},
+    ]
+    history = history_messages(rows, max_turns=1, max_chars=10)
+    assert history == [
+        {"role": "user", "content": "q3"},
+        {"role": "assistant", "content": "x" * 10 + " ...[shortened]"},
+    ]
+    assert len(history_messages(rows)) == 4
