@@ -7,7 +7,27 @@ interface Base {
 export type AnalystEvent =
   | (Base & { type: 'run_start'; question: string })
   | (Base & { type: 'thought'; round: number; text: string })
-  | (Base & { type: 'tool_start'; round: number; call_id: string; tool: string; title: string; preview: string })
+  | (Base & {
+      type: 'llm_call'
+      round: number
+      model: string
+      duration_ms: number
+      cost_usd: number
+      prompt_tokens: number
+      completion_tokens: number
+      content: string
+      tool_calls: { call_id: string; tool: string }[]
+      forced: boolean
+    })
+  | (Base & {
+      type: 'tool_start'
+      round: number
+      call_id: string
+      tool: string
+      title: string
+      preview: string
+      args?: Record<string, unknown> // missing in runs saved before tracing
+    })
   | (Base & {
       type: 'tool_end'
       round: number
@@ -15,6 +35,7 @@ export type AnalystEvent =
       ok: boolean
       duration_ms: number
       summary: string
+      output?: string // missing in runs saved before tracing
       title: string
       preview: string
     })
