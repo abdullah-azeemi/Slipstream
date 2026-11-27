@@ -40,7 +40,7 @@ export type AnalystEvent =
       preview: string
     })
   | (Base & { type: 'chart'; round: number; call_id: string; title: string; option: Record<string, unknown> })
-  | (Base & { type: 'final'; markdown: string; cost_usd: number; steps: number })
+  | (Base & { type: 'final'; markdown: string; cost_usd: number; steps: number; refused?: boolean })
   | (Base & { type: 'error'; message: string })
 
 export interface AnalystRunSummary {

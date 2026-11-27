@@ -116,38 +116,120 @@ _MINUS = "−"  # LLMs sometimes write a unicode minus
 _LAP_TIME = re.compile(r"(?<![\w.:])(\d{1,2}):(\d{2}(?:\.\d+)?)(?![\d:])")
 
 
-def extract_numbers(text: str, unit: str) -> list[float]:
-    """Numbers written directly before `unit` (or an alias), normalised to `unit`.
-
-    '0.08 s/lap' -> 0.08 ; '126 ms per lap' with unit 's/lap' -> 0.126.
-    """
+def locate_numbers(text: str, unit: str) -> list[tuple[int, float]]:
+    """(position, value) for numbers written before `unit` or an alias, in `unit`."""
     text = text.replace(_MINUS, "-")
-    values: list[float] = []
+    found: list[tuple[int, float]] = []
     if unit == "s":  # a lap time written as 1:37.221 is 97.221 s
-        values.extend(int(m) * 60 + float(sec) for m, sec in _LAP_TIME.findall(text))
+        found += [
+            (m.start(), int(m[1]) * 60 + float(m[2])) for m in _LAP_TIME.finditer(text)
+        ]
     for spelling, factor in UNIT_ALIASES.get(unit, ((unit, 1.0),)):
         # (?![\w/]) stops 's' matching inside 's/lap' or 'seconds'
         pattern = r"(-?\d+(?:[.,]\d+)?)\s*" + re.escape(spelling) + r"(?![\w/])"
-        values += [
-            float(m.replace(",", ".")) * factor
-            for m in re.findall(pattern, text, re.IGNORECASE)
+        found += [
+            (m.start(), float(m[1].replace(",", ".")) * factor)
+            for m in re.finditer(pattern, text, re.IGNORECASE)
         ]
-    return values
+    return sorted(found)
+
+
+def extract_numbers(text: str, unit: str) -> list[float]:
+    """'0.08 s/lap' -> [0.08] ; '126 ms per lap' with unit 's/lap' -> [0.126]."""
+    return [value for _, value in locate_numbers(text, unit)]
+
+
+def segments(answer: str) -> list[str]:
+    """The answer as self-contained lines. A table cell is joined to its row label
+    and column header, so a value in a table still sits next to the driver's name."""
+    out: list[str] = []
+    header: list[str] | None = None
+    for line in answer.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            header = None
+            out.append(line)
+            continue
+        cells = [c.strip(" *") for c in stripped.strip("|").split("|")]
+        if all(set(c) <= set("-: ") for c in cells):
+            continue  # the |---| divider
+        if header is None:
+            header = cells
+            out.append(" ".join(cells))
+            continue
+        for column in range(1, len(cells)):
+            title = header[column] if column < len(header) else ""
+            out.append(f"{cells[0]} {title}: {cells[column]}")
+    return out
+
+
+def owner_of(segment: str, position: int, subjects: dict) -> str | None:
+    """Which subject a value belongs to: the last one named before it, else the first after."""
+    mentions = sorted(
+        (m.start(), key)
+        for key, names in subjects.items()
+        for name in names
+        for m in re.finditer(rf"\b{re.escape(name)}\b", segment, re.IGNORECASE)
+    )
+    before = [key for at, key in mentions if at <= position]
+    if before:
+        return before[-1]
+    return mentions[0][1] if mentions else None
+
+
+def _number_found(check: dict, answer: str, subjects: dict) -> tuple[bool, list[float]]:
+    # a degradation slope's sign is the finding; a gap or time may be written either way
+    signed = check["unit"] == "s/lap"
+    seen: list[float] = []
+    for segment in segments(answer):
+        for position, value in locate_numbers(segment, check["unit"]):
+            subject = check.get("subject")
+            if subject and owner_of(segment, position, subjects) != subject:
+                continue
+            seen.append(value)
+    close = (
+        abs((v if signed else abs(v)) - check["value"]) <= check["tol"] for v in seen
+    )
+    return any(close), seen
+
+
+def _says(text: str, option: str) -> bool:
+    """`option` starts a word. A trailing number must end there, so p1 is not p10;
+    other endings are free, so 'fewer stop' also matches 'fewer stops'."""
+    end = r"(?!\d)" if option[-1].isdigit() else ""
+    return re.search(rf"(?<!\w){re.escape(option)}{end}", text) is not None
+
+
+def _phrase_found(
+    options: list[str], subject: str, answer: str, subjects: dict
+) -> bool:
+    return any(
+        owner_of(segment, m.start(), subjects) == subject
+        for segment in segments(answer)
+        for option in options
+        for m in re.finditer(rf"\b{re.escape(option)}\b", segment, re.IGNORECASE)
+    )
 
 
 def check_facts(facts: dict, answer: str) -> list[str]:
     """Failures against ground truth pulled from the database by hand."""
     lowered = answer.lower()
+    subjects = facts.get("subjects", {})
     failures = []
     for check in facts.get("numbers", []):
-        values = extract_numbers(answer, check["unit"])
-        if not any(abs(abs(v) - check["value"]) <= check["tol"] for v in values):
+        found, values = _number_found(check, answer, subjects)
+        if not found:
             failures.append(
                 f"fact {check['name']}: expected {check['value']} {check['unit']}, found {values}"
             )
-    for options in facts.get("any_of", []):
-        if not any(o in lowered for o in options):
-            failures.append(f"fact missing, expected one of {options}")
+    for entry in facts.get("any_of", []):
+        if isinstance(entry, dict):  # the phrase must be said about this subject
+            if not _phrase_found(entry["options"], entry["subject"], answer, subjects):
+                failures.append(
+                    f"fact missing for {entry['subject']}: one of {entry['options']}"
+                )
+        elif not any(_says(lowered, option) for option in entry):
+            failures.append(f"fact missing, expected one of {entry}")
     for first, second in facts.get("in_order", []):
         a, b = lowered.find(first), lowered.find(second)
         if a == -1 or b == -1 or a > b:
@@ -177,6 +259,10 @@ def score_run(question: dict, run: dict) -> QuestionScore:
         has_visual=any(run.get(f) for f in _VISUAL_FIELDS),
     )
 
+    if run.get("crash"):  # no answer and no decision: neither a pass nor a refusal
+        score.failures.append(f"crashed: {run['crash']}")
+        return score
+
     if question["expect_refusal"]:
         score.checks["refused"] = refused
         if not refused:
@@ -194,14 +280,17 @@ def score_run(question: dict, run: dict) -> QuestionScore:
     if missing_terms:
         score.failures.append(f"missing terms: {missing_terms}")
 
+    facts = question.get("facts")
+    # With ground truth, correctness is judged by the facts. Wording such as "could not
+    # establish" is only a warning sign when there is nothing else to judge by.
+    gap_phrases = () if facts else DEFAULT_FORBIDDEN
     forbidden = [
-        p for p in (*DEFAULT_FORBIDDEN, *question.get("forbidden", [])) if p in lowered
+        p for p in (*gap_phrases, *question.get("forbidden", [])) if p in lowered
     ]
     score.checks["no_evidence_gaps"] = not forbidden
     if forbidden:
         score.failures.append(f"admits missing evidence: {forbidden}")
 
-    facts = question.get("facts")
     if facts:
         fact_failures = check_facts(facts, answer)
         score.checks["facts"] = not fact_failures
@@ -220,8 +309,13 @@ def score_run(question: dict, run: dict) -> QuestionScore:
                 f"{check['name']}: {values} outside [{check['min']}, {check['max']}]"
             )
 
-    if run.get("unverified"):
+    # Groundedness (can each number be traced?) is its own measure, apart from correctness.
+    score.checks["grounded"] = not run.get("unverified")
+    if run.get("unverified") and not facts:
         score.failures.append(f"untraceable numbers: {run['unverified']}")
+
+    if run.get("incomplete"):
+        score.failures.append("incomplete: the run hit a limit before concluding")
 
     # Models legitimately hit and fix errors; what matters is that the last call worked.
     # The count is kept in checks so wasted steps stay visible.

@@ -365,3 +365,32 @@ def test_huge_text_is_capped_in_events_but_not_for_the_model():
     output = _events(result, "tool_end")[0]["output"]
     assert output.startswith("y" * MAX_EVENT_TEXT) and "500 more" in output
     assert llm.calls[1][0][-1]["content"] == huge
+
+
+def test_the_model_can_refuse_explicitly():
+    args = '{"markdown": "No qualifying laps are stored.", "refused": true}'
+    llm = ScriptedLLM([Reply("", (_call("c1", "final_answer", args),))])
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox())
+    assert result.refused is True
+    assert _events(result, "final")[0]["refused"] is True
+
+
+def test_an_ordinary_answer_is_not_a_refusal():
+    llm = ScriptedLLM([Reply("Just an answer.")])
+    assert run_analyst("q", llm=llm, toolbox=StubToolBox()).refused is False
+
+
+def test_a_refusal_sent_back_for_revision_does_not_stick():
+    llm = ScriptedLLM(
+        [
+            Reply(
+                "", (_call("c1", "final_answer", '{"markdown":"no","refused":true}'),)
+            ),
+            Reply("Here is the answer after all."),
+        ]
+    )
+    verdicts = iter(["the data is there, look again", None])
+    result = run_analyst(
+        "q", llm=llm, toolbox=StubToolBox(), reviewer=lambda a, m: next(verdicts)
+    )
+    assert result.refused is False

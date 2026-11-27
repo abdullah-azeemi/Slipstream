@@ -277,6 +277,24 @@ CREATE INDEX IF NOT EXISTS idx_team_radio_session_driver
 CREATE INDEX IF NOT EXISTS idx_weather_events_session_lap
     ON weather_events (session_key, lap_number);
 
+CREATE TABLE IF NOT EXISTS session_results (
+    session_key         INTEGER NOT NULL REFERENCES sessions(session_key),
+    driver_number       INTEGER NOT NULL,
+    abbreviation        TEXT,
+    team_name           TEXT,
+    grid_position       INTEGER,
+    position            INTEGER,
+    classified_position TEXT,
+    status              TEXT,
+    points              DOUBLE PRECISION,
+    laps_completed      INTEGER,
+    race_time_ms        DOUBLE PRECISION,
+    q1_ms               DOUBLE PRECISION,
+    q2_ms               DOUBLE PRECISION,
+    q3_ms               DOUBLE PRECISION,
+    PRIMARY KEY (session_key, driver_number)
+);
+
 CREATE TABLE IF NOT EXISTS race_control_events (
     id              SERIAL PRIMARY KEY,
     session_key     INTEGER NOT NULL REFERENCES sessions(session_key),
@@ -402,6 +420,7 @@ def _create_tables(db_engine):
         conn.execute(text("DROP TABLE IF EXISTS telemetry CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS weather_events CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS race_control_events CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS session_results CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS team_radio CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS lap_times CASCADE;"))
         conn.execute(text("DROP TABLE IF EXISTS drivers CASCADE;"))

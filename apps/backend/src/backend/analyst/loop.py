@@ -11,7 +11,7 @@ EVENT TYPES (all carry seq and t_ms):
            tool_calls,forced}
   tool_start{round,call_id,tool,args,title,preview}
   tool_end{round,call_id,ok,duration_ms,summary,output,title,preview}
-  chart{round,call_id,title,option}  final{markdown,cost_usd,steps}  error{message}
+  chart{round,call_id,title,option}  final{markdown,cost_usd,steps,refused}  error{message}
 """
 
 from __future__ import annotations
@@ -58,6 +58,7 @@ class AnalystResult:
     error: str | None = None
     unverified: list[str] = field(default_factory=list)
     incomplete: bool = False
+    refused: bool = False  # the model said the stored data cannot answer the question
 
 
 def _assistant_message(reply: Reply) -> dict:
@@ -134,6 +135,7 @@ def run_analyst(
     numbers_checked = False
     last_call_cost = 0.0
     incomplete = False
+    refused = False
     bad_final = False  # the model produced an unusable final_answer
     rounds = 0
     record("run_start", question=question)
@@ -172,6 +174,7 @@ def run_analyst(
 
             if not reply.tool_calls:
                 answer = reply.content.strip() or None
+                refused = False
                 if answer is None:
                     break
             else:
@@ -186,6 +189,7 @@ def run_analyst(
                             or reply.content.strip()
                             or None
                         )
+                        refused = args.get("refused") is True
                         messages.append(
                             {
                                 "role": "tool",
@@ -292,6 +296,7 @@ def run_analyst(
                 closing = final.content.strip()
             incomplete = not closing
             answer = closing or _partial_answer(messages)
+            refused = False
     except AnalystLLMError as exc:
         record("error", message=str(exc))
         return AnalystResult(
@@ -306,6 +311,7 @@ def run_analyst(
         "final",
         unverified=unverified,
         incomplete=incomplete,
+        refused=refused,
         markdown=answer,
         cost_usd=round(cost, 6),
         steps=rounds,
@@ -318,6 +324,7 @@ def run_analyst(
         charts,
         unverified=unverified,
         incomplete=incomplete,
+        refused=refused,
     )
 
 

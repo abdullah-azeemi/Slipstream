@@ -134,7 +134,13 @@ TOOL_SCHEMAS: list[dict] = [
     _schema(
         "final_answer",
         "Finish with the answer in Markdown. State assumptions and mark estimates as estimates.",
-        {"markdown": {"type": "string"}},
+        {
+            "markdown": {"type": "string"},
+            "refused": {
+                "type": "boolean",
+                "description": "true only when the stored data cannot answer the question at all",
+            },
+        },
         ["markdown"],
     ),
 ]

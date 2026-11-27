@@ -6,6 +6,8 @@ provider (costs money). Start small:
     uv run --project apps/backend python apps/backend/evals/run_eval.py --limit 3
     uv run --project apps/backend python apps/backend/evals/run_eval.py --dry-run
     uv run --project apps/backend python apps/backend/evals/run_eval.py --rescore <results.json>
+
+Saved results can be browsed in MLflow with evals/to_mlflow.py.
 """
 
 from __future__ import annotations
@@ -32,6 +34,12 @@ def _select(questions: list[dict], args: argparse.Namespace) -> list[dict]:
     if args.tier:
         questions = [q for q in questions if q["tier"] == args.tier]
     return questions[: args.limit] if args.limit else questions
+
+
+def _model_of(engine: str) -> str:
+    from backend.config import settings
+
+    return settings.analyst_model if engine == "analyst" else "orchestrator"
 
 
 def _run_one(
@@ -85,7 +93,8 @@ def _run_analyst(question: str, max_cost: float | None) -> dict:
     ]
     return {
         "answer": result.answer,
-        "refusals": [result.error] if result.error else [],
+        "refusals": ["refused by the model"] if result.refused else [],
+        "crash": result.error,
         "trace": trace,
         "cost_usd": result.cost_usd,
         "charts": result.charts,
@@ -171,7 +180,11 @@ def main() -> int:
     out = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.json"
     out.write_text(
         json.dumps(
-            {"summary": scoring.summarize(scores), "runs": runs},
+            {
+                "meta": {"engine": args.engine, "model": _model_of(args.engine)},
+                "summary": scoring.summarize(scores),
+                "runs": runs,
+            },
             indent=2,
             default=str,
         )

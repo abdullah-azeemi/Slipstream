@@ -235,19 +235,31 @@
             "name": "ham_medium",
             "unit": "s/lap",
             "value": 0.014,
-            "tol": 0.003
+            "tol": 0.003,
+            "subject": "ham"
           },
           {
             "name": "lec_medium",
             "unit": "s/lap",
             "value": 0.064,
-            "tol": 0.003
+            "tol": 0.003,
+            "subject": "lec"
           }
         ],
         "forbidden": [
           "fuel burn effects",
           "due to fuel burn"
-        ]
+        ],
+        "subjects": {
+          "ham": [
+            "hamilton",
+            "ham"
+          ],
+          "lec": [
+            "leclerc",
+            "lec"
+          ]
+        }
       }
     },
     {
@@ -315,10 +327,13 @@
       "facts": {
         "any_of": [
           [
-            "leading",
+            "was leading",
+            "leading the race",
             "in the lead",
             "p1",
-            "led the",
+            "led every",
+            "led the race",
+            "led from",
             "no car ahead",
             "first place"
           ]
@@ -596,33 +611,57 @@
             "name": "ham_lap",
             "unit": "s",
             "value": 97.221,
-            "tol": 0.01
+            "tol": 0.01,
+            "subject": "ham"
           },
           {
             "name": "rus_lap",
             "unit": "s",
             "value": 99.4,
-            "tol": 0.01
+            "tol": 0.01,
+            "subject": "rus"
           }
         ],
         "any_of": [
-          [
-            "p3",
-            "3rd",
-            "third"
+          {
+            "subject": "ham",
+            "options": [
+              "p3",
+              "3rd",
+              "third"
+            ]
+          },
+          {
+            "subject": "rus",
+            "options": [
+              "p7",
+              "7th",
+              "seventh"
+            ]
+          },
+          {
+            "subject": "ham",
+            "options": [
+              "soft"
+            ]
+          },
+          {
+            "subject": "rus",
+            "options": [
+              "medium"
+            ]
+          }
+        ],
+        "subjects": {
+          "ham": [
+            "hamilton",
+            "ham"
           ],
-          [
-            "p7",
-            "7th",
-            "seventh"
-          ],
-          [
-            "soft"
-          ],
-          [
-            "medium"
+          "rus": [
+            "russell",
+            "rus"
           ]
-        ]
+        }
       }
     },
     {
