@@ -99,6 +99,9 @@ def analyst_stream():
                 make_sandbox(),
                 sandbox_timeout_s=settings.analyst_sandbox_timeout_seconds,
             )
+            with extensions.engine.connect() as conn:
+                history = persistence.load_history(conn, conv_id)
+
             result = run_analyst(
                 question,
                 llm=make_llm(),
@@ -107,6 +110,7 @@ def analyst_stream():
                 max_steps=settings.analyst_max_steps,
                 max_cost_usd=settings.analyst_max_cost_usd,
                 check_numbers=True,
+                history=history,
             )
             with extensions.engine.begin() as conn:
                 user_id = agent_persistence.ensure_user(conn, clerk_user_id)

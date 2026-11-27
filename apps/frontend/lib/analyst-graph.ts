@@ -17,7 +17,23 @@ export interface AnalystStep {
   state: StepState
   durationMs: number | null
   summary: string
+  args: Record<string, unknown>
+  output: string
   charts: AnalystChart[]
+}
+
+/** One request to the model: what it cost, what it said and which tools it asked for. */
+export interface AnalystModelCall {
+  seq: number
+  round: number
+  model: string
+  durationMs: number
+  costUsd: number
+  promptTokens: number
+  completionTokens: number
+  content: string
+  toolCalls: { callId: string; tool: string }[]
+  forced: boolean
 }
 
 export interface AnalystThought {
@@ -29,6 +45,7 @@ export interface AnalystThought {
 export interface AnalystRunState {
   question: string | null
   steps: AnalystStep[]
+  calls: AnalystModelCall[]
   thoughts: AnalystThought[]
   charts: AnalystChart[]
   answer: string | null
@@ -43,6 +60,7 @@ export interface AnalystRunState {
 export const emptyRun: AnalystRunState = {
   question: null,
   steps: [],
+  calls: [],
   thoughts: [],
   charts: [],
   answer: null,
@@ -60,6 +78,21 @@ function reduceOne(run: AnalystRunState, ev: AnalystEvent): AnalystRunState {
       return { ...emptyRun, question: ev.question, status: 'running' }
     case 'thought':
       return { ...run, thoughts: [...run.thoughts, { round: ev.round, text: ev.text, seq: ev.seq }] }
+    case 'llm_call': {
+      const call: AnalystModelCall = {
+        seq: ev.seq,
+        round: ev.round,
+        model: ev.model,
+        durationMs: ev.duration_ms,
+        costUsd: ev.cost_usd,
+        promptTokens: ev.prompt_tokens,
+        completionTokens: ev.completion_tokens,
+        content: ev.content,
+        toolCalls: ev.tool_calls.map((t) => ({ callId: t.call_id, tool: t.tool })),
+        forced: ev.forced,
+      }
+      return { ...run, calls: [...run.calls, call] }
+    }
     case 'tool_start':
       return {
         ...run,
@@ -74,6 +107,8 @@ function reduceOne(run: AnalystRunState, ev: AnalystEvent): AnalystRunState {
             state: 'running',
             durationMs: null,
             summary: '',
+            args: ev.args ?? {},
+            output: '',
             charts: [],
           },
         ],
@@ -88,6 +123,7 @@ function reduceOne(run: AnalystRunState, ev: AnalystEvent): AnalystRunState {
                 state: ev.ok ? 'done' : 'error',
                 durationMs: ev.duration_ms,
                 summary: ev.summary,
+                output: ev.output ?? ev.summary,
                 title: ev.title || s.title,
                 preview: ev.preview || s.preview,
               }
@@ -118,6 +154,24 @@ export function applyEvent(run: AnalystRunState, ev: AnalystEvent): AnalystRunSt
 
 export function reduceEvents(events: AnalystEvent[]): AnalystRunState {
   return events.reduce(applyEvent, emptyRun)
+}
+
+/** The model call that asked for this step, if the run was traced. */
+export function callForStep(run: AnalystRunState, stepId: string): AnalystModelCall | undefined {
+  return run.calls.find((c) => c.toolCalls.some((t) => t.callId === stepId))
+}
+
+/** What the step ran, as a terminal would show it: the script itself, or the tool call. */
+export function commandOf(step: AnalystStep): string {
+  if (step.tool === 'run_python') return typeof step.args.code === 'string' ? step.args.code : step.preview
+  const args = Object.entries(step.args).map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+  return `${step.tool}(${args.join(', ')})`
+}
+
+/** A few lines for a card: a script's results are at the end, a loader's summary at the start. */
+export function outputExcerpt(step: AnalystStep, lines = 8): string {
+  const all = step.output.split('\n')
+  return (step.tool === 'run_python' ? all.slice(-lines) : all.slice(0, lines)).join('\n')
 }
 
 export const QUESTION_ID = 'question'

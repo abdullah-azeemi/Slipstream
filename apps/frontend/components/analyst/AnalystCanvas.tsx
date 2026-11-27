@@ -19,12 +19,12 @@ import {
 import '@xyflow/react/dist/style.css'
 import './analyst.css'
 import {
-  CARD_H,
   QUESTION_ID,
   currentActivity,
   edgesOf,
   formatElapsed,
   layoutRun,
+  outputExcerpt,
   roundSizes,
   runCounts,
   thoughtsByRound,
@@ -32,6 +32,8 @@ import {
   type AnalystStep,
 } from '@/lib/analyst-graph'
 import EChart from './EChart'
+
+const CHIP_RISE = 40
 
 type StepData = { step: AnalystStep; selected: boolean; siblings: number }
 
@@ -75,6 +77,8 @@ const StepCard = memo(function StepCard({ data }: NodeProps<FlowNode<StepData>>)
       <div className="an-thumb">
         {step.charts[0] ? (
           <EChart option={step.charts[0].option} height={150} mini />
+        ) : step.state !== 'running' && step.output ? (
+          <pre className="an-code an-code-output">{outputExcerpt(step)}</pre>
         ) : step.tool === 'run_python' && step.preview ? (
           <pre className="an-code">{step.preview}</pre>
         ) : (
@@ -249,7 +253,7 @@ export default function AnalystCanvas({
         data: { step, selected: step.id === selectedId, siblings: sizes.get(step.round) ?? 1 } satisfies StepData,
       })
     }
-    // thoughts float over the first card of their turn, like annotations on a screenshot
+    // thoughts sit just above the first card of their turn, clear of what the card shows
     thoughtsByRound(run).forEach((thoughts, round) => {
       const anchor = run.steps.find((s) => s.round === round)
       if (!anchor) return
@@ -257,7 +261,7 @@ export default function AnalystCanvas({
         list.push({
           id: `thought-${t.seq}`,
           type: 'chip',
-          position: { x: pos[anchor.id].x + 14 + i * 18, y: pos[anchor.id].y + CARD_H * 0.16 + i * 34 },
+          position: { x: pos[anchor.id].x + i * 18, y: pos[anchor.id].y - CHIP_RISE * (i + 1) },
           draggable: false,
           selectable: false,
           zIndex: 20,

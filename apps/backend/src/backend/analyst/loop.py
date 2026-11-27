@@ -6,9 +6,12 @@ loop reports progress as plain event dicts (see EVENT TYPES) so the same
 stream drives the live canvas, the persisted run and replay.
 
 EVENT TYPES (all carry seq and t_ms):
-  run_start{question}  thought{round,text}  tool_start{round,call_id,tool,title,preview}
-  tool_end{round,call_id,ok,duration_ms,summary,title,preview}
-  chart{round,call_id,title,option}  final{markdown,cost_usd,steps}  error{message}
+  run_start{question, history_turns}  thought{round,text}
+  llm_call{round,model,duration_ms,cost_usd,prompt_tokens,completion_tokens,content,
+           tool_calls,forced}
+  tool_start{round,call_id,tool,args,title,preview}
+  tool_end{round,call_id,ok,duration_ms,summary,output,title,preview}
+  chart{round,call_id,title,option}  final{markdown,cost_usd,steps,refused}  error{message}
 """
 
 from __future__ import annotations
@@ -34,6 +37,16 @@ _FORCE_FINAL = (
     "computed. Say clearly what you could not establish. Do not call tools."
 )
 
+# Per text field in an event. Events are streamed and stored, so they need a ceiling.
+MAX_EVENT_TEXT = 8000
+
+
+def _clip_event(text: str) -> str:
+    extra = len(text) - MAX_EVENT_TEXT
+    if extra <= 0:
+        return text
+    return f"{text[:MAX_EVENT_TEXT]}\n...[{extra} more characters]"
+
 
 @dataclass
 class AnalystResult:
@@ -45,6 +58,7 @@ class AnalystResult:
     error: str | None = None
     unverified: list[str] = field(default_factory=list)
     incomplete: bool = False
+    refused: bool = False  # the model said the stored data cannot answer the question
 
 
 def _assistant_message(reply: Reply) -> dict:
@@ -89,6 +103,7 @@ def run_analyst(
     max_runtime_s: float = 150.0,
     reviewer: Reviewer | None = None,
     check_numbers: bool = False,
+    history: list[dict] | None = None,
 ) -> AnalystResult:
     started = time.perf_counter()
     events: list[dict] = []
@@ -113,6 +128,7 @@ def run_analyst(
 
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *(history or []),
         {"role": "user", "content": question},
     ]
     cost = 0.0
@@ -121,9 +137,28 @@ def run_analyst(
     numbers_checked = False
     last_call_cost = 0.0
     incomplete = False
+    refused = False
     bad_final = False  # the model produced an unusable final_answer
     rounds = 0
-    record("run_start", question=question)
+    record("run_start", question=question, history_turns=len(history or []) // 2)
+
+    def ask(tools: list[dict] | None) -> Reply:
+        """One model call, traced. No tools means the forced closing call."""
+        t0 = time.perf_counter()
+        reply = llm.chat(messages, tools)
+        record(
+            "llm_call",
+            round=rounds,
+            model=getattr(llm, "model", "unknown"),
+            duration_ms=round((time.perf_counter() - t0) * 1000),
+            cost_usd=reply.cost_usd,
+            prompt_tokens=reply.prompt_tokens,
+            completion_tokens=reply.completion_tokens,
+            content=_clip_event(reply.content),
+            tool_calls=[{"call_id": c.id, "tool": c.name} for c in reply.tool_calls],
+            forced=tools is None,
+        )
+        return reply
 
     try:
         while (
@@ -134,13 +169,14 @@ def run_analyst(
             and cost + 2 * last_call_cost < max_cost_usd
             and time.perf_counter() - started < max_runtime_s
         ):
-            reply = llm.chat(messages, TOOL_SCHEMAS)
+            reply = ask(TOOL_SCHEMAS)
             cost += reply.cost_usd
             last_call_cost = reply.cost_usd
             messages.append(_assistant_message(reply))
 
             if not reply.tool_calls:
                 answer = reply.content.strip() or None
+                refused = False
                 if answer is None:
                     break
             else:
@@ -155,6 +191,7 @@ def run_analyst(
                             or reply.content.strip()
                             or None
                         )
+                        refused = args.get("refused") is True
                         messages.append(
                             {
                                 "role": "tool",
@@ -173,6 +210,10 @@ def run_analyst(
                         round=rounds,
                         call_id=call.id,
                         tool=call.name,
+                        args={
+                            k: _clip_event(v) if isinstance(v, str) else v
+                            for k, v in args.items()
+                        },
                         title=title,
                         preview=preview,
                     )
@@ -185,7 +226,8 @@ def run_analyst(
                     record(
                         "tool_end", round=turn, call_id=call.id, ok=out.ok,
                         duration_ms=round((time.perf_counter() - t0) * 1000),
-                        summary=out.text[:300], title=out.title or title, preview=out.preview or preview,
+                        summary=out.text[:300], output=_clip_event(out.text),
+                        title=out.title or title, preview=out.preview or preview,
                     )  # fmt: skip
                     for chart in out.charts:
                         charts.append(chart)
@@ -251,11 +293,12 @@ def run_analyst(
             closing = ""
             if cost + last_call_cost <= max_cost_usd:
                 messages.append({"role": "user", "content": _FORCE_FINAL})
-                final = llm.chat(messages, None)
+                final = ask(None)
                 cost += final.cost_usd
                 closing = final.content.strip()
             incomplete = not closing
             answer = closing or _partial_answer(messages)
+            refused = False
     except AnalystLLMError as exc:
         record("error", message=str(exc))
         return AnalystResult(
@@ -270,6 +313,7 @@ def run_analyst(
         "final",
         unverified=unverified,
         incomplete=incomplete,
+        refused=refused,
         markdown=answer,
         cost_usd=round(cost, 6),
         steps=rounds,
@@ -282,6 +326,7 @@ def run_analyst(
         charts,
         unverified=unverified,
         incomplete=incomplete,
+        refused=refused,
     )
 
 

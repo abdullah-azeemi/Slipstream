@@ -126,15 +126,20 @@ TOOL_SCHEMAS: list[dict] = [
         "run_python",
         "Run Python in an isolated sandbox (pandas, numpy, scipy, backend.f1lab; no network). Variables from earlier successful calls stay available. "
         "Start the code with one comment line describing the step. Read staged files with load()/df(); "
-        "print results; publish charts with emit_chart(echarts_option_dict, title). Variables do "
-        "not persist between calls.",
+        "print results; publish charts with emit_chart(echarts_option_dict, title).",
         {"code": {"type": "string"}},
         ["code"],
     ),
     _schema(
         "final_answer",
         "Finish with the answer in Markdown. State assumptions and mark estimates as estimates.",
-        {"markdown": {"type": "string"}},
+        {
+            "markdown": {"type": "string"},
+            "refused": {
+                "type": "boolean",
+                "description": "true only when the stored data cannot answer the question at all",
+            },
+        },
         ["markdown"],
     ),
 ]

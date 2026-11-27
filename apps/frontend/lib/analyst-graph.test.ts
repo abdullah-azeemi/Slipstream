@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalystEvent } from '@/types/analyst'
-import { CARD_H, QUESTION_ID, currentActivity, edgesOf, formatElapsed, roundSizes, runCounts, layoutRun, reduceEvents, thoughtsByRound } from './analyst-graph'
+import { CARD_H, QUESTION_ID, callForStep, commandOf, currentActivity, edgesOf, formatElapsed, roundSizes, runCounts, layoutRun, outputExcerpt, reduceEvents, thoughtsByRound } from './analyst-graph'
 
 const base = (seq: number) => ({ seq, t_ms: seq * 100 })
 const start = (id: string, round: number, title = id): AnalystEvent => ({
@@ -174,5 +174,41 @@ describe('layout of parallel steps', () => {
   it('stays one card wide on a narrow canvas', () => {
     const pos = layoutRun(run, 1)
     expect(new Set(Object.values(pos).map((p) => p.x)).size).toBe(1)
+  })
+})
+
+describe('tracing', () => {
+  const modelCall: AnalystEvent = {
+    ...base(1), type: 'llm_call', round: 0, model: 'openai/gpt-4o-mini', duration_ms: 900, cost_usd: 0.001,
+    prompt_tokens: 900, completion_tokens: 40, content: 'Load first.',
+    tool_calls: [{ call_id: 'a', tool: 'run_python' }], forced: false,
+  }
+
+  it('keeps full arguments and output, and links a step to the model call that asked for it', () => {
+    const run = reduceEvents([
+      { ...base(0), type: 'run_start', question: 'q' },
+      modelCall,
+      { ...base(2), type: 'tool_start', round: 0, call_id: 'a', tool: 'run_python', title: 'a', preview: '', args: { code: 'print(1)' } },
+      { ...base(3), type: 'tool_end', round: 0, call_id: 'a', ok: true, duration_ms: 50, summary: 'OK', output: 'OK\nfull output', title: 'a', preview: '' },
+    ])
+    expect(run.steps[0]).toMatchObject({ args: { code: 'print(1)' }, output: 'OK\nfull output' })
+    expect(callForStep(run, 'a')).toMatchObject({ promptTokens: 900, completionTokens: 40, content: 'Load first.' })
+  })
+
+  it('still reads runs saved before tracing existed', () => {
+    const run = reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, start('a', 0), end('a', 0)])
+    expect(run.steps[0]).toMatchObject({ args: {}, output: 'OK' })
+    expect(run.calls).toEqual([])
+    expect(callForStep(run, 'a')).toBeUndefined()
+  })
+
+  it('shows a script or a call as a command, and the useful end of each output', () => {
+    const [step] = reduceEvents([{ ...base(0), type: 'run_start', question: 'q' }, start('a', 0)]).steps
+    const script = { ...step, args: { code: 'print(1)' }, output: 'first\nsecond\nthird' }
+    expect(commandOf(script)).toBe('print(1)')
+    expect(outputExcerpt(script, 2)).toBe('second\nthird')
+    const loader = { ...script, tool: 'load_laps', args: { session_key: 1, driver: 'HAM' } }
+    expect(commandOf(loader)).toBe('load_laps(session_key=1, driver="HAM")')
+    expect(outputExcerpt(loader, 2)).toBe('first\nsecond')
   })
 })

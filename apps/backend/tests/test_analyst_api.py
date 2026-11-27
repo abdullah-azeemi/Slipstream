@@ -80,7 +80,10 @@ def test_stream_emits_events_saves_the_run_and_ends(client):
     assert response.status_code == 200
     frames = _frames(response)
     kinds = [data["type"] for name, data in frames if name == "analyst"]
-    assert kinds == ["run_start", "thought", "tool_start", "tool_end", "chart", "final"]
+    assert kinds == [
+        "run_start", "llm_call", "thought", "tool_start", "tool_end",
+        "chart", "llm_call", "final",
+    ]  # fmt: skip
     assert frames[-1][0] == "done"
     saved = next(data for name, data in frames if name == "saved")
     assert saved["run_id"] > 0 and saved["conversation_id"] > 0
@@ -209,3 +212,26 @@ def test_second_run_while_one_is_active_is_rejected(client):
         assert _ask(client).status_code == 429
     finally:
         concurrency.release("test-clerk-user")
+
+
+def test_a_follow_up_in_the_same_chat_sees_the_earlier_turn(client, monkeypatch):
+    sent = []
+
+    class Recording(ScriptedLLM):
+        def chat(self, messages, tools):
+            sent.append(list(messages))
+            return super().chat(messages, tools)
+
+    monkeypatch.setattr(analyst_api, "make_llm", Recording)
+    first = _saved(_ask(client, "How bad was it for Hamilton?"))
+    sent.clear()
+    client.post(
+        "/api/v1/agent/analyst/stream",
+        json={"question": "And Russell?", "conversation_id": first["conversation_id"]},
+    ).get_data()
+
+    assert [(m["role"], m["content"]) for m in sent[0][1:]] == [
+        ("user", "How bad was it for Hamilton?"),
+        ("assistant", "Degradation is 0.08 s/lap (estimate)."),
+        ("user", "And Russell?"),
+    ]

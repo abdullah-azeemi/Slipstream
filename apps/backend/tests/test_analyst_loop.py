@@ -1,7 +1,9 @@
 """Analyst loop tests with a scripted model and a stub toolbox (no network, no Docker)."""
 
+import json
 from backend.analyst.client import AnalystLLMError, Reply, ToolCall
-from backend.analyst.loop import run_analyst
+from backend.analyst.loop import MAX_EVENT_TEXT, run_analyst
+from backend.analyst.persistence import history_messages
 from backend.analyst.tools import ToolOutput
 
 
@@ -64,8 +66,8 @@ def test_tool_then_final_answer_emits_ordered_events_and_sums_cost():
     assert result.answer == "Deg is 0.08 s/lap."
     assert result.cost_usd == 0.004
     assert _types(result) == [
-        "run_start", "thought", "tool_start", "tool_end",
-        "tool_start", "tool_end", "chart", "final",
+        "run_start", "llm_call", "thought", "tool_start", "tool_end",
+        "llm_call", "tool_start", "tool_end", "chart", "llm_call", "final",
     ]  # fmt: skip
     assert [e["seq"] for e in result.events] == list(range(len(result.events)))
     assert seen == result.events
@@ -77,7 +79,7 @@ def test_plain_text_reply_is_accepted_as_the_answer():
     llm = ScriptedLLM([Reply("Just an answer.")])
     result = run_analyst("hi", llm=llm, toolbox=StubToolBox())
     assert result.answer == "Just an answer."
-    assert _types(result) == ["run_start", "final"]
+    assert _types(result) == ["run_start", "llm_call", "final"]
 
 
 def test_budget_keeps_room_for_a_closing_answer():
@@ -281,7 +283,7 @@ def test_independent_tools_in_one_turn_run_in_parallel_with_ordered_messages():
     assert starts == ["a", "b", "c"] and sorted(ends) == ["a", "b", "c"]
     assert (
         result.events.index(next(e for e in result.events if e["type"] == "tool_end"))
-        > 3
+        > 5
     )  # all started first
     assert [e["seq"] for e in result.events] == list(range(len(result.events)))
     tool_msgs = [m["tool_call_id"] for m in llm.calls[1][0] if m["role"] == "tool"]
@@ -303,3 +305,126 @@ def test_run_python_waits_for_the_loaders_of_its_turn():
     run_analyst("q", llm=llm, toolbox=box)
     assert box.order == ["load_laps", "run_python"]
     assert box.max_active == 1
+
+
+def _events(result, type_):
+    return [e for e in result.events if e["type"] == type_]
+
+
+def test_every_model_call_is_traced():
+    llm = ScriptedLLM(
+        [
+            Reply(
+                "Load first.",
+                (_call("c1", "load_laps"),),
+                cost_usd=0.001,
+                prompt_tokens=900,
+                completion_tokens=40,
+            ),
+            Reply("Done.", cost_usd=0.002, prompt_tokens=1500, completion_tokens=60),
+        ]
+    )
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox())
+
+    first, second = _events(result, "llm_call")
+    assert first["prompt_tokens"] == 900 and first["completion_tokens"] == 40
+    assert first["cost_usd"] == 0.001 and first["duration_ms"] >= 0
+    assert first["content"] == "Load first."
+    assert first["tool_calls"] == [{"call_id": "c1", "tool": "load_laps"}]
+    assert (first["round"], second["round"]) == (0, 1)
+    assert second["tool_calls"] == [] and second["forced"] is False
+
+
+def test_the_closing_call_is_marked_as_forced():
+    llm = ScriptedLLM([Reply("Out of time answer.")])
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox(), max_runtime_s=0.0)
+    assert _events(result, "llm_call")[0]["forced"] is True
+
+
+def test_events_carry_full_arguments_and_output():
+    code = "\n".join(f"print({n})" for n in range(40))
+    long_output = "OK\n" + "x" * 1000
+    llm = ScriptedLLM(
+        [
+            Reply("", (_call("c1", "run_python", json.dumps({"code": code})),)),
+            Reply("done"),
+        ]
+    )
+    box = StubToolBox({"run_python": ToolOutput(long_output, title="calc")})
+    result = run_analyst("q", llm=llm, toolbox=box)
+
+    assert _events(result, "tool_start")[0]["args"] == {"code": code}
+    assert _events(result, "tool_end")[0]["output"] == long_output
+
+
+def test_huge_text_is_capped_in_events_but_not_for_the_model():
+    huge = "y" * (MAX_EVENT_TEXT + 500)
+    llm = ScriptedLLM([Reply("", (_call("c1", "load_laps"),)), Reply("done")])
+    box = StubToolBox({"load_laps": ToolOutput(huge, title="laps")})
+    result = run_analyst("q", llm=llm, toolbox=box)
+
+    output = _events(result, "tool_end")[0]["output"]
+    assert output.startswith("y" * MAX_EVENT_TEXT) and "500 more" in output
+    assert llm.calls[1][0][-1]["content"] == huge
+
+
+def test_the_model_can_refuse_explicitly():
+    args = '{"markdown": "No qualifying laps are stored.", "refused": true}'
+    llm = ScriptedLLM([Reply("", (_call("c1", "final_answer", args),))])
+    result = run_analyst("q", llm=llm, toolbox=StubToolBox())
+    assert result.refused is True
+    assert _events(result, "final")[0]["refused"] is True
+
+
+def test_an_ordinary_answer_is_not_a_refusal():
+    llm = ScriptedLLM([Reply("Just an answer.")])
+    assert run_analyst("q", llm=llm, toolbox=StubToolBox()).refused is False
+
+
+def test_a_refusal_sent_back_for_revision_does_not_stick():
+    llm = ScriptedLLM(
+        [
+            Reply(
+                "", (_call("c1", "final_answer", '{"markdown":"no","refused":true}'),)
+            ),
+            Reply("Here is the answer after all."),
+        ]
+    )
+    verdicts = iter(["the data is there, look again", None])
+    result = run_analyst(
+        "q", llm=llm, toolbox=StubToolBox(), reviewer=lambda a, m: next(verdicts)
+    )
+    assert result.refused is False
+
+
+def test_earlier_turns_reach_the_model_between_the_prompt_and_the_question():
+    history = [
+        {"role": "user", "content": "Lap 38 for Hamilton?"},
+        {"role": "assistant", "content": "97.221 s."},
+    ]
+    llm = ScriptedLLM([Reply("Done.")])
+    result = run_analyst(
+        "And Russell?", llm=llm, toolbox=StubToolBox(), history=history
+    )
+    sent = llm.calls[0][0]
+    assert sent[0]["role"] == "system"
+    assert sent[1:3] == history
+    assert sent[3] == {"role": "user", "content": "And Russell?"}
+    assert _events(result, "run_start")[0]["history_turns"] == 1
+
+
+def test_history_keeps_the_last_complete_turns_and_shortens_long_answers():
+    rows = [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "q2, whose run failed"},
+        {"role": "user", "content": "q3"},
+        {"role": "assistant", "content": "x" * 50},
+        {"role": "user", "content": "the question being asked now"},
+    ]
+    history = history_messages(rows, max_turns=1, max_chars=10)
+    assert history == [
+        {"role": "user", "content": "q3"},
+        {"role": "assistant", "content": "x" * 10 + " ...[shortened]"},
+    ]
+    assert len(history_messages(rows)) == 4

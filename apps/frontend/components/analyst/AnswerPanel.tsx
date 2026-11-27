@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import './analyst.css'
 import { roundSizes, thoughtsByRound, type AnalystRunState, type AnalystStep } from '@/lib/analyst-graph'
 import EChart from './EChart'
+import StepInspector from './StepInspector'
 
 function StateDot({ state }: { state: AnalystStep['state'] }) {
   const color = state === 'running' ? '#3d7f8a' : state === 'error' ? '#c4574c' : '#4c9a6a'
@@ -24,6 +25,8 @@ export default function AnswerPanel({
   const byRound = thoughtsByRound(run)
   const rounds = [...new Set(run.steps.map((s) => s.round))].sort((a, b) => a - b)
   const sizes = roundSizes(run)
+
+  if (selected) return <StepInspector run={run} step={selected} onClose={() => onSelect(null)} />
 
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
@@ -52,10 +55,8 @@ export default function AnswerPanel({
               {run.steps.filter((s) => s.round === round).map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => onSelect(s.id === selectedId ? null : s.id)}
-                  className={`an-mono flex w-full items-center gap-2 rounded border px-2.5 py-1.5 text-left text-[12px] ${
-                    s.id === selectedId ? 'border-[#3d7f8a] bg-[#f1f7f8]' : 'border-[#e3e6e3] bg-white hover:border-[#b9c4c6]'
-                  }`}
+                  onClick={() => onSelect(s.id)}
+                  className="an-mono flex w-full items-center gap-2 rounded border border-[#e3e6e3] bg-white px-2.5 py-1.5 text-left text-[12px] hover:border-[#b9c4c6]"
                 >
                   <StateDot state={s.state} />
                   <span className="font-semibold text-[#1f2a2e]">{s.tool}</span>
@@ -66,14 +67,6 @@ export default function AnswerPanel({
           ))}
         </ol>
       </section>
-
-      {selected && (
-        <section className="rounded border border-[#d5dad8] bg-[#fbfbf9] p-3">
-          <div className="an-mono mb-2 text-[11px] uppercase tracking-wider text-[#8a9498]">Step · {selected.tool}</div>
-          {selected.preview && <pre className="an-mono mb-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-[#f1efe9] p-2 text-[11px] leading-relaxed text-[#46545a]">{selected.preview}</pre>}
-          {selected.summary && <pre className="an-mono max-h-48 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-[#46545a]">{selected.summary}</pre>}
-        </section>
-      )}
 
       {run.answer && (
         <section>

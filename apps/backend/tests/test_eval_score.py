@@ -217,3 +217,91 @@ def test_facts_can_require_an_order():
 def test_simple_tier_exists_and_has_facts_for_every_question():
     simple = [x for x in score.load_questions() if x["tier"] == "simple"]
     assert len(simple) >= 10 and all(x.get("facts") for x in simple)
+
+
+# ── who a value belongs to, and its sign ─────────────────────────────
+
+_LAP_38 = {
+    "subjects": {"ham": ["hamilton", "ham"], "rus": ["russell", "rus"]},
+    "numbers": [
+        {
+            "name": "ham_lap",
+            "subject": "ham",
+            "unit": "s",
+            "value": 97.221,
+            "tol": 0.01,
+        },
+        {"name": "rus_lap", "subject": "rus", "unit": "s", "value": 99.4, "tol": 0.01},
+    ],
+    "any_of": [{"subject": "ham", "options": ["p3", "third"]}],
+}
+
+
+def _passes(facts, answer):
+    run = {"answer": answer, "refusals": [], "trace": []}
+    return score.score_run(_facts_q(**facts), run).passed
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Hamilton (P3) did 97.221 s, while George Russell took 99.400 s.",
+        "Russell: 99.400 s. Hamilton: 1:37.221, in P3.",
+        "| | Hamilton | Russell |\n|---|---|---|\n| Position | P3 | P7 |\n| Lap | 97.221 s | 99.400 s |",
+        "| Driver | Position | Lap |\n|---|---|---|\n| HAM | P3 | 97.221 s |\n| RUS | P7 | 99.400 s |",
+    ],
+)
+def test_values_given_to_the_right_driver_pass(answer):
+    assert _passes(_LAP_38, answer)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Hamilton (P3) did 99.400 s, while George Russell took 97.221 s.",
+        "| | Hamilton | Russell |\n|---|---|---|\n| Position | P3 | P7 |\n| Lap | 99.400 s | 97.221 s |",
+        "Hamilton did 97.221 s in P7. Russell took 99.400 s in P3.",
+    ],
+)
+def test_values_swapped_between_drivers_fail(answer):
+    assert not _passes(_LAP_38, answer)
+
+
+def test_a_degradation_slope_with_the_wrong_sign_fails():
+    facts = {
+        "numbers": [{"name": "deg", "unit": "s/lap", "value": 0.064, "tol": 0.003}]
+    }
+    assert _passes(facts, "Slope +0.064 s/lap.")
+    assert not _passes(facts, "Slope -0.064 s/lap.")
+
+
+def test_a_short_option_does_not_match_inside_a_longer_one():
+    facts = {"any_of": [["p1"]]}
+    assert _passes(facts, "He finished P1.")
+    assert not _passes(facts, "He finished P10.")
+
+
+def test_with_ground_truth_an_honest_caveat_does_not_fail_a_correct_answer():
+    facts = {"any_of": [["leading"]]}
+    run = {
+        "answer": "He was leading. What I could not establish: the rivals' plans.",
+        "refusals": [],
+        "trace": [],
+        "unverified": ["1.5 s"],
+    }
+    result = score.score_run(_facts_q(**facts), run)
+    assert result.passed
+    assert result.checks["grounded"] is False
+
+
+def test_a_run_that_hit_its_limit_fails_even_with_the_right_words():
+    run = {"answer": "He was leading.", "refusals": [], "trace": [], "incomplete": True}
+    assert not score.score_run(_facts_q(any_of=[["leading"]]), run).passed
+
+
+def test_a_crashed_run_never_counts_as_a_correct_refusal():
+    trap = _q(tier="trap", expect_refusal=True, must_mention=[], numeric_checks=[])
+    crashed = {"answer": "", "refusals": [], "trace": [], "crash": "LLM unavailable"}
+    result = score.score_run(trap, crashed)
+    assert not result.passed
+    assert any("crashed" in f for f in result.failures)

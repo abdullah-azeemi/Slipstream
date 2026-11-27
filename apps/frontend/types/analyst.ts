@@ -7,7 +7,27 @@ interface Base {
 export type AnalystEvent =
   | (Base & { type: 'run_start'; question: string })
   | (Base & { type: 'thought'; round: number; text: string })
-  | (Base & { type: 'tool_start'; round: number; call_id: string; tool: string; title: string; preview: string })
+  | (Base & {
+      type: 'llm_call'
+      round: number
+      model: string
+      duration_ms: number
+      cost_usd: number
+      prompt_tokens: number
+      completion_tokens: number
+      content: string
+      tool_calls: { call_id: string; tool: string }[]
+      forced: boolean
+    })
+  | (Base & {
+      type: 'tool_start'
+      round: number
+      call_id: string
+      tool: string
+      title: string
+      preview: string
+      args?: Record<string, unknown> // missing in runs saved before tracing
+    })
   | (Base & {
       type: 'tool_end'
       round: number
@@ -15,11 +35,12 @@ export type AnalystEvent =
       ok: boolean
       duration_ms: number
       summary: string
+      output?: string // missing in runs saved before tracing
       title: string
       preview: string
     })
   | (Base & { type: 'chart'; round: number; call_id: string; title: string; option: Record<string, unknown> })
-  | (Base & { type: 'final'; markdown: string; cost_usd: number; steps: number })
+  | (Base & { type: 'final'; markdown: string; cost_usd: number; steps: number; refused?: boolean })
   | (Base & { type: 'error'; message: string })
 
 export interface AnalystRunSummary {
