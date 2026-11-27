@@ -5,6 +5,11 @@ import './globals.css'
 import { geist, geistMono } from '@/components/landing/font'
 import AppChrome from '@/components/layout/AppChrome'
 import AuthTokenSync from '@/components/auth/AuthTokenSync'
+import type { Metadata } from 'next'
+import { SITE_NAME, SITE_URL } from '@/lib/site'
+
+// Lets every page use relative canonical and share-image URLs.
+export const metadata: Metadata = { metadataBase: new URL(SITE_URL), applicationName: SITE_NAME }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
