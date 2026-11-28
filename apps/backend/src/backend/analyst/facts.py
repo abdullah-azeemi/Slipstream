@@ -103,6 +103,11 @@ def gather_facts(
     if not preload:
         return Facts(session)
 
+    return Facts(session, calls=preload_calls(plan, session, toolbox))
+
+
+def preload_calls(plan: Plan, session: dict, toolbox: ToolBox) -> list[PreCall]:
+    """Run the loaders the agent would otherwise spend its first turns asking for."""
     key = session["session_key"]
     wanted: list[tuple[str, dict]] = [("load_context", {"session_key": key})]
     if session["session_type"] == "R":
@@ -111,5 +116,4 @@ def gather_facts(
 
     with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
         outputs = list(pool.map(lambda w: toolbox.call(*w), wanted))
-    calls = [PreCall(tool, args, out) for (tool, args), out in zip(wanted, outputs)]
-    return Facts(session, calls=calls)
+    return [PreCall(tool, args, out) for (tool, args), out in zip(wanted, outputs)]

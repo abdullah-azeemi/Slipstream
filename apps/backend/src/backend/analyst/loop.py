@@ -27,6 +27,7 @@ from backend.analyst import checker
 from backend.analyst.client import AnalystLLMError, ChatClient, Reply
 from backend.analyst.prompt import SYSTEM_PROMPT
 from backend.analyst.tools import TOOL_SCHEMAS, ToolBox, describe_call, parse_args
+from backend.analyst.facts import PreCall
 
 Emit = Callable[[dict], None]
 # Extension point: return feedback text to make the model revise, or None to accept.
@@ -75,6 +76,29 @@ def _assistant_message(reply: Reply) -> dict:
     return message
 
 
+def _preload_messages(calls: list[PreCall]) -> list[dict]:
+    """Calls that code already made, shown to the model as if it had made them."""
+    if not calls:
+        return []
+    asked = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": f"pre-{n}",
+                "type": "function",
+                "function": {"name": c.tool, "arguments": json.dumps(c.args)},
+            }
+            for n, c in enumerate(calls)
+        ],
+    }
+    results = [
+        {"role": "tool", "tool_call_id": f"pre-{n}", "content": c.output.text}
+        for n, c in enumerate(calls)
+    ]
+    return [asked, *results]
+
+
 def _partial_answer(messages: list[dict]) -> str:
     """When no conclusion was written, show the latest results instead of nothing."""
     results = [
@@ -104,6 +128,8 @@ def run_analyst(
     reviewer: Reviewer | None = None,
     check_numbers: bool = False,
     history: list[dict] | None = None,
+    preloaded: list[PreCall] | None = None,
+    guidance: str = "",
 ) -> AnalystResult:
     started = time.perf_counter()
     events: list[dict] = []
@@ -127,9 +153,11 @@ def run_analyst(
                     pass
 
     messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        # Guidance goes last so the long prompt stays an identical, cacheable prefix.
+        {"role": "system", "content": f"{SYSTEM_PROMPT}\n{guidance}".rstrip()},
         *(history or []),
         {"role": "user", "content": question},
+        *_preload_messages(preloaded or []),
     ]
     cost = 0.0
     answer: str | None = None

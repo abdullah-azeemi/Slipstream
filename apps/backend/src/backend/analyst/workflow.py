@@ -12,7 +12,7 @@ import time
 from backend.analyst import checker
 from backend.analyst.client import AnalystLLMError, ChatClient, Reply
 from backend.analyst.digest import race_digest
-from backend.analyst.facts import Facts, gather_facts
+from backend.analyst.facts import Facts, PreCall, gather_facts, preload_calls
 from backend.analyst.loop import AnalystResult, Emit, run_analyst
 from backend.analyst.prepare import Plan, prepare
 from backend.analyst.tools import ToolBox, describe_call
@@ -23,6 +23,31 @@ ANSWER_PROMPT = f"""You are Pitwall, an F1 analyst. Answer the question using on
 Be short: the answer first, then one line of evidence. Copy numbers exactly.
 Reply with exactly {NEED_AGENT} and nothing else only when the FACTS do not contain
 what is asked."""
+
+# The method for each kind of question, so the agent does not have to work it out.
+RECIPES = {
+    "strategy": "Use pit_summary({'CODE': laps, ...}, total_laps) for pit losses. Take gaps and traffic from race_summary.",
+    "tyres": "Use degradation_by_stint(laps, total_laps) on each driver's laps and report StintDeg.issues. Publish degradation_chart(laps, total_laps).",
+    "telemetry": "Call load_telemetry for every driver and lap you need in ONE turn, then use lateral_peak or longitudinal_g in one script.",
+    "compare": "Compare the same laps for both drivers in one script. Use clean_laps and fuel_correct for pace. Load telemetry only if corners or speed are asked.",
+    "what_if": "Start from the actual race and measured pit loss. Label the result as a scenario and list its assumptions.",
+}
+
+
+def agent_guidance(category: str, calls: list[PreCall]) -> str:
+    parts = []
+    done = [call.tool for call in calls if call.output.ok]
+    if done:
+        parts.append(
+            f"ALREADY DONE: the session is found and these tools ran: {', '.join(done)}. "
+            "Their results follow the question and their files are in /data. Do not call "
+            "find_sessions or repeat them."
+        )
+    if category in RECIPES:
+        parts.append(f"METHOD: {RECIPES[category]}")
+    if parts:
+        parts.append("With each tool call, write one short sentence saying why.")
+    return "\n".join(parts)
 
 
 class _Recorder:
@@ -74,8 +99,8 @@ class _Traced:
         return reply
 
 
-def _record_facts(record: _Recorder, facts: Facts) -> None:
-    for number, call in enumerate(facts.calls):
+def _record_preload(record: _Recorder, calls: list[PreCall]) -> None:
+    for number, call in enumerate(calls):
         call_id = f"pre-{number}"
         title, preview = describe_call(call.tool, call.args)
         record(
@@ -93,7 +118,7 @@ def _record_facts(record: _Recorder, facts: Facts) -> None:
             round=0,
             call_id=call_id,
             ok=out.ok,
-            duration_ms=0,  # the loaders ran together; the plan event has the time
+            duration_ms=0,  # the loaders ran together, so one time each is not kept
             summary=out.text[:300],
             output=out.text,
             title=out.title or title,
@@ -172,9 +197,8 @@ def run_workflow(
         drivers=list(plan.drivers),
         reason=plan.reason,
     )
-    # Nothing reads preloaded tool output yet, so loading it would only add time.
+    # Checks only: a one-call answer needs no tool output, so load it later.
     facts = gather_facts(plan, toolbox, preload=False)
-    _record_facts(record, facts)
     if facts.missing:
         return finish(facts.missing, refused=True)
     # "unknown" is often an easy question the plan could not label, so try it too.
@@ -184,9 +208,12 @@ def run_workflow(
             return finish(answer)
         record("thought", round=0, text="The facts are not enough: running the agent.")
 
+    calls = preload_calls(plan, facts.session, toolbox) if facts.session else []
+    _record_preload(record, calls)
+
     spent = traced.cost
     # The agent's rounds come after the preloaded round 0 on the canvas.
-    offset = 1 if facts.calls else 0
+    offset = 1 if calls else 0
 
     def forward(event: dict) -> None:
         data = {k: v for k, v in event.items() if k not in ("type", "seq", "t_ms")}
@@ -199,7 +226,13 @@ def run_workflow(
         record(event["type"], **data)
 
     result = run_analyst(
-        question, llm=llm, toolbox=toolbox, emit=forward, **agent_options
+        question,
+        llm=llm,
+        toolbox=toolbox,
+        emit=forward,
+        preloaded=calls,
+        guidance=agent_guidance(plan.category, calls),
+        **agent_options,
     )
     result.cost_usd = round(result.cost_usd + spent, 6)
     result.events = record.events
